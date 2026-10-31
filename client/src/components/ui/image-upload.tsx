@@ -78,7 +78,7 @@ export function ImageUpload({
     : undefined;
 
   return (
-    <div className={cn("relative group", className)}>
+    <div className={cn("group relative", className)}>
       <input
         ref={inputRef}
         type="file"
@@ -89,13 +89,18 @@ export function ImageUpload({
 
       {src ? (
         <>
-          <Image src={src} alt={t("image.preview")} ratio={ratio} />
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center gap-2 rounded-xl bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
+          <Image
+            src={src}
+            alt={t("image.preview")}
+            ratio={ratio}
+            className="transition-transform duration-300 group-hover:scale-[1.02]"
+          />
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-end gap-1.5 rounded-b-xl bg-gradient-to-t from-black/60 via-black/20 to-transparent p-2 opacity-0 transition-opacity duration-200 group-hover:opacity-100 focus-within:opacity-100">
             <Button
               type="button"
               variant="secondary"
               size="icon-sm"
-              className="pointer-events-auto"
+              className="pointer-events-auto shadow-sm"
               aria-label={t("image.preview")}
               onClick={() => setPreviewOpen(true)}
             >
@@ -105,7 +110,7 @@ export function ImageUpload({
               type="button"
               variant="secondary"
               size="icon-sm"
-              className="pointer-events-auto"
+              className="pointer-events-auto shadow-sm"
               aria-label={t("image.modify")}
               onClick={openPicker}
             >
@@ -115,7 +120,7 @@ export function ImageUpload({
               type="button"
               variant="destructive"
               size="icon-sm"
-              className="pointer-events-auto"
+              className="pointer-events-auto shadow-sm"
               aria-label={t("image.delete")}
               onClick={remove}
             >
@@ -135,18 +140,23 @@ export function ImageUpload({
           onDrop={onDrop}
           style={frameStyle}
           className={cn(
-            "flex w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border bg-muted/40 text-muted-foreground transition-colors hover:border-ring hover:bg-muted",
-            dragging && "border-ring bg-muted",
-            ratio ? "aspect-[var(--img-ratio)]" : "h-40",
+            "group/drop relative flex w-full flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-border bg-gradient-to-br from-primary/[0.05] to-transparent text-foreground transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/60 hover:from-primary/[0.09] hover:shadow-card focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring",
+            dragging &&
+              "scale-[1.01] border-primary bg-primary/10 shadow-card",
+            ratio ? "aspect-[var(--img-ratio)]" : "h-44",
           )}
         >
-          <UploadCloud className="size-7" />
-          <span className="text-sm">{t("image.dragHint")}</span>
+          <span className="flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary ring-1 ring-primary/20 transition-transform duration-200 group-hover/drop:scale-110">
+            <UploadCloud className="size-6" />
+          </span>
+          <span className="px-4 text-center text-sm font-medium text-foreground">
+            {t("image.dragHint")}
+          </span>
         </button>
       )}
 
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogContent className="sm:max-w-2xl">
+        <DialogContent className="sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>{t("image.previewTitle")}</DialogTitle>
           </DialogHeader>
@@ -154,7 +164,7 @@ export function ImageUpload({
             <img
               src={src}
               alt={t("image.preview")}
-              className="max-h-[70vh] w-full rounded-lg object-contain"
+              className="max-h-[70vh] w-full rounded-xl object-contain shadow-card"
             />
           )}
         </DialogContent>
