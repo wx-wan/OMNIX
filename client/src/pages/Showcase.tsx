@@ -77,6 +77,7 @@ import { StatCard } from "@/components/layout/StatCard";
 import { KanbanBoard, type KanbanStage } from "@/components/kanban/KanbanBoard";
 import { Chatter, type ChatterMessage } from "@/components/chatter/Chatter";
 import { Image } from "@/components/ui/image";
+import { ImageUpload } from "@/components/ui/image-upload";
 
 // 演示用图片（内联 SVG，避免依赖网络）
 const SAMPLE_IMAGE = `data:image/svg+xml;utf8,${encodeURIComponent(
@@ -188,6 +189,7 @@ export default function Showcase() {
   const { t } = useTranslation();
   const [checked, setChecked] = useState(true);
   const [on, setOn] = useState(true);
+  const [uploaded, setUploaded] = useState<string | null>(SAMPLE_IMAGE);
 
   return (
     <div className="flex flex-col gap-8">
@@ -263,6 +265,17 @@ export default function Showcase() {
         <div className="grid max-w-2xl grid-cols-2 gap-4">
           <Image src={SAMPLE_IMAGE} alt="示例图片" ratio="16/9" />
           <Image src="https://invalid.example/nope.png" alt="加载失败的示例" ratio="16/9" />
+        </div>
+      </Section>
+
+      <Section
+        title={t("showcase.imageUploadTitle")}
+        description={t("showcase.imageUploadDesc")}
+        icon={Puzzle}
+      >
+        <div className="grid max-w-2xl grid-cols-2 gap-4">
+          <ImageUpload value={uploaded} onChange={setUploaded} ratio="1/1" />
+          <ImageUpload ratio="1/1" />
         </div>
       </Section>
 

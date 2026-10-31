@@ -53,6 +53,11 @@ const resources = {
       },
       image: {
         broken: "图片加载失败",
+        dragHint: "点击或拖拽上传图片",
+        preview: "预览",
+        modify: "修改",
+        delete: "删除",
+        previewTitle: "图片预览",
       },
       settings: {
         aboutDesc:
@@ -85,6 +90,8 @@ const resources = {
         chatterDesc: "记录级讨论流 + 发消息输入框（Odoo 风格），可挂到任意业务单据底部",
         imageTitle: "图片组件",
         imageDesc: "加载骨架 + 失败占位，支持宽高比",
+        imageUploadTitle: "图片上传组件",
+        imageUploadDesc: "上传 / 删除 / 修改 / 预览",
         btnVariants: "Button 变体",
         btnSizes: "Button 尺寸",
         form: "表单",
@@ -179,6 +186,11 @@ const resources = {
       },
       image: {
         broken: "Image failed to load",
+        dragHint: "Click or drag to upload",
+        preview: "Preview",
+        modify: "Replace",
+        delete: "Delete",
+        previewTitle: "Image preview",
       },
       settings: {
         aboutDesc:
@@ -215,6 +227,8 @@ const resources = {
           "Record-level message thread + composer (Odoo-style), droppable onto any business document",
         imageTitle: "Image",
         imageDesc: "Loading skeleton + broken fallback, aspect-ratio support",
+        imageUploadTitle: "Image uploader",
+        imageUploadDesc: "Upload · delete · replace · preview",
         btnVariants: "Button variants",
         btnSizes: "Button sizes",
         form: "Form",
