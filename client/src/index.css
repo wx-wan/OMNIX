@@ -5,6 +5,21 @@
 @import "@fontsource-variable/montserrat";
 @import "@fontsource-variable/noto-sans-sc";
 
+/* 侧栏折叠：用注册过的自定义长度做 grid 轨道动画，避免 transition-[width] 触发的整列重排卡顿 */
+@property --sb-w {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 15rem;
+}
+.app-shell {
+  --sb-w: 15rem;
+  grid-template-columns: var(--sb-w) 1fr;
+  transition: --sb-w 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.app-shell[data-collapsed="true"] {
+  --sb-w: 4rem;
+}
+
 @custom-variant dark (&:is(.dark *));
 
 :root {
@@ -29,8 +44,8 @@
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.94 0 0);
   --input: oklch(0.93 0 0);
-  /* 焦点环用品牌主题色 */
-  --ring: #FFD54F;
+  /* 焦点环：与品牌主色保持一致（= var(--primary) = #FFD54F），明暗主题统一 */
+  --ring: var(--primary);
   /* VIS 辅助色 */
   --chart-1: oklch(0.78 0.15 60);
   --chart-2: oklch(0.87 0.05 240);
@@ -39,8 +54,6 @@
   --chart-5: oklch(0.91 0.13 115);
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
   --sidebar-accent: oklch(0.97 0 0);
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
@@ -66,7 +79,7 @@
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
-  --ring: #FFD54F;
+  --ring: var(--primary);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
@@ -74,8 +87,6 @@
   --chart-5: oklch(0.269 0 0);
   --sidebar: oklch(0.205 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
   --sidebar-accent: oklch(0.269 0 0);
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
@@ -123,8 +134,6 @@
   --color-chart-5: var(--chart-5);
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
   --color-sidebar-accent: var(--sidebar-accent);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
@@ -173,6 +182,15 @@
   .page-pad {
     @apply px-4 py-5 md:px-6 md:py-6;
   }
+  /* island 内容画布：浅灰海面 + 极轻顶部高光，让白色卡片像浮岛 */
+  .island-canvas {
+    background-image: radial-gradient(
+      120% 80% at 50% -10%,
+      color-mix(in oklch, var(--canvas), white 55%) 0%,
+      transparent 60%
+    );
+    background-repeat: no-repeat;
+  }
   /* 标准卡片表面：白底 + 柔和小投影 */
   .card-surface,
   .card-surface-interactive {
@@ -189,7 +207,7 @@
     @apply h-9 w-full rounded-lg border border-border bg-card text-sm text-foreground transition-colors placeholder:text-muted-foreground;
   }
   .search-field:focus-within {
-    @apply border-ring ring-2 ring-ring/50;
+    @apply border-ring ring-2 ring-ring;
   }
   .search-field-input {
     @apply h-full min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground;

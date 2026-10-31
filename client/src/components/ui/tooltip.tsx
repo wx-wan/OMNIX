@@ -1,5 +1,5 @@
 import { Tooltip as TooltipPrimitive } from '@base-ui/react/tooltip'
-import { cn } from '@/lib/utils'
+import { cn } from 'cn'
 
 /**
  * 悬停提示（字段标签旁的 ⓘ 等）

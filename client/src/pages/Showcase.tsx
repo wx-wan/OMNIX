@@ -33,6 +33,7 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -66,6 +67,12 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Section } from "@/components/layout/Section";
+import { Stack } from "@/components/layout/Stack";
+import { Grid } from "@/components/layout/Grid";
+import { Split } from "@/components/layout/Split";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { StatCard } from "@/components/layout/StatCard";
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -90,6 +97,42 @@ export default function Showcase() {
           基于 Base UI（shadcn base-nova）· 品牌黄 #FFD54F
         </p>
       </div>
+
+      <Section
+        title="Layout 布局组件（island UI）"
+        description="Container · Stack · Grid · Split · PageHeader · Section · StatCard"
+        icon={Puzzle}
+      >
+        <Stack gap={6}>
+          <PageHeader
+            title="示例页头"
+            description="带图标 + 右侧操作区"
+            icon={Info}
+            actions={<Button size="sm">操作</Button>}
+          />
+          <Grid min="12rem">
+            <StatCard label="总用户" value="1,284" delta="+12.5%" trend="up" icon={Puzzle} />
+            <StatCard label="会话" value="342" delta="+4.1%" trend="up" icon={Info} />
+            <StatCard label="营收" value="¥89,200" delta="-2.3%" trend="down" icon={Trash2} />
+          </Grid>
+          <Split
+            main={
+              <Section title="主区">
+                <p className="text-sm text-muted-foreground">
+                  主内容区，占据剩余宽度；窄屏时自动堆叠到侧栏上方。
+                </p>
+              </Section>
+            }
+            aside={
+              <Section title="侧栏">
+                <p className="text-sm text-muted-foreground">
+                  固定宽度的侧栏（桌面 20rem）。
+                </p>
+              </Section>
+            }
+          />
+        </Stack>
+      </Section>
 
       <Card>
         <CardHeader>
@@ -184,10 +227,12 @@ export default function Showcase() {
             <DropdownMenu>
               <DropdownMenuTrigger render={<Button variant="outline">菜单</Button>} />
               <DropdownMenuContent>
-                <DropdownMenuLabel>操作</DropdownMenuLabel>
-                <DropdownMenuItem>
-                  <Pencil /> 编辑
-                </DropdownMenuItem>
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel>操作</DropdownMenuLabel>
+                  <DropdownMenuItem>
+                    <Pencil /> 编辑
+                  </DropdownMenuItem>
+                </DropdownMenuGroup>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem variant="destructive">
                   <Trash2 /> 删除

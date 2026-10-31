@@ -5,7 +5,7 @@
  * 视觉复用 muted token + rounded-md；动效走 Tailwind `animate-pulse`。
  */
 import { type HTMLAttributes } from 'react'
-import { cn } from '@/lib/utils'
+import { cn } from 'cn'
 import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table'
 
 /** 基础骨架块：任意尺寸 + 圆角自定义，组合出任何结构占位。 */

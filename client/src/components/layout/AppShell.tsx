@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Outlet, NavLink, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { useTheme } from "next-themes";
+import { useTheme } from "@/components/theme/ThemeProvider";
 import {
   LayoutDashboard,
   Users,
@@ -12,8 +12,9 @@ import {
   Boxes,
   Puzzle,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn } from "cn";
 import { Button } from "@/components/ui/button";
+import { Container } from "@/components/layout/Container";
 
 const navItems = [
   { to: "/", labelKey: "nav.dashboard", icon: LayoutDashboard, end: true },
@@ -33,15 +34,13 @@ export function AppShell() {
   };
 
   return (
-    <div className="flex h-dvh overflow-hidden bg-canvas">
-      {/* Sidebar */}
-      <aside
-        className={cn(
-          "flex shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width] duration-200",
-          collapsed ? "w-16" : "w-60",
-        )}
-      >
-        <div className="flex h-14 items-center gap-2 px-4">
+    <div
+      className="app-shell grid h-dvh gap-3 overflow-hidden bg-canvas p-3"
+      data-collapsed={collapsed}
+    >
+      {/* Sidebar — floating card (island) */}
+      <aside className="flex flex-col overflow-hidden rounded-2xl bg-card p-3 shadow-card">
+        <div className={cn("flex h-14 items-center gap-2 px-1", collapsed && "justify-center")}>
           <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
             <Boxes className="size-5" />
           </div>
@@ -49,7 +48,7 @@ export function AppShell() {
             <span className="text-base font-semibold tracking-tight">{t("appName")}</span>
           )}
         </div>
-        <nav className="flex flex-1 flex-col gap-1 px-2 py-3">
+        <nav className="flex flex-1 flex-col gap-1 py-3">
           {navItems.map((item) => {
             const active =
               item.end ? location.pathname === item.to : location.pathname.startsWith(item.to);
@@ -63,7 +62,7 @@ export function AppShell() {
                   "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
                   active
                     ? "bg-primary/10 text-primary"
-                    : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                    : "text-foreground hover:bg-muted hover:text-foreground",
                   collapsed && "justify-center px-0",
                 )}
               >
@@ -74,20 +73,22 @@ export function AppShell() {
           })}
         </nav>
         <button
-          className="mx-2 mb-3 rounded-lg px-3 py-2 text-xs text-muted-foreground hover:bg-sidebar-accent"
+          className="mt-auto rounded-lg px-3 py-2 text-xs text-muted-foreground hover:bg-muted"
           onClick={() => setCollapsed((v) => !v)}
         >
           {collapsed ? "»" : "«"}
         </button>
       </aside>
 
-      {/* Main */}
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-background px-4">
-          <div className="text-sm text-muted-foreground">
-            {t(navItems.find((n) =>
-              n.end ? location.pathname === n.to : location.pathname.startsWith(n.to),
-            )?.labelKey ?? "appName")}
+      {/* Main column */}
+      <div className="flex min-w-0 flex-col gap-3">
+        <header className="flex h-14 shrink-0 items-center justify-between rounded-2xl bg-card px-4 shadow-card">
+          <div className="text-sm font-medium text-muted-foreground">
+            {t(
+              navItems.find((n) =>
+                n.end ? location.pathname === n.to : location.pathname.startsWith(n.to),
+              )?.labelKey ?? "appName",
+            )}
           </div>
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="icon" onClick={toggleLang} aria-label="toggle language">
@@ -103,10 +104,10 @@ export function AppShell() {
             </Button>
           </div>
         </header>
-        <main className="flex-1 overflow-y-auto page-pad">
-          <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
+        <main className="island-canvas min-h-0 flex-1 overflow-y-auto rounded-2xl px-4 py-5 md:px-6 md:py-6">
+          <Container size="lg">
             <Outlet />
-          </div>
+          </Container>
         </main>
       </div>
     </div>

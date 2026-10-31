@@ -1,14 +1,19 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
+  LayoutDashboard,
   Users as UsersIcon,
   Activity,
   DollarSign,
   ShoppingCart,
 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { api } from "@/lib/api";
+import { Stack } from "@/components/layout/Stack";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { Section } from "@/components/layout/Section";
+import { Grid } from "@/components/layout/Grid";
+import { StatCard } from "@/components/layout/StatCard";
 
 interface Stat {
   key: string;
@@ -48,65 +53,53 @@ export default function Dashboard() {
   }, []);
 
   const icons = [UsersIcon, Activity, DollarSign, ShoppingCart];
+  const data = stats.length ? stats : seedStats(t);
 
   return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">{t("dashboard.title")}</h1>
-        <p className="text-sm text-muted-foreground">{t("dashboard.subtitle")}</p>
-      </div>
+    <Stack gap={6}>
+      <PageHeader
+        title={t("dashboard.title")}
+        description={t("dashboard.subtitle")}
+        icon={LayoutDashboard}
+      />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {(stats.length ? stats : seedStats(t)).map((s, i) => {
-          const Icon = icons[i % icons.length];
-          return (
-            <Card key={s.key}>
-              <CardContent className="flex items-center justify-between p-5">
-                <div>
-                  <p className="text-sm text-muted-foreground">{s.key}</p>
-                  <p className="mt-1 text-2xl font-semibold">{s.value}</p>
-                  <p
-                    className={
-                      "mt-1 text-xs " + (s.up ? "text-emerald-600" : "text-destructive")
-                    }
-                  >
-                    {s.delta}
-                  </p>
-                </div>
-                <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                  <Icon className="size-5" />
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
+      <Grid min="14rem">
+        {data.map((s, i) => (
+          <StatCard
+            key={s.key}
+            label={s.key}
+            value={s.value}
+            delta={s.delta}
+            trend={s.up ? "up" : "down"}
+            icon={icons[i % icons.length]}
+          />
+        ))}
+      </Grid>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("dashboard.recentUsers")}</CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="divide-y divide-border">
-            {(recent.length ? recent : seedUsers()).map((u) => (
-              <div key={u.id} className="flex items-center justify-between px-6 py-3">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">{u.name}</p>
-                  <p className="truncate text-xs text-muted-foreground">{u.email}</p>
-                </div>
-                <div className="flex items-center gap-3">
-                  <Badge variant={u.role === "admin" ? "default" : "secondary"}>{u.role}</Badge>
-                  <span className="text-xs text-muted-foreground">
-                    {new Date(u.createdAt).toLocaleDateString()}
-                  </span>
-                </div>
+      <Section title={t("dashboard.recentUsers")} icon={UsersIcon} noPadding>
+        <div className="divide-y divide-border">
+          {(recent.length ? recent : seedUsers()).map((u) => (
+            <div key={u.id} className="flex items-center justify-between gap-3 px-5 py-3">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium">{u.name}</p>
+                <p className="truncate text-xs text-muted-foreground">{u.email}</p>
               </div>
-            ))}
-            {loading && <p className="px-6 py-4 text-sm text-muted-foreground">{t("dashboard.loading")}</p>}
-          </div>
-        </CardContent>
-      </Card>
-    </div>
+              <div className="flex shrink-0 items-center gap-3">
+                <Badge variant={u.role === "admin" ? "default" : "secondary"}>
+                  {u.role}
+                </Badge>
+                <span className="text-xs text-muted-foreground">
+                  {new Date(u.createdAt).toLocaleDateString()}
+                </span>
+              </div>
+            </div>
+          ))}
+          {loading && (
+            <p className="px-5 py-4 text-sm text-muted-foreground">{t("dashboard.loading")}</p>
+          )}
+        </div>
+      </Section>
+    </Stack>
   );
 }
 
