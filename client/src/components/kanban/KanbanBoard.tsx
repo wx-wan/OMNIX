@@ -100,19 +100,16 @@ function KanbanCard({
 
 /** 看板 / 阶段流：阶段列承载事项卡片。
  *  - fill：列等分铺满容器（无横向滚动）；否则固定宽可横向滚动。
- *  - fullHeight：撑满父容器高度，各列纵向拉伸、列内列表独立滚动（用于整页看板）。
  *  - draggable + onDealMove：开启拖拽流转（默认关闭，由调用方按配置传入）。展示型优先。 */
 export function KanbanBoard({
   stages,
   fill = false,
-  fullHeight = false,
   className,
   draggable = false,
   onDealMove,
 }: {
   stages: KanbanStage[];
   fill?: boolean;
-  fullHeight?: boolean;
   className?: string;
   draggable?: boolean;
   onDealMove?: (dealId: string, toStageId: string) => void;
@@ -124,7 +121,6 @@ export function KanbanBoard({
     <div
       className={cn(
         "flex gap-4 overflow-x-auto pb-2",
-        fullHeight && "h-full min-h-0",
         className,
       )}
     >
@@ -155,7 +151,6 @@ export function KanbanBoard({
           className={cn(
             "flex flex-col rounded-2xl bg-card shadow-card",
             fill ? "min-w-0 flex-1" : "w-72 shrink-0",
-            fullHeight && "h-full min-h-0",
             dragOverStage === stage.id && "ring-2 ring-primary",
           )}
         >
@@ -170,12 +165,7 @@ export function KanbanBoard({
               {stage.items.length}
             </span>
           </div>
-          <div
-            className={cn(
-              "flex flex-col gap-2 px-3 pb-3",
-              fullHeight && "min-h-0 flex-1 overflow-y-auto",
-            )}
-          >
+          <div className="flex flex-col gap-2 px-3 pb-3">
             {stage.items.length === 0 ? (
               <p className="px-1 py-6 text-center text-xs text-muted-foreground">
                 {t("kanban.empty")}

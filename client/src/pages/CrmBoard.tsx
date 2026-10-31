@@ -163,7 +163,7 @@ export default function CrmBoard() {
   };
 
   return (
-    <Stack gap={4} className="h-full min-h-0">
+    <Stack gap={4}>
       {/* 「新增」作为顶栏操作栏（portal 到顶栏右侧） */}
       <HeaderAction>
         <Button
@@ -179,7 +179,6 @@ export default function CrmBoard() {
 
       <KanbanBoard
         stages={stages}
-        fullHeight
         draggable={CRM_DRAG_ENABLED}
         onDealMove={handleMove}
       />
