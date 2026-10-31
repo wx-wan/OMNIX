@@ -166,10 +166,11 @@
   html {
     @apply font-sans;
   }
+  /* 自动填充底色用 --background（而非写死白）：暗色下仍跟随主题，否则白底白字不可见 */
   input:-webkit-autofill,
   input:-webkit-autofill:hover,
   input:-webkit-autofill:focus {
-    -webkit-box-shadow: 0 0 0 1000px #ffffff inset;
+    -webkit-box-shadow: 0 0 0 1000px var(--background) inset;
     -webkit-text-fill-color: var(--foreground);
     caret-color: var(--foreground);
     transition: background-color 9999s ease-in-out 0s;
@@ -287,13 +288,24 @@
 .o-app-switcher-bg {
   @apply bg-background;
   background-image:
-    linear-gradient(45deg, #eaeaea 0%, transparent 50%),
-    linear-gradient(135deg, #eaeaea 0%, transparent 30%, transparent 60%, #eaeaea 95%),
-    linear-gradient(180deg, #eaeaea 0%, transparent 100%),
-    radial-gradient(circle at 50% 50%, rgba(233, 236, 239, 0.95) 20%, transparent 400%),
-    radial-gradient(black 1px, #eaeaea 1px);
+    linear-gradient(45deg, var(--o-grid) 0%, transparent 50%),
+    linear-gradient(135deg, var(--o-grid) 0%, transparent 30%, transparent 60%, var(--o-grid) 95%),
+    linear-gradient(180deg, var(--o-grid) 0%, transparent 100%),
+    radial-gradient(circle at 50% 50%, var(--o-grid-soft) 20%, transparent 400%),
+    radial-gradient(var(--o-dot) 1px, var(--o-grid) 1px);
   background-repeat: no-repeat, no-repeat, no-repeat, no-repeat, repeat;
   background-size: auto, auto, 100% 40%, auto, 12px 12px;
+}
+/* 亮色：浅灰网格；暗色：深灰网格（此前写死 #eaeaea，暗色下整屏泛白） */
+:root {
+  --o-grid: #eaeaea;
+  --o-grid-soft: rgb(233 236 239 / 0.95);
+  --o-dot: black;
+}
+.dark {
+  --o-grid: oklch(0.269 0 0);
+  --o-grid-soft: oklch(0.269 0 0 / 0.95);
+  --o-dot: oklch(0.35 0 0);
 }
 
 /* ── 消息提示（sonner）────────────────────────────
