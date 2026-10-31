@@ -12,6 +12,8 @@ import {
   Boxes,
   Puzzle,
   KanbanSquare,
+  Contact,
+  Package,
 } from "lucide-react";
 import { cn } from "cn";
 import { Button } from "@/components/ui/button";
@@ -21,6 +23,8 @@ const navItems = [
   { to: "/", labelKey: "nav.dashboard", icon: LayoutDashboard, end: true },
   { to: "/users", labelKey: "nav.users", icon: Users, end: false },
   { to: "/crm", labelKey: "nav.crm", icon: KanbanSquare, end: false },
+  { to: "/customers", labelKey: "nav.customers", icon: Contact, end: false },
+  { to: "/products", labelKey: "nav.products", icon: Package, end: false },
   { to: "/showcase", labelKey: "nav.components", icon: Puzzle, end: false },
   { to: "/settings", labelKey: "nav.settings", icon: Settings, end: false },
 ];

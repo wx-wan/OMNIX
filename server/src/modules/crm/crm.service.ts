@@ -3,7 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
 } from "@nestjs/common";
-import { Priority } from "@prisma/client";
+import { Priority, Prisma } from "@prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
 import { UpdateDealDto } from "./dto/update-deal.dto";
 import { CreateDealDto } from "./dto/create-deal.dto";
@@ -32,11 +32,8 @@ export class CrmService {
     }));
   }
 
-  /** 新建商机：不传 stageId 时默认落入第一个阶段（线索到达），位置为该列末尾。 */
+  /** 新建商机：可内联客户画像 + 产品需求（各自落库），关联后进入第一个阶段（线索到达）。 */
   async createDeal(dto: CreateDealDto) {
-    const title = dto.title?.trim();
-    if (!title) throw new BadRequestException("title is required");
-
     let stageId = dto.stageId;
     if (stageId) {
       const stage = await this.prisma.stage.findUnique({ where: { id: stageId } });
@@ -47,23 +44,46 @@ export class CrmService {
       stageId = first.id;
     }
 
-    const agg = await this.prisma.deal.aggregate({
-      where: { stageId },
-      _max: { position: true },
-    });
+    const title =
+      dto.title?.trim() ||
+      [dto.customer?.name, dto.product?.name].filter(Boolean).join(" · ") ||
+      "新商机";
 
-    return this.prisma.deal.create({
-      data: {
-        title,
-        description: dto.description,
-        tag: dto.tag,
-        priority: dto.priority ?? Priority.medium,
-        amount: dto.amount,
-        assignee: dto.assignee,
-        meta: dto.meta,
-        stageId,
-        position: (agg._max.position ?? -1) + 1,
-      },
+    // 内联产品带单价时，按 单价×数量 派生商机金额（未显式传 amount 时）
+    let amount = dto.amount;
+    if (amount == null && dto.product?.price != null) {
+      amount = new Prisma.Decimal(dto.product.price)
+        .mul(dto.product.quantity ?? 1)
+        .toNumber();
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const customer = dto.customer
+        ? await tx.customer.create({ data: dto.customer })
+        : null;
+      const product = dto.product
+        ? await tx.product.create({ data: dto.product })
+        : null;
+      const agg = await tx.deal.aggregate({
+        where: { stageId },
+        _max: { position: true },
+      });
+
+      return tx.deal.create({
+        data: {
+          title,
+          description: dto.description,
+          tag: dto.tag,
+          priority: dto.priority ?? Priority.medium,
+          amount,
+          assignee: dto.assignee,
+          meta: dto.meta,
+          stageId,
+          position: (agg._max.position ?? -1) + 1,
+          customerId: dto.customerId ?? customer?.id ?? undefined,
+          productId: dto.productId ?? product?.id ?? undefined,
+        },
+      });
     });
   }
 

@@ -42,22 +42,62 @@ model Stage {
   @@map("stages")
 }
 
-// CRM 交易/线索卡片
+// 客户（新建商机时落库；也可在「客户」页独立维护）
+model Customer {
+  id        String   @id @default(cuid())
+  name      String // 客户名称 *
+  contact   String? // 联系人
+  phone     String? // 电话
+  company   String? // 公司
+  industry  String? // 行业
+  email     String? // 邮箱
+  note      String? // 备注
+  deals     Deal[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("customers")
+}
+
+// 产品（新建商机时落库；也可在「产品」页独立维护）
+model Product {
+  id          String   @id @default(cuid())
+  name        String // 产品名称 *
+  category    String? // 类别
+  spec        String? // 规格 / 型号
+  price       Decimal? @db.Decimal(12, 2) // 单价（元）
+  quantity    Int      @default(1) // 数量
+  unit        String? // 单位
+  description String? // 描述
+  deals       Deal[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("products")
+}
+
+// CRM 交易/线索卡片（可关联一个客户与一个产品）
 model Deal {
   id          String    @id @default(cuid())
-  title       String // 公司 / 客户名
+  title       String // 商机名称（可由客户 + 产品派生）
   description String?
   tag         String? // 新签 / 续约 等
   priority    Priority  @default(medium)
-  amount      Decimal?  @db.Decimal(12, 2) // 金额（元）
+  amount      Decimal?  @db.Decimal(12, 2) // 金额（元，可由 单价×数量 派生）
   assignee    String? // 业务员
   meta        String? // 备注 / 日期
   stage       Stage     @relation(fields: [stageId], references: [id])
   stageId     String
   position    Int       @default(0) // 同阶段内排序
+  customer    Customer? @relation(fields: [customerId], references: [id])
+  customerId  String?   @map("customer_id")
+  product     Product?  @relation(fields: [productId], references: [id])
+  productId   String?   @map("product_id")
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
   @@index([stageId])
+  @@index([customerId])
+  @@index([productId])
   @@map("deals")
 }

@@ -7,7 +7,6 @@ import { Stack } from "@/components/layout/Stack";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -23,6 +22,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { CustomerForm, EMPTY_CUSTOMER, type CustomerValues } from "@/components/crm/CustomerForm";
+import { ProductForm, EMPTY_PRODUCT, type ProductValues } from "@/components/crm/ProductForm";
 import { CRM_DRAG_ENABLED } from "@/config";
 
 interface RawDeal {
@@ -58,14 +59,6 @@ const FALLBACK_STAGES: KanbanStage[] = [
   { id: "service", title: "售后服务", accent: "bg-rose-500", items: [] },
 ];
 
-const EMPTY_FORM = {
-  title: "",
-  amount: "",
-  assignee: "",
-  priority: "medium" as KanbanPriority,
-  description: "",
-};
-
 function formatAmount(n: number) {
   return `¥${n.toLocaleString("zh-CN")}`;
 }
@@ -91,22 +84,29 @@ export default function CrmBoard() {
   // 服务端「线索到达」真实 id；为空时新建商机由后端默认落第一阶段
   const [leadStageId, setLeadStageId] = useState<string | null>(null);
 
-  // 新建商机弹窗
+  // 新建商机弹窗（双版面：左客户画像 / 右产品需求）
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(false);
-  const [form, setForm] = useState(EMPTY_FORM);
+  const [customer, setCustomer] = useState<CustomerValues>(EMPTY_CUSTOMER);
+  const [product, setProduct] = useState<ProductValues>(EMPTY_PRODUCT);
+  const [assignee, setAssignee] = useState("");
+  const [priority, setPriority] = useState<KanbanPriority>("medium");
 
   const load = () => {
     api
       .get<RawStage[]>("/crm/board")
       .then((r) => {
-        setStages(r.data.length ? r.data.map((s) => ({
-          id: s.id,
-          title: s.title,
-          accent: s.accent,
-          items: s.deals.map(toItem),
-        })) : FALLBACK_STAGES);
+        setStages(
+          r.data.length
+            ? r.data.map((s) => ({
+                id: s.id,
+                title: s.title,
+                accent: s.accent,
+                items: s.deals.map(toItem),
+              }))
+            : FALLBACK_STAGES,
+        );
         setLeadStageId(r.data[0]?.id ?? null);
       })
       .catch(() => setStages(FALLBACK_STAGES));
@@ -127,21 +127,32 @@ export default function CrmBoard() {
     }
   };
 
+  const resetForm = () => {
+    setCustomer(EMPTY_CUSTOMER);
+    setProduct(EMPTY_PRODUCT);
+    setAssignee("");
+    setPriority("medium");
+    setError(false);
+  };
+
   const handleCreate = async () => {
-    if (!form.title.trim() || saving) return;
+    if (!customer.name.trim() || !product.name.trim() || saving) return;
     setSaving(true);
     try {
       await api.post("/crm/deals", {
-        title: form.title.trim(),
-        amount: form.amount ? Number(form.amount) : undefined,
-        assignee: form.assignee.trim() || undefined,
-        priority: form.priority,
-        description: form.description.trim() || undefined,
+        customer: { ...customer, name: customer.name.trim() },
+        product: {
+          ...product,
+          name: product.name.trim(),
+          price: product.price ? Number(product.price) : undefined,
+          quantity: product.quantity ? Number(product.quantity) : undefined,
+        },
+        assignee: assignee.trim() || undefined,
+        priority,
         stageId: leadStageId ?? undefined,
       });
       setOpen(false);
-      setForm(EMPTY_FORM);
-      setError(false);
+      resetForm();
       load();
     } catch {
       setError(true);
@@ -155,7 +166,7 @@ export default function CrmBoard() {
       <div className="flex items-center">
         <Button
           onClick={() => {
-            setError(false);
+            resetForm();
             setOpen(true);
           }}
         >
@@ -178,7 +189,7 @@ export default function CrmBoard() {
           if (v) setError(false);
         }}
       >
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>{t("crm.formTitle")}</DialogTitle>
             <DialogDescription>{t("crm.formDesc")}</DialogDescription>
@@ -190,68 +201,53 @@ export default function CrmBoard() {
               handleCreate();
             }}
           >
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="deal-title">{t("crm.fieldTitle")} *</Label>
-              <Input
-                id="deal-title"
-                value={form.title}
-                onChange={(e) => setForm({ ...form, title: e.target.value })}
-                autoFocus
-                required
-              />
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <section className="rounded-xl border border-border bg-muted/30 p-3">
+                <h3 className="mb-3 text-sm font-semibold">{t("customer.panel")}</h3>
+                <CustomerForm values={customer} onChange={setCustomer} idPrefix="deal" />
+              </section>
+              <section className="rounded-xl border border-border bg-muted/30 p-3">
+                <h3 className="mb-3 text-sm font-semibold">{t("product.panel")}</h3>
+                <ProductForm values={product} onChange={setProduct} idPrefix="deal" />
+              </section>
             </div>
+
             <div className="grid grid-cols-2 gap-3">
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="deal-amount">{t("crm.fieldAmount")}</Label>
-                <Input
-                  id="deal-amount"
-                  type="number"
-                  min="0"
-                  value={form.amount}
-                  onChange={(e) => setForm({ ...form, amount: e.target.value })}
-                />
-              </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="deal-assignee">{t("crm.fieldAssignee")}</Label>
                 <Input
                   id="deal-assignee"
-                  value={form.assignee}
-                  onChange={(e) => setForm({ ...form, assignee: e.target.value })}
+                  value={assignee}
+                  onChange={(e) => setAssignee(e.target.value)}
                 />
               </div>
+              <div className="flex flex-col gap-1.5">
+                <Label>{t("crm.fieldPriority")}</Label>
+                <Select
+                  value={priority}
+                  onValueChange={(v) => setPriority(v as KanbanPriority)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="high">{t("kanban.priorityHigh")}</SelectItem>
+                    <SelectItem value="medium">{t("kanban.priorityMedium")}</SelectItem>
+                    <SelectItem value="low">{t("kanban.priorityLow")}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            <div className="flex flex-col gap-1.5">
-              <Label>{t("crm.fieldPriority")}</Label>
-              <Select
-                value={form.priority}
-                onValueChange={(v) => setForm({ ...form, priority: v as KanbanPriority })}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="high">{t("kanban.priorityHigh")}</SelectItem>
-                  <SelectItem value="medium">{t("kanban.priorityMedium")}</SelectItem>
-                  <SelectItem value="low">{t("kanban.priorityLow")}</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="deal-desc">{t("crm.fieldDesc")}</Label>
-              <Textarea
-                id="deal-desc"
-                rows={2}
-                className="min-h-0 resize-none"
-                value={form.description}
-                onChange={(e) => setForm({ ...form, description: e.target.value })}
-              />
-            </div>
+
             {error && <p className="text-sm text-red-500">{t("crm.createFailed")}</p>}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                 {t("common.cancel")}
               </Button>
-              <Button type="submit" disabled={!form.title.trim() || saving}>
+              <Button
+                type="submit"
+                disabled={!customer.name.trim() || !product.name.trim() || saving}
+              >
                 {t("common.save")}
               </Button>
             </DialogFooter>
