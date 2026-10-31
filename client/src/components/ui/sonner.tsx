@@ -10,6 +10,8 @@ import { CircleCheckIcon, CircleHelpIcon, TriangleAlertIcon, OctagonXIcon, Loade
  * 跟随**应用自身**的主题（读 html.dark），而不是操作系统偏好。
  * 结构细节（内边距、字号、阴影、分状态图标色）写在 index.css 的「消息提示」段。
  * 不要打开 richColors：它带一套彩色底规则，会把白卡盖掉。
+ * 描边必须保留（--normal-border = var(--border)）：暗色下卡片色与页面背景只差一档，
+ * 不描边的话 toast 会糊成一条和背景融在一起的深色长条。
  */
 function useAppTheme() {
   const [theme, setTheme] = React.useState<"light" | "dark">("light")
@@ -42,9 +44,9 @@ const Toaster = ({ ...props }: ToasterProps) => {
         {
           "--normal-bg": "var(--card)",
           "--normal-text": "var(--foreground)",
-          "--normal-border": "transparent",
+          "--normal-border": "var(--border)",
           "--border-radius": "var(--radius)",
-          "--width": "20rem",
+          "--width": "18rem",
         } as React.CSSProperties
       }
       {...props}

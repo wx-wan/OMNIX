@@ -1,12 +1,11 @@
 import { IsOptional, IsString, IsNumber, IsEnum, ValidateNested } from "class-validator";
 import { Type } from "class-transformer";
 import { Priority } from "@prisma/client";
-import { CreateCustomerDto } from "../../customers/dto/create-customer.dto";
-import { CreateContactDto } from "../../customers/dto/create-contact.dto";
+import { CreateContactDto } from "../../contacts/dto/create-contact.dto";
 import { CreateProductDto } from "../../products/dto/create-product.dto";
 
 export class CreateDealDto {
-  /** 可不传：默认由 客户名 · 产品名 派生。 */
+  /** 可不传：默认由 往来单位名 · 产品名 派生。 */
   @IsOptional()
   @IsString()
   title?: string;
@@ -40,22 +39,16 @@ export class CreateDealDto {
   @IsString()
   stageId?: string;
 
-  /** 直接关联已有客户 / 产品（与下方内联新建二选一）。 */
+  /** 直接关联已有往来单位 / 联系人（与下方内联新建二选一）。 */
   @IsOptional()
   @IsString()
-  customerId?: string;
+  contactId?: string;
 
   @IsOptional()
   @IsString()
   productId?: string;
 
-  /** 内联新建客户（公司）并关联（落库 customers 表）。 */
-  @IsOptional()
-  @ValidateNested()
-  @Type(() => CreateCustomerDto)
-  customer?: CreateCustomerDto;
-
-  /** 随公司一并新建的主联系人（落库 contacts 表，归属该客户）。 */
+  /** 内联新建往来单位 / 联系人并关联（默认 type=customer，落库 contacts 表）。 */
   @IsOptional()
   @ValidateNested()
   @Type(() => CreateContactDto)

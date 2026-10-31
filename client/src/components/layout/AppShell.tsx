@@ -6,7 +6,6 @@ import { useTheme } from "@/components/theme/ThemeProvider";
 import { useAuth, userInitials } from "@/lib/auth";
 import {
   LayoutDashboard,
-  Users,
   Settings,
   Moon,
   Sun,
@@ -32,9 +31,8 @@ import {
 
 const navItems = [
   { to: "/", labelKey: "nav.dashboard", icon: LayoutDashboard, end: true },
-  { to: "/users", labelKey: "nav.users", icon: Users, end: false },
+  { to: "/contacts", labelKey: "nav.contacts", icon: Contact, end: false },
   { to: "/crm", labelKey: "nav.crm", icon: KanbanSquare, end: false },
-  { to: "/customers", labelKey: "nav.customers", icon: Contact, end: false },
   { to: "/products", labelKey: "nav.products", icon: Package, end: false },
   { to: "/showcase", labelKey: "nav.components", icon: Puzzle, end: false },
   { to: "/settings", labelKey: "nav.settings", icon: Settings, end: false },
@@ -55,7 +53,7 @@ export function AppShell() {
   const { theme, setTheme } = useTheme();
   const { user, logout } = useAuth();
   const location = useLocation();
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
 
   const toggleLang = () => {
     const next = i18n.language.startsWith("zh") ? "en" : "zh";
@@ -112,7 +110,7 @@ export function AppShell() {
 
       {/* Main column */}
       <div className="flex min-h-0 min-w-0 flex-col gap-3">
-        <header className="flex h-14 shrink-0 items-center justify-between rounded-2xl bg-card px-4 shadow-card md:px-6">
+        <header className="flex h-12 shrink-0 items-center justify-between px-4 md:px-6">
           <div
             id="header-actions"
             className="flex items-center gap-2 [&:not(:has(*))]:hidden"
@@ -152,9 +150,9 @@ export function AppShell() {
             </Button>
           </div>
         </header>
-        <main className="island-canvas min-h-0 flex-1 overflow-y-auto rounded-2xl px-4 py-5 md:px-6 md:py-6">
-          {/* CRM 看板脱离 Container 做全宽；其余页面保持居中容器 */}
-          {location.pathname === "/crm" ? <Outlet /> : <Container size="lg"><Outlet /></Container>}
+        <main className="min-h-0 flex-1 overflow-y-auto">
+          {/* CRM 看板及其商机页（/crm/deals/*）均脱离 Container 做全宽；其余页面保持居中容器 */}
+          {location.pathname.startsWith("/crm") ? <Outlet /> : <Container size="lg"><Outlet /></Container>}
         </main>
       </div>
     </div>

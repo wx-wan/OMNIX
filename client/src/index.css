@@ -309,9 +309,9 @@
 }
 
 /* ── 消息提示（sonner）────────────────────────────
-   全站唯一的 toast 外观，与卡片语言同源：白卡 + 单一阴影 + 卡片档圆角，不描边。 */
+   全站唯一的 toast 外观，与卡片语言同源：卡片底 + 描边（暗色下靠它和背景分层）+ 浮层阴影。 */
 [data-sonner-toaster] [data-sonner-toast][data-styled='true'] {
-  @apply rounded-xl border border-transparent bg-card text-foreground shadow-pop;
+  @apply rounded-xl border-border bg-card text-foreground shadow-pop;
   padding: 12px 14px;
   gap: 10px;
   font-size: 14px;

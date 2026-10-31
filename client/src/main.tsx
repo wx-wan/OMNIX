@@ -13,7 +13,8 @@ createRoot(document.getElementById("root")!).render(
     <ThemeProvider>
       <AuthProvider>
         <RouterProvider router={router} />
-        <Toaster position="top-center" closeButton />
+        {/* 不开 closeButton：sonner 的关闭钮悬在 toast 左上角外沿，短消息下像游离的杂点；自动消失 + 滑动关闭已够用 */}
+        <Toaster position="top-center" />
       </AuthProvider>
     </ThemeProvider>
   </StrictMode>,

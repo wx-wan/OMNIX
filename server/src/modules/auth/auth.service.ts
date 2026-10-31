@@ -4,6 +4,7 @@ import {
   UnauthorizedException,
 } from "@nestjs/common";
 import bcrypt from "bcryptjs";
+import { ContactType, Prisma } from "@prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
 
 export interface PublicUser {
@@ -17,37 +18,52 @@ export interface PublicUser {
 export class AuthService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async register(email: string, name: string, password: string): Promise<PublicUser> {
-    const existing = await this.prisma.user.findUnique({ where: { email } });
+  async register(
+    email: string,
+    name: string,
+    password: string,
+  ): Promise<PublicUser> {
+    const existing = await this.prisma.contact.findUnique({ where: { email } });
     if (existing) throw new ConflictException("Email already registered");
     const passwordHash = await bcrypt.hash(password, 10);
-    const user = await this.prisma.user.create({
-      data: { email, name, passwordHash },
+    const user = await this.prisma.contact.create({
+      data: {
+        email,
+        name,
+        type: ContactType.user,
+        role: "user",
+        password: passwordHash,
+      },
     });
     return this.toPublic(user);
   }
 
   async validateUser(email: string, password: string): Promise<PublicUser> {
-    const user = await this.prisma.user.findUnique({ where: { email } });
-    if (!user || !user.passwordHash) {
+    const user = await this.prisma.contact.findUnique({ where: { email } });
+    if (!user || user.type !== ContactType.user || !user.password) {
       throw new UnauthorizedException("Invalid credentials");
     }
-    const ok = await bcrypt.compare(password, user.passwordHash);
+    const ok = await bcrypt.compare(password, user.password);
     if (!ok) throw new UnauthorizedException("Invalid credentials");
     return this.toPublic(user);
   }
 
   async findById(id: string): Promise<PublicUser | null> {
-    const user = await this.prisma.user.findUnique({ where: { id } });
+    const user = await this.prisma.contact.findUnique({ where: { id } });
     return user ? this.toPublic(user) : null;
   }
 
   private toPublic(user: {
     id: string;
-    email: string;
+    email: string | null;
     name: string;
-    role: string;
+    role: string | null;
   }): PublicUser {
-    return { id: user.id, email: user.email, name: user.name, role: user.role };
+    return {
+      id: user.id,
+      email: user.email ?? "",
+      name: user.name,
+      role: user.role ?? "user",
+    };
   }
 }

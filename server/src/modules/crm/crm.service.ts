@@ -46,7 +46,7 @@ export class CrmService {
 
     const title =
       dto.title?.trim() ||
-      [dto.customer?.name, dto.product?.name].filter(Boolean).join(" · ") ||
+      [dto.contact?.name, dto.product?.name].filter(Boolean).join(" · ") ||
       "新商机";
 
     // 内联产品带单价时，按 单价×数量 派生商机金额（未显式传 amount 时）
@@ -58,13 +58,9 @@ export class CrmService {
     }
 
     return this.prisma.$transaction(async (tx) => {
-      // 内联公司（客户）+ 可选主联系人，二者在同一个事务里落库并关联
-      const customer = dto.customer
-        ? await tx.customer.create({
-            data: dto.contact
-              ? { ...dto.customer, contacts: { create: dto.contact } }
-              : dto.customer,
-          })
+      // 内联往来单位 / 联系人（默认 type=customer）落库 contacts 表
+      const contact = dto.contact
+        ? await tx.contact.create({ data: dto.contact })
         : null;
       const product = dto.product
         ? await tx.product.create({ data: dto.product })
@@ -85,20 +81,20 @@ export class CrmService {
           meta: dto.meta,
           stageId,
           position: (agg._max.position ?? -1) + 1,
-          customerId: dto.customerId ?? customer?.id ?? undefined,
+          contactId: dto.contactId ?? contact?.id ?? undefined,
           productId: dto.productId ?? product?.id ?? undefined,
         },
       });
     });
   }
 
-  /** 商机详情：含关联阶段、客户（及其联系人）与产品。amount 转为 number。 */
+  /** 商机详情：含关联阶段、往来单位（联系人）与产品。amount 转为 number。 */
   async getDeal(id: string) {
     const deal = await this.prisma.deal.findUnique({
       where: { id },
       include: {
         stage: true,
-        customer: { include: { contacts: { orderBy: { createdAt: "asc" } } } },
+        contact: true,
         product: true,
       },
     });
@@ -116,7 +112,7 @@ export class CrmService {
     const exists = await this.prisma.deal.findUnique({ where: { id } });
     if (!exists) throw new NotFoundException(`Deal ${id} not found`);
 
-    const data: Record<string, unknown> = {};
+    const data: Prisma.DealUpdateInput = {};
     if (dto.title !== undefined) data.title = dto.title;
     if (dto.description !== undefined) data.description = dto.description;
     if (dto.tag !== undefined) data.tag = dto.tag;
@@ -124,7 +120,7 @@ export class CrmService {
     if (dto.amount !== undefined) data.amount = dto.amount;
     if (dto.assignee !== undefined) data.assignee = dto.assignee;
     if (dto.meta !== undefined) data.meta = dto.meta;
-    if (dto.stageId !== undefined) data.stageId = dto.stageId;
+    if (dto.stageId !== undefined) data.stage = { connect: { id: dto.stageId } };
     if (dto.position !== undefined) data.position = dto.position;
 
     // 拖拽换列时若未显式给位置，则落到目标列末尾
@@ -136,6 +132,29 @@ export class CrmService {
       data.position = (agg._max.position ?? -1) + 1;
     }
 
-    return this.prisma.deal.update({ where: { id }, data });
+    // 内联产品改单价时，按 单价×数量 重新派生金额（未显式传 amount）
+    if (dto.product?.price != null && dto.amount === undefined) {
+      data.amount = new Prisma.Decimal(dto.product.price)
+        .mul(dto.product.quantity ?? 1)
+        .toNumber();
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      // 同步更新关联的往来单位 / 联系人
+      if (dto.contact && exists.contactId) {
+        await tx.contact.update({ where: { id: exists.contactId }, data: dto.contact });
+      }
+      // 同步更新关联的产品需求
+      if (dto.product && exists.productId) {
+        const pd: Prisma.ProductUpdateInput = { ...dto.product };
+        if (pd.price != null && typeof pd.price === "number") {
+          pd.price = new Prisma.Decimal(pd.price);
+        }
+        await tx.product.update({ where: { id: exists.productId }, data: pd });
+      }
+      return tx.deal.update({ where: { id }, data });
+    });
+
+    return this.getDeal(id);
   }
 }

@@ -2,9 +2,9 @@ import { createBrowserRouter, Navigate } from "react-router-dom";
 import { AppShell } from "@/components/layout/AppShell";
 import { RequireAuth } from "@/components/auth/RequireAuth";
 import Dashboard from "@/pages/Dashboard";
-import Users from "@/pages/Users";
 import CrmBoard from "@/pages/CrmBoard";
-import Customers from "@/pages/Customers";
+import Contacts from "@/pages/Contacts";
+import DealForm from "@/pages/DealForm";
 import Products from "@/pages/Products";
 import Settings from "@/pages/Settings";
 import Showcase from "@/pages/Showcase";
@@ -13,9 +13,10 @@ import Register from "@/pages/Register";
 
 const protectedRoutes = [
   { index: true, element: <Dashboard /> },
-  { path: "users", element: <Users /> },
+  { path: "contacts", element: <Contacts /> },
   { path: "crm", element: <CrmBoard /> },
-  { path: "customers", element: <Customers /> },
+  { path: "crm/deals/new", element: <DealForm /> },
+  { path: "crm/deals/:id", element: <DealForm /> },
   { path: "products", element: <Products /> },
   { path: "showcase", element: <Showcase /> },
   { path: "settings", element: <Settings /> },

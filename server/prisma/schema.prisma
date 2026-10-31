@@ -17,16 +17,11 @@ enum Priority {
   high
 }
 
-model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  name         String
-  passwordHash String   @default("")
-  role         String   @default("user") // admin | user
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  @@map("users")
+// 统一往来单位 / 联系人类型：客户、供应商、用户（系统账号）
+enum ContactType {
+  customer
+  supplier
+  user
 }
 
 // CRM 销售阶段（看板列）
@@ -43,34 +38,27 @@ model Stage {
   @@map("stages")
 }
 
-// 客户（新建商机时落库；也可在「客户」页独立维护）
-// 客户（公司）：一个公司可维护多条联系人（见 Contact）
-model Customer {
-  id           String   @id @default(cuid())
-  name         String // 公司名称 *
-  country      String? // 国家地区
-  website      String? // 官网
-  customerType String? // 客户类型
-  contacts     Contact[]
-  deals        Deal[]
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  @@map("customers")
-}
-
-// 联系人：归属某家公司，一个公司可有多个联系人
+// 统一往来单位 / 联系人（扁平化单表）
+// - type 区分 客户 / 供应商 / 用户
+// - name 为组织名称（公司）或个人姓名
+// - company 为个人所属公司（当本条为「个人」时填写）
+// - password / role 仅 type=user 用于登录
 model Contact {
-  id         String   @id @default(cuid())
-  customerId String
-  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  name       String // 联系人姓名 *
-  email      String? // 电子邮箱
-  phone      String? // 电话号码
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id        String      @id @default(cuid())
+  type      ContactType @default(customer)
+  name      String // 组织名称 或 个人姓名 *
+  company   String? // 个人所属公司
+  email     String? @unique // 邮箱唯一（登录按邮箱定位）
+  phone     String?
+  country   String? // 国家地区
+  website   String? // 官网
+  password  String? // 仅 type=user 用于登录
+  role      String? // 仅 type=user：admin | user
+  deals     Deal[]
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
 
-  @@index([customerId])
+  @@index([type])
   @@map("contacts")
 }
 
@@ -91,10 +79,10 @@ model Product {
   @@map("products")
 }
 
-// CRM 交易/线索卡片（可关联一个客户与一个产品）
+// CRM 交易/线索卡片（关联一个往来单位与一个产品）
 model Deal {
   id          String    @id @default(cuid())
-  title       String // 商机名称（可由客户 + 产品派生）
+  title       String // 商机名称（可由往来单位 + 产品派生）
   description String?
   tag         String? // 新签 / 续约 等
   priority    Priority  @default(medium)
@@ -104,15 +92,15 @@ model Deal {
   stage       Stage     @relation(fields: [stageId], references: [id])
   stageId     String
   position    Int       @default(0) // 同阶段内排序
-  customer    Customer? @relation(fields: [customerId], references: [id])
-  customerId  String?   @map("customer_id")
+  contact     Contact?  @relation(fields: [contactId], references: [id])
+  contactId   String?   @map("contact_id")
   product     Product?  @relation(fields: [productId], references: [id])
   productId   String?   @map("product_id")
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
   @@index([stageId])
-  @@index([customerId])
+  @@index([contactId])
   @@index([productId])
   @@map("deals")
 }

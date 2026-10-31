@@ -32,6 +32,8 @@ export interface ChatterProps {
   onSend?: (text: string) => void;
   placeholder?: string;
   className?: string;
+  /** 充满父容器高度（消息区 flex-1 自适应滚动），用于详情页分栏布局。 */
+  fill?: boolean;
 }
 
 function deriveInitials(name: string): string {
@@ -57,6 +59,7 @@ export function Chatter({
   onSend,
   placeholder,
   className,
+  fill,
 }: ChatterProps) {
   const { t } = useTranslation();
   const [messages, setMessages] = useState<ChatterMessage[]>(initialMessages);
@@ -87,7 +90,7 @@ export function Chatter({
   };
 
   return (
-    <div className={cn("flex flex-col rounded-2xl bg-card shadow-card", className)}>
+    <div className={cn("flex flex-col rounded-2xl bg-card shadow-card", fill && "h-full", className)}>
       {/* Header */}
       <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
         <div className="flex items-center gap-2">
@@ -113,7 +116,12 @@ export function Chatter({
       </div>
 
       {/* Message thread */}
-      <div className="flex max-h-80 flex-col gap-4 overflow-y-auto px-4 py-4">
+      <div
+        className={cn(
+          "flex flex-col gap-4 overflow-y-auto px-4 py-4",
+          fill ? "min-h-0 flex-1" : "max-h-80",
+        )}
+      >
         {messages.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted-foreground">{t("chatter.empty")}</p>
         ) : (

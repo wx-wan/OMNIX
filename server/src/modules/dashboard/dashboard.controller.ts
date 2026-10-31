@@ -1,5 +1,6 @@
 import { Controller, Get } from "@nestjs/common";
-import { UsersService } from "../users/users.service";
+import { ContactsService } from "../contacts/contacts.service";
+import { ContactType } from "@prisma/client";
 
 interface Stat {
   key: string; // i18n key
@@ -10,11 +11,13 @@ interface Stat {
 
 @Controller("dashboard")
 export class DashboardController {
-  constructor(private readonly users: UsersService) {}
+  constructor(private readonly contacts: ContactsService) {}
 
   @Get("stats")
   async stats(): Promise<Stat[]> {
-    const total = await this.users.findAll().then((u) => u.length);
+    const total = await this.contacts
+      .list(ContactType.user)
+      .then((u) => u.length);
     return [
       { key: "dashboard.totalUsers", value: String(total), delta: "+12.5%", up: true },
       { key: "dashboard.activeSessions", value: "342", delta: "+4.1%", up: true },

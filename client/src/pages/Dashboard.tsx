@@ -40,7 +40,7 @@ export default function Dashboard() {
     let alive = true;
     Promise.all([
       api.get<Stat[]>("/dashboard/stats").catch(() => ({ data: [] as Stat[] })),
-      api.get<RecentUser[]>("/users?limit=5").catch(() => ({ data: [] as RecentUser[] })),
+      api.get<RecentUser[]>("/contacts?type=user&limit=5").catch(() => ({ data: [] as RecentUser[] })),
     ]).then(([s, u]) => {
       if (!alive) return;
       setStats(s.data);
