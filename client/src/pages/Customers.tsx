@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Plus } from "lucide-react";
 import { api } from "@/lib/api";
 import { Stack } from "@/components/layout/Stack";
+import { HeaderAction } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -67,8 +68,7 @@ export default function Customers() {
 
   return (
     <Stack gap={4}>
-      <div className="flex items-center justify-between">
-        <h1 className="text-lg font-semibold tracking-tight">{t("nav.customers")}</h1>
+      <HeaderAction>
         <Button
           onClick={() => {
             setError(false);
@@ -79,7 +79,7 @@ export default function Customers() {
           <Plus />
           {t("crm.newDeal")}
         </Button>
-      </div>
+      </HeaderAction>
 
       {list.length === 0 ? (
         <Card>
