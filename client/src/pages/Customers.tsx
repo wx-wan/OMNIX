@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import { api } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import { Stack } from "@/components/layout/Stack";
 import { HeaderAction } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/button";
@@ -14,6 +15,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { Chatter } from "@/components/chatter/Chatter";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -46,6 +48,7 @@ const typeLabel = (t: (k: string) => string, type?: string | null) =>
 
 export default function Customers() {
   const { t } = useTranslation();
+  const { user } = useAuth();
   const [list, setList] = useState<Company[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
   const [values, setValues] = useState<CustomerValues>(EMPTY_CUSTOMER);
@@ -357,6 +360,12 @@ export default function Customers() {
                   </div>
                 ))}
               </div>
+
+              <Chatter
+                className="mt-2"
+                currentUser={user?.name}
+                followers={detail.contacts.map((c) => c.name)}
+              />
             </>
           )}
         </SheetContent>

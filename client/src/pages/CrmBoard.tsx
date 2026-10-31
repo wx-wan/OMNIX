@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Plus } from "lucide-react";
 import { api } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import { HeaderAction } from "@/components/layout/AppShell";
 import { KanbanBoard, type KanbanItem, type KanbanPriority, type KanbanStage } from "@/components/kanban/KanbanBoard";
 import { Stack } from "@/components/layout/Stack";
@@ -24,6 +25,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { Chatter } from "@/components/chatter/Chatter";
 import type { CustomerValues } from "@/components/crm/CustomerForm";
 import { EMPTY_CUSTOMER } from "@/components/crm/CustomerForm";
 import type { ProductValues } from "@/components/crm/ProductForm";
@@ -147,6 +149,7 @@ function InfoItem({ label, children }: { label: string; children?: React.ReactNo
 
 export default function CrmBoard() {
   const { t } = useTranslation();
+  const { user } = useAuth();
   const [stages, setStages] = useState<KanbanStage[]>(FALLBACK_STAGES);
   // 服务端「线索到达」真实 id；为空时新建商机由后端默认落第一阶段
   const [leadStageId, setLeadStageId] = useState<string | null>(null);
@@ -615,6 +618,12 @@ export default function CrmBoard() {
                   <p className="text-sm text-muted-foreground">{detail.description}</p>
                 </section>
               )}
+
+              <Chatter
+                className="mt-2"
+                currentUser={user?.name}
+                followers={detail.assignee ? [detail.assignee] : undefined}
+              />
             </>
           )}
         </SheetContent>
