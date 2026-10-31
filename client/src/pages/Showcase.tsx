@@ -75,6 +75,7 @@ import { Split } from "@/components/layout/Split";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { StatCard } from "@/components/layout/StatCard";
 import { KanbanBoard, type KanbanStage } from "@/components/kanban/KanbanBoard";
+import { Chatter, type ChatterMessage } from "@/components/chatter/Chatter";
 
 // 演示用的示例数据（代表后端返回内容，非界面文案）
 const kanbanStages: KanbanStage[] = [
@@ -145,6 +146,29 @@ const kanbanStages: KanbanStage[] = [
   },
 ];
 
+// 演示用的示例数据（代表后端返回内容，非界面文案）
+const chatterMessages: ChatterMessage[] = [
+  {
+    id: "m1",
+    author: "林经理",
+    body: "客户已确认报价，麻烦安排样品寄出。",
+    timestamp: "10-29 09:12",
+    attachments: [{ name: "报价单_v2.pdf", size: "240 KB" }],
+  },
+  {
+    id: "m2",
+    author: "陈销售",
+    body: "样品今天已发出，快递单号 SF1234567890。",
+    timestamp: "10-29 15:40",
+  },
+  {
+    id: "m3",
+    author: "林经理",
+    body: "收到，跟进一下物流状态。",
+    timestamp: "10-30 10:05",
+  },
+];
+
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex flex-col gap-2">
@@ -210,6 +234,19 @@ export default function Showcase() {
         icon={Puzzle}
       >
         <KanbanBoard stages={kanbanStages} />
+      </Section>
+
+      <Section
+        title={t("showcase.chatterTitle")}
+        description={t("showcase.chatterDesc")}
+        icon={Puzzle}
+      >
+        <Chatter
+          initialMessages={chatterMessages}
+          currentUser="我"
+          followers={["林经理", "陈销售", "王主管"]}
+          className="max-w-xl"
+        />
       </Section>
 
       <Card>

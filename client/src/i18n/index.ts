@@ -33,6 +33,15 @@ const resources = {
         title: "CRM 看板",
         subtitle: "销售全流程：从线索到达、需求确认直到售后服务",
       },
+      chatter: {
+        title: "讨论",
+        send: "发送",
+        placeholder: "输入消息…",
+        empty: "暂无消息，开始讨论吧",
+        you: "我",
+        followers: "关注者",
+        hint: "Enter 发送 · Shift+Enter 换行",
+      },
       settings: {
         aboutDesc:
           "React 19 + shadcn/ui（Base UI + Tailwind v4） · NestJS + Prisma + PostgreSQL",
@@ -60,6 +69,8 @@ const resources = {
         sideAreaDesc: "固定宽度的侧栏（桌面 20rem）。",
         kanbanTitle: "Kanban 看板（阶段流）",
         kanbanDesc: "横向滚动的阶段列，展示事项在流程中的分布",
+        chatterTitle: "Chatter 讨论面板",
+        chatterDesc: "记录级讨论流 + 发消息输入框（Odoo 风格），可挂到任意业务单据底部",
         btnVariants: "Button 变体",
         btnSizes: "Button 尺寸",
         form: "表单",
@@ -134,6 +145,15 @@ const resources = {
         subtitle:
           "Full sales pipeline: from lead arrival and qualification through to after-sales service",
       },
+      chatter: {
+        title: "Discuss",
+        send: "Send",
+        placeholder: "Write a message…",
+        empty: "No messages yet — start the discussion.",
+        you: "You",
+        followers: "Followers",
+        hint: "Enter to send · Shift+Enter for newline",
+      },
       settings: {
         aboutDesc:
           "React 19 + shadcn/ui (Base UI + Tailwind v4) · NestJS + Prisma + PostgreSQL",
@@ -164,6 +184,9 @@ const resources = {
         kanbanTitle: "Kanban board (stage flow)",
         kanbanDesc:
           "Horizontally scrolling stage columns showing how items flow through the pipeline",
+        chatterTitle: "Chatter discussion panel",
+        chatterDesc:
+          "Record-level message thread + composer (Odoo-style), droppable onto any business document",
         btnVariants: "Button variants",
         btnSizes: "Button sizes",
         form: "Form",
