@@ -8,7 +8,7 @@ const resources = {
       nav: {
         dashboard: "仪表盘",
         users: "用户",
-        crm: "CRM",
+        crm: "看板",
         customers: "客户",
         products: "产品",
         components: "组件",
@@ -164,7 +164,7 @@ const resources = {
       nav: {
         dashboard: "Dashboard",
         users: "Users",
-        crm: "CRM",
+        crm: "Board",
         customers: "Customers",
         products: "Products",
         components: "Components",

@@ -90,7 +90,7 @@ export function AppShell() {
 
       {/* Main column */}
       <div className="flex min-h-0 min-w-0 flex-col gap-3">
-        <header className="flex h-14 shrink-0 items-center justify-between rounded-2xl bg-card px-4 shadow-card">
+        <header className="flex h-14 shrink-0 items-center justify-between rounded-2xl bg-card px-4 shadow-card md:px-6">
           <div className="text-sm font-medium text-muted-foreground">
             {t(
               navItems.find((n) =>
