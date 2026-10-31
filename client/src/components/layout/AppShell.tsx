@@ -102,18 +102,11 @@ export function AppShell() {
       {/* Main column */}
       <div className="flex min-h-0 min-w-0 flex-col gap-3">
         <header className="flex h-14 shrink-0 items-center justify-between rounded-2xl bg-card px-4 shadow-card md:px-6">
-          <div className="text-sm font-medium text-muted-foreground">
-            {t(
-              navItems.find((n) =>
-                n.end ? location.pathname === n.to : location.pathname.startsWith(n.to),
-              )?.labelKey ?? "appName",
-            )}
-          </div>
+          <div
+            id="header-actions"
+            className="flex items-center gap-2 [&:not(:has(*))]:hidden"
+          />
           <div className="flex items-center gap-2">
-            <div
-              id="header-actions"
-              className="flex items-center gap-2 [&:not(:has(*))]:hidden"
-            />
             <Button variant="ghost" size="icon" onClick={toggleLang} aria-label="toggle language">
               <Languages className="size-5" />
             </Button>
