@@ -1,6 +1,12 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from "@nestjs/common";
+import { Priority } from "@prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
 import { UpdateDealDto } from "./dto/update-deal.dto";
+import { CreateDealDto } from "./dto/create-deal.dto";
 
 @Injectable()
 export class CrmService {
@@ -24,6 +30,41 @@ export class CrmService {
         amount: deal.amount != null ? deal.amount.toNumber() : null,
       })),
     }));
+  }
+
+  /** 新建商机：不传 stageId 时默认落入第一个阶段（线索到达），位置为该列末尾。 */
+  async createDeal(dto: CreateDealDto) {
+    const title = dto.title?.trim();
+    if (!title) throw new BadRequestException("title is required");
+
+    let stageId = dto.stageId;
+    if (stageId) {
+      const stage = await this.prisma.stage.findUnique({ where: { id: stageId } });
+      if (!stage) throw new NotFoundException(`Stage ${stageId} not found`);
+    } else {
+      const first = await this.prisma.stage.findFirst({ orderBy: { position: "asc" } });
+      if (!first) throw new BadRequestException("No stages configured");
+      stageId = first.id;
+    }
+
+    const agg = await this.prisma.deal.aggregate({
+      where: { stageId },
+      _max: { position: true },
+    });
+
+    return this.prisma.deal.create({
+      data: {
+        title,
+        description: dto.description,
+        tag: dto.tag,
+        priority: dto.priority ?? Priority.medium,
+        amount: dto.amount,
+        assignee: dto.assignee,
+        meta: dto.meta,
+        stageId,
+        position: (agg._max.position ?? -1) + 1,
+      },
+    });
   }
 
   async updateDeal(id: string, dto: UpdateDealDto) {

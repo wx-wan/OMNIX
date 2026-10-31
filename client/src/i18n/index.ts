@@ -32,6 +32,15 @@ const resources = {
       crm: {
         title: "CRM 看板",
         subtitle: "销售全流程：从线索到达、需求确认直到售后服务",
+        newDeal: "新增",
+        formTitle: "新建商机",
+        formDesc: "新商机将进入「线索到达」阶段",
+        fieldTitle: "商机名称",
+        fieldAmount: "金额（¥）",
+        fieldAssignee: "业务员",
+        fieldPriority: "优先级",
+        fieldDesc: "备注",
+        createFailed: "创建失败，请重试",
       },
       chatter: {
         title: "讨论",
@@ -144,6 +153,15 @@ const resources = {
         title: "CRM Board",
         subtitle:
           "Full sales pipeline: from lead arrival and qualification through to after-sales service",
+        newDeal: "New",
+        formTitle: "New opportunity",
+        formDesc: "New deals enter the “Lead arrival” stage",
+        fieldTitle: "Opportunity name",
+        fieldAmount: "Amount (¥)",
+        fieldAssignee: "Owner",
+        fieldPriority: "Priority",
+        fieldDesc: "Notes",
+        createFailed: "Failed to create — please retry",
       },
       chatter: {
         title: "Discuss",
