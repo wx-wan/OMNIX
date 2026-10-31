@@ -73,6 +73,75 @@ import { Grid } from "@/components/layout/Grid";
 import { Split } from "@/components/layout/Split";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { StatCard } from "@/components/layout/StatCard";
+import { KanbanBoard, type KanbanStage } from "@/components/kanban/KanbanBoard";
+
+const kanbanStages: KanbanStage[] = [
+  {
+    id: "todo",
+    title: "待办",
+    accent: "bg-slate-400",
+    items: [
+      {
+        id: "t1",
+        title: "需求评审：导出报表",
+        description: "梳理列与格式要求",
+        tag: "需求",
+        priority: "medium",
+        assignee: { name: "林", initials: "林" },
+        meta: "截止 11-02",
+      },
+      {
+        id: "t2",
+        title: "接入支付回调",
+        priority: "high",
+        assignee: { name: "陈", initials: "陈" },
+      },
+    ],
+  },
+  {
+    id: "doing",
+    title: "进行中",
+    accent: "bg-sky-500",
+    items: [
+      {
+        id: "d1",
+        title: "看板组件开发",
+        description: "阶段流展示，支持横向滚动",
+        tag: "前端",
+        priority: "high",
+        assignee: { name: "王", initials: "王" },
+      },
+    ],
+  },
+  {
+    id: "review",
+    title: "待审核",
+    accent: "bg-amber-500",
+    items: [
+      {
+        id: "r1",
+        title: "主题色一致性走查",
+        priority: "low",
+        assignee: { name: "李", initials: "李" },
+      },
+    ],
+  },
+  {
+    id: "done",
+    title: "已完成",
+    accent: "bg-emerald-500",
+    items: [
+      {
+        id: "o1",
+        title: "字体落地",
+        description: "montserrat + noto-sans-sc",
+        priority: "medium",
+        assignee: { name: "王", initials: "王" },
+        meta: "10-31",
+      },
+    ],
+  },
+];
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -132,6 +201,14 @@ export default function Showcase() {
             }
           />
         </Stack>
+      </Section>
+
+      <Section
+        title="Kanban 看板（阶段流）"
+        description="横向滚动的阶段列，展示事项在流程中的分布"
+        icon={Puzzle}
+      >
+        <KanbanBoard stages={kanbanStages} />
       </Section>
 
       <Card>
