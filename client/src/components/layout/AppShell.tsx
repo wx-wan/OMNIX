@@ -118,7 +118,7 @@ export function AppShell() {
             id="header-actions"
             className="flex items-center gap-2 [&:not(:has(*))]:hidden"
           />
-          <div className="flex items-center gap-2">
+          <div className="ml-auto flex items-center gap-2">
             {user && (
               <DropdownMenu>
                 <DropdownMenuTrigger className="flex items-center gap-2 rounded-lg px-2 py-1 text-sm hover:bg-muted">
