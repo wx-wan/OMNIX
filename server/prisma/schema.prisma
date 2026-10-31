@@ -1,6 +1,6 @@
 // Prisma schema — OMNIX 后端
 // 生成客户端：npx prisma generate
-// 建表/迁移：npx prisma migrate dev --name init
+// 建表/迁移：npx prisma migrate dev
 
 generator client {
   provider = "prisma-client-js"
@@ -9,6 +9,12 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+enum Priority {
+  low
+  medium
+  high
 }
 
 model User {
@@ -20,4 +26,38 @@ model User {
   updatedAt DateTime @updatedAt
 
   @@map("users")
+}
+
+// CRM 销售阶段（看板列）
+model Stage {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  title     String
+  accent    String   @default("bg-slate-400") // 阶段强调色（tailwind 背景类）
+  position  Int      @default(0)
+  deals     Deal[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("stages")
+}
+
+// CRM 交易/线索卡片
+model Deal {
+  id          String    @id @default(cuid())
+  title       String // 公司 / 客户名
+  description String?
+  tag         String? // 新签 / 续约 等
+  priority    Priority  @default(medium)
+  amount      Decimal?  @db.Decimal(12, 2) // 金额（元）
+  assignee    String? // 业务员
+  meta        String? // 备注 / 日期
+  stage       Stage     @relation(fields: [stageId], references: [id])
+  stageId     String
+  position    Int       @default(0) // 同阶段内排序
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([stageId])
+  @@map("deals")
 }

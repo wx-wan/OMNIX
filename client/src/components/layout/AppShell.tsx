@@ -11,6 +11,7 @@ import {
   Languages,
   Boxes,
   Puzzle,
+  KanbanSquare,
 } from "lucide-react";
 import { cn } from "cn";
 import { Button } from "@/components/ui/button";
@@ -19,6 +20,7 @@ import { Container } from "@/components/layout/Container";
 const navItems = [
   { to: "/", labelKey: "nav.dashboard", icon: LayoutDashboard, end: true },
   { to: "/users", labelKey: "nav.users", icon: Users, end: false },
+  { to: "/crm", labelKey: "nav.crm", icon: KanbanSquare, end: false },
   { to: "/showcase", labelKey: "nav.components", icon: Puzzle, end: false },
   { to: "/settings", labelKey: "nav.settings", icon: Settings, end: false },
 ];
@@ -83,7 +85,7 @@ export function AppShell() {
       </aside>
 
       {/* Main column */}
-      <div className="flex min-w-0 flex-col gap-3">
+      <div className="flex min-h-0 min-w-0 flex-col gap-3">
         <header className="flex h-14 shrink-0 items-center justify-between rounded-2xl bg-card px-4 shadow-card">
           <div className="text-sm font-medium text-muted-foreground">
             {t(

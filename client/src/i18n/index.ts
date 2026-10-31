@@ -8,6 +8,7 @@ const resources = {
       nav: {
         dashboard: "仪表盘",
         users: "用户",
+        crm: "CRM",
         components: "组件",
         settings: "设置",
       },
@@ -27,6 +28,10 @@ const resources = {
         cancel: "取消",
         confirm: "确认",
         actions: "操作",
+      },
+      crm: {
+        title: "CRM 看板",
+        subtitle: "销售全流程：从线索到达、需求确认直到售后服务",
       },
       settings: {
         aboutDesc:
@@ -103,6 +108,7 @@ const resources = {
       nav: {
         dashboard: "Dashboard",
         users: "Users",
+        crm: "CRM",
         components: "Components",
         settings: "Settings",
       },
@@ -122,6 +128,11 @@ const resources = {
         cancel: "Cancel",
         confirm: "Confirm",
         actions: "Actions",
+      },
+      crm: {
+        title: "CRM Board",
+        subtitle:
+          "Full sales pipeline: from lead arrival and qualification through to after-sales service",
       },
       settings: {
         aboutDesc:
