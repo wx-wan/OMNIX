@@ -76,6 +76,12 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { StatCard } from "@/components/layout/StatCard";
 import { KanbanBoard, type KanbanStage } from "@/components/kanban/KanbanBoard";
 import { Chatter, type ChatterMessage } from "@/components/chatter/Chatter";
+import { Image } from "@/components/ui/image";
+
+// 演示用图片（内联 SVG，避免依赖网络）
+const SAMPLE_IMAGE = `data:image/svg+xml;utf8,${encodeURIComponent(
+  `<svg xmlns='http://www.w3.org/2000/svg' width='320' height='180'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='#FFD54F'/><stop offset='1' stop-color='#2b2b2b'/></linearGradient></defs><rect width='100%' height='100%' fill='url(#g)'/><text x='50%' y='50%' fill='white' font-size='20' text-anchor='middle' dominant-baseline='middle' font-family='sans-serif'>OMNIX</text></svg>`,
+)}`;
 
 // 演示用的示例数据（代表后端返回内容，非界面文案）
 const kanbanStages: KanbanStage[] = [
@@ -247,6 +253,17 @@ export default function Showcase() {
           followers={["林经理", "陈销售", "王主管"]}
           className="max-w-xl"
         />
+      </Section>
+
+      <Section
+        title={t("showcase.imageTitle")}
+        description={t("showcase.imageDesc")}
+        icon={Puzzle}
+      >
+        <div className="grid max-w-2xl grid-cols-2 gap-4">
+          <Image src={SAMPLE_IMAGE} alt="示例图片" ratio="16/9" />
+          <Image src="https://invalid.example/nope.png" alt="加载失败的示例" ratio="16/9" />
+        </div>
       </Section>
 
       <Card>

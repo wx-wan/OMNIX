@@ -51,6 +51,9 @@ const resources = {
         followers: "关注者",
         hint: "Enter 发送 · Shift+Enter 换行",
       },
+      image: {
+        broken: "图片加载失败",
+      },
       settings: {
         aboutDesc:
           "React 19 + shadcn/ui（Base UI + Tailwind v4） · NestJS + Prisma + PostgreSQL",
@@ -80,6 +83,8 @@ const resources = {
         kanbanDesc: "横向滚动的阶段列，展示事项在流程中的分布",
         chatterTitle: "Chatter 讨论面板",
         chatterDesc: "记录级讨论流 + 发消息输入框（Odoo 风格），可挂到任意业务单据底部",
+        imageTitle: "图片组件",
+        imageDesc: "加载骨架 + 失败占位，支持宽高比",
         btnVariants: "Button 变体",
         btnSizes: "Button 尺寸",
         form: "表单",
@@ -172,6 +177,9 @@ const resources = {
         followers: "Followers",
         hint: "Enter to send · Shift+Enter for newline",
       },
+      image: {
+        broken: "Image failed to load",
+      },
       settings: {
         aboutDesc:
           "React 19 + shadcn/ui (Base UI + Tailwind v4) · NestJS + Prisma + PostgreSQL",
@@ -205,6 +213,8 @@ const resources = {
         chatterTitle: "Chatter discussion panel",
         chatterDesc:
           "Record-level message thread + composer (Odoo-style), droppable onto any business document",
+        imageTitle: "Image",
+        imageDesc: "Loading skeleton + broken fallback, aspect-ratio support",
         btnVariants: "Button variants",
         btnSizes: "Button sizes",
         form: "Form",
