@@ -197,7 +197,7 @@ export default function Customers() {
           if (v) setCreateErr(false);
         }}
       >
-        <SheetContent className="sm:max-w-md">
+        <SheetContent className="sm:max-w-2xl">
           <SheetHeader>
             <SheetTitle>{t("customer.panel")}</SheetTitle>
             <SheetDescription>{t("customer.empty")}</SheetDescription>
@@ -229,7 +229,7 @@ export default function Customers() {
           }
         }}
       >
-        <SheetContent className="sm:max-w-lg">
+        <SheetContent className="sm:max-w-2xl">
           {detail && (
             <>
               <SheetHeader>

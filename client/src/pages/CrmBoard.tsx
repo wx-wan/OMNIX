@@ -296,7 +296,7 @@ export default function CrmBoard() {
           if (v) setError(false);
         }}
       >
-        <SheetContent className="sm:max-w-2xl">
+        <SheetContent className="sm:max-w-5xl">
           <SheetHeader>
             <SheetTitle>{t("crm.formTitle")}</SheetTitle>
             <SheetDescription>{t("crm.formDesc")}</SheetDescription>
@@ -523,7 +523,7 @@ export default function CrmBoard() {
 
       {/* 商机详情：标题/阶段/金额 + 两栏信息 + 产品需求 */}
       <Sheet open={detailOpen} onOpenChange={setDetailOpen}>
-        <SheetContent className="sm:max-w-2xl">
+        <SheetContent className="sm:max-w-5xl">
           {detailError && (
             <p className="py-10 text-center text-sm text-muted-foreground">
               {t("crm.notFound")}
