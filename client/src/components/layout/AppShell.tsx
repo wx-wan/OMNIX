@@ -26,7 +26,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -128,10 +127,10 @@ export function AppShell() {
                   <span className="max-w-24 truncate">{user.name}</span>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-48">
-                  <DropdownMenuLabel className="font-normal">
+                  <div className="px-2 py-1.5">
                     <div className="text-sm font-medium">{user.name}</div>
                     <div className="truncate text-xs text-muted-foreground">{user.email}</div>
-                  </DropdownMenuLabel>
+                  </div>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem variant="destructive" onClick={() => void logout()}>
                     <LogOut className="size-4" />
