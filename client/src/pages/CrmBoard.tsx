@@ -91,6 +91,7 @@ export default function CrmBoard() {
   const [error, setError] = useState(false);
   const [customer, setCustomer] = useState<CustomerValues>(EMPTY_CUSTOMER);
   const [product, setProduct] = useState<ProductValues>(EMPTY_PRODUCT);
+  const [contact, setContact] = useState({ name: "", email: "", phone: "" });
   const [assignee, setAssignee] = useState("");
   const [priority, setPriority] = useState<KanbanPriority>("medium");
 
@@ -131,6 +132,7 @@ export default function CrmBoard() {
   const resetForm = () => {
     setCustomer(EMPTY_CUSTOMER);
     setProduct(EMPTY_PRODUCT);
+    setContact({ name: "", email: "", phone: "" });
     setAssignee("");
     setPriority("medium");
     setError(false);
@@ -140,8 +142,16 @@ export default function CrmBoard() {
     if (!customer.name.trim() || !product.name.trim() || saving) return;
     setSaving(true);
     try {
+      const primaryContact = contact.name.trim()
+        ? {
+            name: contact.name.trim(),
+            email: contact.email.trim() || undefined,
+            phone: contact.phone.trim() || undefined,
+          }
+        : undefined;
       await api.post("/crm/deals", {
         customer: { ...customer, name: customer.name.trim() },
+        contact: primaryContact,
         product: {
           ...product,
           name: product.name.trim(),
@@ -206,6 +216,38 @@ export default function CrmBoard() {
               <section className="rounded-xl border border-border bg-muted/30 p-3">
                 <h3 className="mb-3 text-sm font-semibold">{t("customer.panel")}</h3>
                 <CustomerForm values={customer} onChange={setCustomer} idPrefix="deal" />
+                <h4 className="mb-2 mt-4 text-xs font-semibold text-muted-foreground">
+                  {t("contact.panel")}
+                </h4>
+                <div className="flex flex-col gap-3">
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="deal-contact-name">{t("contact.name")}</Label>
+                    <Input
+                      id="deal-contact-name"
+                      value={contact.name}
+                      onChange={(e) => setContact({ ...contact, name: e.target.value })}
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="deal-contact-email">{t("contact.email")}</Label>
+                      <Input
+                        id="deal-contact-email"
+                        type="email"
+                        value={contact.email}
+                        onChange={(e) => setContact({ ...contact, email: e.target.value })}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="deal-contact-phone">{t("contact.phone")}</Label>
+                      <Input
+                        id="deal-contact-phone"
+                        value={contact.phone}
+                        onChange={(e) => setContact({ ...contact, phone: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                </div>
               </section>
               <section className="rounded-xl border border-border bg-muted/30 p-3">
                 <h3 className="mb-3 text-sm font-semibold">{t("product.panel")}</h3>

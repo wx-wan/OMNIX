@@ -44,20 +44,34 @@ model Stage {
 }
 
 // 客户（新建商机时落库；也可在「客户」页独立维护）
+// 客户（公司）：一个公司可维护多条联系人（见 Contact）
 model Customer {
-  id        String   @id @default(cuid())
-  name      String // 客户名称 *
-  contact   String? // 联系人
-  phone     String? // 电话
-  company   String? // 公司
-  industry  String? // 行业
-  email     String? // 邮箱
-  note      String? // 备注
-  deals     Deal[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String   @id @default(cuid())
+  name         String // 公司名称 *
+  country      String? // 国家地区
+  website      String? // 官网
+  customerType String? // 客户类型
+  contacts     Contact[]
+  deals        Deal[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@map("customers")
+}
+
+// 联系人：归属某家公司，一个公司可有多个联系人
+model Contact {
+  id         String   @id @default(cuid())
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  name       String // 联系人姓名 *
+  email      String? // 电子邮箱
+  phone      String? // 电话号码
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([customerId])
+  @@map("contacts")
 }
 
 // 产品（新建商机时落库；也可在「产品」页独立维护）

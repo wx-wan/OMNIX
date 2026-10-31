@@ -2,6 +2,7 @@ import { IsOptional, IsString, IsNumber, IsEnum, ValidateNested } from "class-va
 import { Type } from "class-transformer";
 import { Priority } from "@prisma/client";
 import { CreateCustomerDto } from "../../customers/dto/create-customer.dto";
+import { CreateContactDto } from "../../customers/dto/create-contact.dto";
 import { CreateProductDto } from "../../products/dto/create-product.dto";
 
 export class CreateDealDto {
@@ -48,11 +49,17 @@ export class CreateDealDto {
   @IsString()
   productId?: string;
 
-  /** 内联新建客户并关联（落库 customers 表）。 */
+  /** 内联新建客户（公司）并关联（落库 customers 表）。 */
   @IsOptional()
   @ValidateNested()
   @Type(() => CreateCustomerDto)
   customer?: CreateCustomerDto;
+
+  /** 随公司一并新建的主联系人（落库 contacts 表，归属该客户）。 */
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CreateContactDto)
+  contact?: CreateContactDto;
 
   /** 内联新建产品并关联（落库 products 表）。 */
   @IsOptional()

@@ -58,8 +58,13 @@ export class CrmService {
     }
 
     return this.prisma.$transaction(async (tx) => {
+      // 内联公司（客户）+ 可选主联系人，二者在同一个事务里落库并关联
       const customer = dto.customer
-        ? await tx.customer.create({ data: dto.customer })
+        ? await tx.customer.create({
+            data: dto.contact
+              ? { ...dto.customer, contacts: { create: dto.contact } }
+              : dto.customer,
+          })
         : null;
       const product = dto.product
         ? await tx.product.create({ data: dto.product })
