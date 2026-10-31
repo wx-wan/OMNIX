@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { cn } from "cn";
 import { Badge } from "@/components/ui/badge";
 
@@ -32,13 +33,14 @@ const priorityClasses: Record<KanbanPriority, string> = {
   low: "bg-emerald-500/10 text-emerald-600",
 };
 
-const priorityLabel: Record<KanbanPriority, string> = {
-  high: "高",
-  medium: "中",
-  low: "低",
+const priorityKey: Record<KanbanPriority, string> = {
+  high: "kanban.priorityHigh",
+  medium: "kanban.priorityMedium",
+  low: "kanban.priorityLow",
 };
 
 function KanbanCard({ item }: { item: KanbanItem }) {
+  const { t } = useTranslation();
   return (
     <div className="rounded-xl border border-border bg-card p-3 transition-colors hover:border-primary/40">
       <p className="text-sm font-medium text-foreground">{item.title}</p>
@@ -54,7 +56,7 @@ function KanbanCard({ item }: { item: KanbanItem }) {
                 priorityClasses[item.priority],
               )}
             >
-              {priorityLabel[item.priority]}
+              {t(priorityKey[item.priority])}
             </span>
           )}
           {item.tag && <Badge variant="secondary">{item.tag}</Badge>}
@@ -83,6 +85,7 @@ export function KanbanBoard({
   stages: KanbanStage[];
   className?: string;
 }) {
+  const { t } = useTranslation();
   return (
     <div className={cn("flex gap-4 overflow-x-auto pb-2", className)}>
       {stages.map((stage) => (
@@ -106,7 +109,7 @@ export function KanbanBoard({
           <div className="flex flex-col gap-2 px-3 pb-3">
             {stage.items.length === 0 ? (
               <p className="px-1 py-6 text-center text-xs text-muted-foreground">
-                暂无事项
+                {t("kanban.empty")}
               </p>
             ) : (
               stage.items.map((item) => <KanbanCard key={item.id} item={item} />)

@@ -10,8 +10,8 @@ export default function Settings() {
     <Stack gap={6}>
       <PageHeader title={t("nav.settings")} />
       <Section
-        title="OMNIX"
-        description="React 19 + shadcn/ui（Base UI + Tailwind v4） · NestJS + Prisma + PostgreSQL"
+        title={t("appName")}
+        description={t("settings.aboutDesc")}
         action={
           <div className="flex gap-3">
             <Button variant="outline">{t("common.cancel")}</Button>
@@ -19,9 +19,7 @@ export default function Settings() {
           </div>
         }
       >
-        <p className="text-sm text-muted-foreground">
-          更多配置项（语言、主题、通知、安全等）将在此呈现。
-        </p>
+        <p className="text-sm text-muted-foreground">{t("settings.comingSoon")}</p>
       </Section>
     </Stack>
   );

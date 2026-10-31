@@ -30,7 +30,9 @@ export function AppShell() {
   const [collapsed, setCollapsed] = useState(false);
 
   const toggleLang = () => {
-    i18n.changeLanguage(i18n.language.startsWith("zh") ? "en" : "zh");
+    const next = i18n.language.startsWith("zh") ? "en" : "zh";
+    i18n.changeLanguage(next);
+    document.documentElement.lang = next === "zh" ? "zh-CN" : "en";
   };
 
   return (

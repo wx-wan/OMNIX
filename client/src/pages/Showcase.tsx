@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Puzzle,
   Trash2,
@@ -46,15 +47,15 @@ import {
 } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Progress } from "@/components/ui/progress";
 import {
   Table,
   TableBody,
   TableCell,
-  TableHead,
   TableHeader,
   TableRow,
+  TableHead,
 } from "@/components/ui/table";
-import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -75,6 +76,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { StatCard } from "@/components/layout/StatCard";
 import { KanbanBoard, type KanbanStage } from "@/components/kanban/KanbanBoard";
 
+// 演示用的示例数据（代表后端返回内容，非界面文案）
 const kanbanStages: KanbanStage[] = [
   {
     id: "todo",
@@ -153,6 +155,7 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 }
 
 export default function Showcase() {
+  const { t } = useTranslation();
   const [checked, setChecked] = useState(true);
   const [on, setOn] = useState(true);
 
@@ -160,42 +163,40 @@ export default function Showcase() {
     <div className="flex flex-col gap-8">
       <div>
         <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
-          <Puzzle className="size-6 text-primary" /> 基础组件库
+          <Puzzle className="size-6 text-primary" /> {t("showcase.title")}
         </h1>
-        <p className="text-sm text-muted-foreground">
-          基于 Base UI（shadcn base-nova）· 品牌黄 #FFD54F
-        </p>
+        <p className="text-sm text-muted-foreground">{t("showcase.subtitle")}</p>
       </div>
 
       <Section
-        title="Layout 布局组件（island UI）"
-        description="Container · Stack · Grid · Split · PageHeader · Section · StatCard"
+        title={t("showcase.layoutTitle")}
+        description={t("showcase.layoutDesc")}
         icon={Puzzle}
       >
         <Stack gap={6}>
           <PageHeader
-            title="示例页头"
-            description="带图标 + 右侧操作区"
+            title={t("showcase.demoHeaderTitle")}
+            description={t("showcase.demoHeaderDesc")}
             icon={Info}
-            actions={<Button size="sm">操作</Button>}
+            actions={<Button size="sm">{t("common.actions")}</Button>}
           />
           <Grid min="12rem">
-            <StatCard label="总用户" value="1,284" delta="+12.5%" trend="up" icon={Puzzle} />
-            <StatCard label="会话" value="342" delta="+4.1%" trend="up" icon={Info} />
-            <StatCard label="营收" value="¥89,200" delta="-2.3%" trend="down" icon={Trash2} />
+            <StatCard label={t("showcase.statUsers")} value="1,284" delta="+12.5%" trend="up" icon={Puzzle} />
+            <StatCard label={t("showcase.statSessions")} value="342" delta="+4.1%" trend="up" icon={Info} />
+            <StatCard label={t("showcase.statRevenue")} value="¥89,200" delta="-2.3%" trend="down" icon={Trash2} />
           </Grid>
           <Split
             main={
-              <Section title="主区">
+              <Section title={t("showcase.mainArea")}>
                 <p className="text-sm text-muted-foreground">
-                  主内容区，占据剩余宽度；窄屏时自动堆叠到侧栏上方。
+                  {t("showcase.mainAreaDesc")}
                 </p>
               </Section>
             }
             aside={
-              <Section title="侧栏">
+              <Section title={t("showcase.sideArea")}>
                 <p className="text-sm text-muted-foreground">
-                  固定宽度的侧栏（桌面 20rem）。
+                  {t("showcase.sideAreaDesc")}
                 </p>
               </Section>
             }
@@ -204,8 +205,8 @@ export default function Showcase() {
       </Section>
 
       <Section
-        title="Kanban 看板（阶段流）"
-        description="横向滚动的阶段列，展示事项在流程中的分布"
+        title={t("showcase.kanbanTitle")}
+        description={t("showcase.kanbanDesc")}
         icon={Puzzle}
       >
         <KanbanBoard stages={kanbanStages} />
@@ -216,7 +217,7 @@ export default function Showcase() {
           <CardTitle>Button & Badge</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          <Row label="Button 变体">
+          <Row label={t("showcase.btnVariants")}>
             <Button>Default</Button>
             <Button variant="secondary">Secondary</Button>
             <Button variant="outline">Outline</Button>
@@ -224,7 +225,7 @@ export default function Showcase() {
             <Button variant="destructive">Destructive</Button>
             <Button variant="link">Link</Button>
           </Row>
-          <Row label="Button 尺寸">
+          <Row label={t("showcase.btnSizes")}>
             <Button size="xs">xs</Button>
             <Button size="sm">sm</Button>
             <Button size="default">default</Button>
@@ -245,23 +246,23 @@ export default function Showcase() {
 
       <Card>
         <CardHeader>
-          <CardTitle>表单</CardTitle>
+          <CardTitle>{t("showcase.form")}</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <Row label="Input">
-            <Input className="max-w-xs" placeholder="请输入内容" />
+            <Input className="max-w-xs" placeholder={t("showcase.inputPlaceholder")} />
           </Row>
           <Row label="Textarea">
-            <Textarea className="max-w-md" placeholder="请输入详细描述" />
+            <Textarea className="max-w-md" placeholder={t("showcase.textareaPlaceholder")} />
           </Row>
           <Row label="Label + Checkbox / Switch">
             <div className="flex items-center gap-2">
               <Checkbox checked={checked} onCheckedChange={(v) => setChecked(!!v)} id="cb" />
-              <Label htmlFor="cb">同意条款</Label>
+              <Label htmlFor="cb">{t("showcase.agreeTerms")}</Label>
             </div>
             <div className="flex items-center gap-2">
               <Switch checked={on} onCheckedChange={setOn} id="sw" />
-              <Label htmlFor="sw">启用通知</Label>
+              <Label htmlFor="sw">{t("showcase.enableNotify")}</Label>
             </div>
           </Row>
           <Row label="Select">
@@ -270,9 +271,9 @@ export default function Showcase() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">全部</SelectItem>
-                <SelectItem value="active">活跃</SelectItem>
-                <SelectItem value="inactive">停用</SelectItem>
+                <SelectItem value="all">{t("showcase.filterAll")}</SelectItem>
+                <SelectItem value="active">{t("showcase.filterActive")}</SelectItem>
+                <SelectItem value="inactive">{t("showcase.filterInactive")}</SelectItem>
               </SelectContent>
             </Select>
           </Row>
@@ -281,67 +282,67 @@ export default function Showcase() {
 
       <Card>
         <CardHeader>
-          <CardTitle>浮层 / 弹出</CardTitle>
+          <CardTitle>{t("showcase.overlays")}</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <Row label="Dialog">
             <Dialog>
-              <DialogTrigger render={<Button variant="outline">打开对话框</Button>} />
+              <DialogTrigger render={<Button variant="outline">{t("showcase.openDialog")}</Button>} />
               <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>确认操作</DialogTitle>
-                  <DialogDescription>此操作不可撤销，请谨慎。</DialogDescription>
+                  <DialogTitle>{t("showcase.confirmAction")}</DialogTitle>
+                  <DialogDescription>{t("showcase.confirmDesc")}</DialogDescription>
                 </DialogHeader>
-                <p className="text-sm text-muted-foreground">对话框内容区。</p>
+                <p className="text-sm text-muted-foreground">{t("showcase.dialogBody")}</p>
                 <DialogFooter>
-                  <DialogClose render={<Button variant="outline">取消</Button>} />
-                  <Button>确认</Button>
+                  <DialogClose render={<Button variant="outline">{t("common.cancel")}</Button>} />
+                  <Button>{t("common.confirm")}</Button>
                 </DialogFooter>
               </DialogContent>
             </Dialog>
           </Row>
           <Row label="DropdownMenu">
             <DropdownMenu>
-              <DropdownMenuTrigger render={<Button variant="outline">菜单</Button>} />
+              <DropdownMenuTrigger render={<Button variant="outline">{t("showcase.menu")}</Button>} />
               <DropdownMenuContent>
                 <DropdownMenuGroup>
-                  <DropdownMenuLabel>操作</DropdownMenuLabel>
+                  <DropdownMenuLabel>{t("common.actions")}</DropdownMenuLabel>
                   <DropdownMenuItem>
-                    <Pencil /> 编辑
+                    <Pencil /> {t("showcase.edit")}
                   </DropdownMenuItem>
                 </DropdownMenuGroup>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem variant="destructive">
-                  <Trash2 /> 删除
+                  <Trash2 /> {t("showcase.delete")}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </Row>
           <Row label="Popover">
             <Popover>
-              <PopoverTrigger render={<Button variant="outline">弹出</Button>} />
+              <PopoverTrigger render={<Button variant="outline">{t("showcase.popoverTrigger")}</Button>} />
               <PopoverContent>
-                <p className="text-sm">这是一个 Popover 气泡。</p>
+                <p className="text-sm">{t("showcase.popoverBody")}</p>
               </PopoverContent>
             </Popover>
           </Row>
           <Row label="Tooltip">
             <Tooltip>
-              <TooltipTrigger render={<Button variant="outline">悬停查看</Button>} />
-              <TooltipContent>提示文本</TooltipContent>
+              <TooltipTrigger render={<Button variant="outline">{t("showcase.tooltipTrigger")}</Button>} />
+              <TooltipContent>{t("showcase.tooltipText")}</TooltipContent>
             </Tooltip>
           </Row>
           <Row label="Sheet">
             <Sheet>
-              <SheetTrigger render={<Button variant="outline">抽屉</Button>} />
+              <SheetTrigger render={<Button variant="outline">{t("showcase.sheetTrigger")}</Button>} />
               <SheetContent side="right">
                 <SheetHeader>
-                  <SheetTitle>侧边抽屉</SheetTitle>
-                  <SheetDescription>从右侧滑入。</SheetDescription>
+                  <SheetTitle>{t("showcase.sheetTitle")}</SheetTitle>
+                  <SheetDescription>{t("showcase.sheetDesc")}</SheetDescription>
                 </SheetHeader>
-                <p className="text-sm text-muted-foreground">抽屉内容。</p>
+                <p className="text-sm text-muted-foreground">{t("showcase.sheetBody")}</p>
                 <SheetFooter>
-                  <SheetTrigger render={<Button>完成</Button>} />
+                  <SheetTrigger render={<Button>{t("showcase.sheetDone")}</Button>} />
                 </SheetFooter>
               </SheetContent>
             </Sheet>
@@ -351,17 +352,17 @@ export default function Showcase() {
 
       <Card>
         <CardHeader>
-          <CardTitle>数据展示</CardTitle>
+          <CardTitle>{t("showcase.dataDisplay")}</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <Row label="Tabs">
             <Tabs defaultValue="a" className="w-full max-w-md">
               <TabsList>
-                <TabsTrigger value="a">第一项</TabsTrigger>
-                <TabsTrigger value="b">第二项</TabsTrigger>
+                <TabsTrigger value="a">{t("showcase.tabFirst")}</TabsTrigger>
+                <TabsTrigger value="b">{t("showcase.tabSecond")}</TabsTrigger>
               </TabsList>
-              <TabsContent value="a">第一项内容</TabsContent>
-              <TabsContent value="b">第二项内容</TabsContent>
+              <TabsContent value="a">{t("showcase.tabFirstBody")}</TabsContent>
+              <TabsContent value="b">{t("showcase.tabSecondBody")}</TabsContent>
             </Tabs>
           </Row>
           <Row label="Avatar">
@@ -377,9 +378,9 @@ export default function Showcase() {
           </Row>
           <Row label="Separator">
             <div className="w-full">
-              <p className="text-sm">上方</p>
+              <p className="text-sm">{t("showcase.separatorTop")}</p>
               <Separator className="my-3" />
-              <p className="text-sm">下方</p>
+              <p className="text-sm">{t("showcase.separatorBottom")}</p>
             </div>
           </Row>
           <Row label="Skeleton">
@@ -390,21 +391,21 @@ export default function Showcase() {
             <Table className="max-w-md">
               <TableHeader>
                 <TableRow>
-                  <TableHead>名称</TableHead>
-                  <TableHead>角色</TableHead>
-                  <TableHead>状态</TableHead>
+                  <TableHead>{t("showcase.tableName")}</TableHead>
+                  <TableHead>{t("showcase.tableRole")}</TableHead>
+                  <TableHead>{t("showcase.tableStatus")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 <TableRow>
                   <TableCell>Ada</TableCell>
                   <TableCell>admin</TableCell>
-                  <TableCell><Badge variant="success">启用</Badge></TableCell>
+                  <TableCell><Badge variant="success">{t("showcase.tableEnabled")}</Badge></TableCell>
                 </TableRow>
                 <TableRow>
                   <TableCell>Lin</TableCell>
                   <TableCell>user</TableCell>
-                  <TableCell><Badge variant="outline">停用</Badge></TableCell>
+                  <TableCell><Badge variant="outline">{t("showcase.tableDisabled")}</Badge></TableCell>
                 </TableRow>
               </TableBody>
             </Table>
