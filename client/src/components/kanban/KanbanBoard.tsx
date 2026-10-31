@@ -46,10 +46,12 @@ function KanbanCard({
   item,
   draggable,
   onDragStart,
+  onClick,
 }: {
   item: KanbanItem;
   draggable?: boolean;
   onDragStart?: (e: DragEvent) => void;
+  onClick?: () => void;
 }) {
   const { t } = useTranslation();
   return (
@@ -57,9 +59,11 @@ function KanbanCard({
       className={cn(
         "rounded-xl border border-border bg-card p-3 transition-colors hover:border-primary/40",
         draggable && "cursor-grab active:cursor-grabbing",
+        onClick && "cursor-pointer",
       )}
       draggable={draggable}
       onDragStart={onDragStart}
+      onClick={onClick}
     >
       <p className="text-sm font-medium text-foreground">{item.title}</p>
       {item.amount && (
@@ -107,12 +111,14 @@ export function KanbanBoard({
   className,
   draggable = false,
   onDealMove,
+  onDealClick,
 }: {
   stages: KanbanStage[];
   fill?: boolean;
   className?: string;
   draggable?: boolean;
   onDealMove?: (dealId: string, toStageId: string) => void;
+  onDealClick?: (dealId: string) => void;
 }) {
   const { t } = useTranslation();
   const [dragOverStage, setDragOverStage] = useState<string | null>(null);
@@ -176,6 +182,7 @@ export function KanbanBoard({
                   key={item.id}
                   item={item}
                   draggable={draggable}
+                  onClick={onDealClick ? () => onDealClick(item.id) : undefined}
                   onDragStart={
                     draggable
                       ? (e) => {

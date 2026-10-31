@@ -19,6 +19,12 @@ export class CrmController {
     return this.crm.createDeal(dto);
   }
 
+  // GET /api/crm/deals/:id —— 商机详情（含客户/联系人/产品/阶段）
+  @Get("deals/:id")
+  getDeal(@Param("id") id: string) {
+    return this.crm.getDeal(id);
+  }
+
   // PATCH /api/crm/deals/:id —— 更新交易（含拖拽换列 / 改阶段）
   @Patch("deals/:id")
   updateDeal(@Param("id") id: string, @Body() dto: UpdateDealDto) {

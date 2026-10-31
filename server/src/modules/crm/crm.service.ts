@@ -92,6 +92,26 @@ export class CrmService {
     });
   }
 
+  /** 商机详情：含关联阶段、客户（及其联系人）与产品。amount 转为 number。 */
+  async getDeal(id: string) {
+    const deal = await this.prisma.deal.findUnique({
+      where: { id },
+      include: {
+        stage: true,
+        customer: { include: { contacts: { orderBy: { createdAt: "asc" } } } },
+        product: true,
+      },
+    });
+    if (!deal) throw new NotFoundException(`Deal ${id} not found`);
+    return {
+      ...deal,
+      amount: deal.amount != null ? deal.amount.toNumber() : null,
+      product: deal.product
+        ? { ...deal.product, price: deal.product.price?.toNumber() ?? null }
+        : null,
+    };
+  }
+
   async updateDeal(id: string, dto: UpdateDealDto) {
     const exists = await this.prisma.deal.findUnique({ where: { id } });
     if (!exists) throw new NotFoundException(`Deal ${id} not found`);
