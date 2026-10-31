@@ -109,9 +109,8 @@ export function AppShell() {
           </div>
         </header>
         <main className="island-canvas min-h-0 flex-1 overflow-y-auto rounded-2xl px-4 py-5 md:px-6 md:py-6">
-          <Container size="lg">
-            <Outlet />
-          </Container>
+          {/* CRM 看板脱离 Container 做全宽；其余页面保持居中容器 */}
+          {location.pathname === "/crm" ? <Outlet /> : <Container size="lg"><Outlet /></Container>}
         </main>
       </div>
     </div>
