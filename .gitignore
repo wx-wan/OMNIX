@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+.npm/
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Prisma generated client (regenerate via prisma generate)
+# server/src/generated/ is git-ignored by default in prisma output config below
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# OS / Editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Local DB dumps
+*.dump
+
+# Coverage
+coverage/

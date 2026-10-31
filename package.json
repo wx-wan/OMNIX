@@ -1,0 +1,25 @@
+{
+  "name": "omnix",
+  "private": true,
+  "version": "0.1.0",
+  "description": "OMNIX — 前端 React 19 + shadcn/ui (Base UI + Tailwind v4)，后端 NestJS + Prisma + PostgreSQL 的全栈应用。",
+  "scripts": {
+    "install:all": "npm --prefix client install && npm --prefix server install",
+    "dev:client": "npm --prefix client run dev",
+    "dev:server": "npm --prefix server run start:dev",
+    "dev": "npm --prefix client run dev & npm --prefix server run start:dev",
+    "build:client": "npm --prefix client run build",
+    "build:server": "npm --prefix server run build",
+    "start:server": "npm --prefix server run start:prod"
+  },
+  "workspaces": [
+    "client",
+    "server"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "shadcn": "^4.23.0"
+  }
+}

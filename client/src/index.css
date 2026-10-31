@@ -1,0 +1,218 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+/* 品牌字体：Montserrat（拉丁）+ 思源黑体/Noto Sans SC（中文） */
+@import "@fontsource-variable/montserrat";
+@import "@fontsource-variable/noto-sans-sc";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --radius: 1rem;
+  /* 内容画布：卡片浮于其上的浅灰底（island 式"海面"），模块之间靠底色与留白分离，而非通栏分割线 */
+  --canvas: oklch(0.962 0 0);
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  /* 品牌主色：OMNIX Indigo #4F46E5，前景白 */
+  --primary: #4F46E5;
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: #f5f5f5;
+  --secondary-foreground: #000000;
+  --muted: #eaeaea;
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: #f5f5f5;
+  --accent-foreground: #000000;
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.94 0 0);
+  --input: oklch(0.93 0 0);
+  /* 焦点环用品牌主题色 */
+  --ring: #4F46E5;
+  /* VIS 辅助色 */
+  --chart-1: oklch(0.78 0.15 60);
+  --chart-2: oklch(0.87 0.05 240);
+  --chart-3: oklch(0.87 0.1 130);
+  --chart-4: oklch(0.88 0.035 340);
+  --chart-5: oklch(0.91 0.13 115);
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+}
+
+.dark {
+  --canvas: oklch(0.12 0 0);
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: #6366F1;
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: #6366F1;
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+}
+
+@theme inline {
+  --font-sans: 'Montserrat Variable', 'Noto Sans SC Variable', system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-heading: var(--font-sans);
+  /* 圆角梯度：显式递增（控件 12 / 卡片 16 / 大面板 20），避免 2xl 反而小于 xl 的错位 */
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 20px;
+  --radius-3xl: 26px;
+  --radius-4xl: 9999px;
+  /* 抬升层次：卡片静止 / 悬停 / 浮层 */
+  --shadow-card: 0 1px 2px 0 oklch(0 0 0 / 0.04), 0 2px 8px -2px oklch(0 0 0 / 0.06);
+  --shadow-lift: 0 2px 4px -1px oklch(0 0 0 / 0.05), 0 10px 24px -8px oklch(0 0 0 / 0.14);
+  --shadow-pop: 0 12px 32px -10px oklch(0 0 0 / 0.2), 0 2px 6px -2px oklch(0 0 0 / 0.08);
+  --color-canvas: var(--canvas);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus {
+    -webkit-box-shadow: 0 0 0 1000px #ffffff inset;
+    -webkit-text-fill-color: var(--foreground);
+    caret-color: var(--foreground);
+    transition: background-color 9999s ease-in-out 0s;
+  }
+}
+
+@layer components {
+  /* 页面画布：卡片浮于其上的底色 */
+  .page-canvas {
+    @apply bg-canvas;
+  }
+  .page-pad {
+    @apply px-4 py-5 md:px-6 md:py-6;
+  }
+  /* 标准卡片表面：白底 + 柔和小投影 */
+  .card-surface,
+  .card-surface-interactive {
+    @apply rounded-xl bg-card shadow-card;
+  }
+  .card-surface-interactive {
+    @apply transition-[box-shadow,transform] duration-200 hover:shadow-lift;
+  }
+  .section-title {
+    @apply text-sm font-semibold tracking-tight text-foreground;
+  }
+  /* 全局统一搜索框 */
+  .search-field {
+    @apply h-9 w-full rounded-lg border border-border bg-card text-sm text-foreground transition-colors placeholder:text-muted-foreground;
+  }
+  .search-field:focus-within {
+    @apply border-ring ring-2 ring-ring/50;
+  }
+  .search-field-input {
+    @apply h-full min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground;
+  }
+  .search-field-icon {
+    @apply size-4 shrink-0 text-muted-foreground;
+  }
+}
+
+/* ── 消息提示（sonner）────────────────────────────
+   全站唯一的 toast 外观，与卡片语言同源：白卡 + 单一阴影 + 卡片档圆角，不描边。 */
+[data-sonner-toaster] [data-sonner-toast][data-styled='true'] {
+  @apply rounded-xl border border-transparent bg-card text-foreground shadow-pop;
+  padding: 12px 14px;
+  gap: 10px;
+  font-size: 14px;
+  line-height: 1.4;
+}
+[data-sonner-toaster] [data-sonner-toast][data-styled='true'] [data-title] {
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+[data-sonner-toaster] [data-sonner-toast][data-styled='true'] [data-description] {
+  @apply text-muted-foreground;
+  font-size: 13px;
+  line-height: 1.45;
+}
+[data-sonner-toaster] [data-sonner-toast][data-styled='true'] [data-icon] {
+  @apply text-muted-foreground;
+}
+[data-sonner-toaster] [data-sonner-toast][data-type='success'] [data-icon] {
+  @apply text-emerald-600;
+}
+[data-sonner-toaster] [data-sonner-toast][data-type='error'] [data-icon] {
+  @apply text-destructive;
+}
+[data-sonner-toaster] [data-sonner-toast][data-type='warning'] [data-icon] {
+  @apply text-amber-600;
+}
