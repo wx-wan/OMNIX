@@ -53,8 +53,10 @@ export default function Login() {
       toast.success(t("auth.loginSuccess"));
       const from = (location.state as { from?: { pathname?: string } })?.from?.pathname || "/";
       navigate(from, { replace: true });
-    } catch {
-      toast.error(t("auth.invalidCredentials"));
+    } catch (err: unknown) {
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      // 有响应 → 按状态码给业务提示；无响应（网络/后端未启动）→ 服务器不可达
+      toast.error(status ? t("auth.invalidCredentials") : t("auth.serverUnreachable"));
     } finally {
       setLoading(false);
     }
