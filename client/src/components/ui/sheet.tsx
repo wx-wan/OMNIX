@@ -1,13 +1,54 @@
 import * as React from "react"
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
 import { cn } from "cn"
-import { XIcon } from "lucide-react"
-import { Button } from "@/components/ui/button"
 
-const Sheet = DialogPrimitive.Root
-const SheetTrigger = DialogPrimitive.Trigger
-const SheetClose = DialogPrimitive.Close
-const SheetPortal = DialogPrimitive.Portal
+import { Button } from "@/components/ui/button"
+import { XIcon } from "lucide-react"
+
+type SheetSide = "right" | "left" | "top" | "bottom"
+
+const sideClasses: Record<SheetSide, string> = {
+  right:
+    "top-0 right-0 h-full w-full max-w-md border-l data-open:slide-in-from-right data-closed:slide-out-to-right",
+  left:
+    "top-0 left-0 h-full w-full max-w-md border-r data-open:slide-in-from-left data-closed:slide-out-to-left",
+  top:
+    "top-0 left-0 right-0 w-full max-h-[80vh] rounded-b-xl border-b data-open:slide-in-from-top data-closed:slide-out-to-top",
+  bottom:
+    "bottom-0 left-0 right-0 w-full max-h-[80vh] rounded-t-xl border-t data-open:slide-in-from-bottom data-closed:slide-out-to-bottom",
+}
+
+function Sheet({ ...props }: DialogPrimitive.Root.Props) {
+  return <DialogPrimitive.Root data-slot="sheet" {...props} />
+}
+
+function SheetTrigger({ ...props }: DialogPrimitive.Trigger.Props) {
+  return <DialogPrimitive.Trigger data-slot="sheet-trigger" {...props} />
+}
+
+function SheetClose({ ...props }: DialogPrimitive.Close.Props) {
+  return <DialogPrimitive.Close data-slot="sheet-close" {...props} />
+}
+
+function SheetPortal({ ...props }: DialogPrimitive.Portal.Props) {
+  return <DialogPrimitive.Portal data-slot="sheet-portal" {...props} />
+}
+
+function SheetOverlay({
+  className,
+  ...props
+}: DialogPrimitive.Backdrop.Props) {
+  return (
+    <DialogPrimitive.Backdrop
+      data-slot="sheet-overlay"
+      className={cn(
+        "fixed inset-0 isolate z-50 bg-black/20 duration-base supports-backdrop-filter:backdrop-blur-xs data-open:animate-in data-open:fade-in-0 data-open:ease-enter data-closed:animate-out data-closed:fade-out-0 data-closed:ease-exit",
+        className
+      )}
+      {...props}
+    />
+  )
+}
 
 function SheetContent({
   className,
@@ -16,24 +57,17 @@ function SheetContent({
   showCloseButton = true,
   ...props
 }: DialogPrimitive.Popup.Props & {
-  side?: "left" | "right" | "top" | "bottom"
+  side?: SheetSide
   showCloseButton?: boolean
 }) {
   return (
     <SheetPortal>
-      <DialogPrimitive.Backdrop className="fixed inset-0 z-50 bg-black/20 duration-base supports-backdrop-filter:backdrop-blur-xs data-open:animate-in data-open:fade-in-0 data-open:ease-enter data-closed:animate-out data-closed:fade-out-0 data-closed:ease-exit" />
+      <SheetOverlay />
       <DialogPrimitive.Popup
         data-slot="sheet-content"
         className={cn(
-          "fixed z-50 flex flex-col gap-4 bg-popover p-5 text-popover-foreground shadow-pop outline-none duration-base",
-          side === "right" &&
-            "inset-y-0 right-0 h-full w-3/4 max-w-sm data-open:animate-in data-open:slide-in-from-right data-open:ease-enter data-closed:animate-out data-closed:slide-out-to-right data-closed:ease-exit",
-          side === "left" &&
-            "inset-y-0 left-0 h-full w-3/4 max-w-sm data-open:animate-in data-open:slide-in-from-left data-open:ease-enter data-closed:animate-out data-closed:slide-out-to-left data-closed:ease-exit",
-          side === "top" &&
-            "inset-x-0 top-0 w-full data-open:animate-in data-open:slide-in-from-top data-open:ease-enter data-closed:animate-out data-closed:slide-out-to-top data-closed:ease-exit",
-          side === "bottom" &&
-            "inset-x-0 bottom-0 w-full data-open:animate-in data-open:slide-in-from-bottom data-open:ease-enter data-closed:animate-out data-closed:slide-out-to-bottom data-closed:ease-exit",
+          "fixed z-50 flex flex-col gap-5 bg-popover p-5 text-sm text-popover-foreground shadow-pop outline-none duration-base data-open:animate-in data-open:fade-in-0 data-open:ease-enter data-closed:animate-out data-closed:fade-out-0 data-closed:ease-exit",
+          sideClasses[side],
           className
         )}
         {...props}
@@ -41,7 +75,14 @@ function SheetContent({
         {children}
         {showCloseButton && (
           <DialogPrimitive.Close
-            render={<Button variant="ghost" size="icon-sm" className="absolute top-3 right-3" />}
+            data-slot="sheet-close"
+            render={
+              <Button
+                variant="ghost"
+                className="absolute top-3 right-3"
+                size="icon-sm"
+              />
+            }
           >
             <XIcon />
             <span className="sr-only">Close</span>
@@ -54,17 +95,38 @@ function SheetContent({
 
 function SheetHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
-    <div data-slot="sheet-header" className={cn("flex flex-col gap-2", className)} {...props} />
+    <div
+      data-slot="sheet-header"
+      className={cn("flex flex-col gap-2", className)}
+      {...props}
+    />
   )
 }
 
-function SheetFooter({ className, ...props }: React.ComponentProps<"div">) {
+function SheetFooter({
+  className,
+  showCloseButton = false,
+  children,
+  ...props
+}: React.ComponentProps<"div"> & {
+  showCloseButton?: boolean
+}) {
   return (
     <div
       data-slot="sheet-footer"
-      className={cn("mt-auto flex flex-col gap-2 sm:flex-row sm:justify-end", className)}
+      className={cn(
+        "-mx-5 -mb-5 mt-auto flex flex-col-reverse gap-2 border-t border-border/60 bg-muted/40 p-5 sm:flex-row sm:justify-end",
+        className
+      )}
       {...props}
-    />
+    >
+      {children}
+      {showCloseButton && (
+        <DialogPrimitive.Close render={<Button variant="outline" />}>
+          Close
+        </DialogPrimitive.Close>
+      )}
+    </div>
   )
 }
 
@@ -72,17 +134,26 @@ function SheetTitle({ className, ...props }: DialogPrimitive.Title.Props) {
   return (
     <DialogPrimitive.Title
       data-slot="sheet-title"
-      className={cn("font-heading text-base leading-tight font-semibold tracking-tight", className)}
+      className={cn(
+        "font-heading text-base leading-tight font-semibold tracking-tight",
+        className
+      )}
       {...props}
     />
   )
 }
 
-function SheetDescription({ className, ...props }: DialogPrimitive.Description.Props) {
+function SheetDescription({
+  className,
+  ...props
+}: DialogPrimitive.Description.Props) {
   return (
     <DialogPrimitive.Description
       data-slot="sheet-description"
-      className={cn("text-sm text-muted-foreground", className)}
+      className={cn(
+        "text-sm text-muted-foreground *:[a]:underline *:[a]:underline-offset-3 *:[a]:hover:text-foreground",
+        className
+      )}
       {...props}
     />
   )

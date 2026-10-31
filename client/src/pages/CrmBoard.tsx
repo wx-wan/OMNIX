@@ -16,13 +16,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { CustomerForm, EMPTY_CUSTOMER, type CustomerValues } from "@/components/crm/CustomerForm";
 import { ProductForm, EMPTY_PRODUCT, type ProductValues } from "@/components/crm/ProductForm";
 import { CRM_DRAG_ENABLED } from "@/config";
@@ -193,18 +193,18 @@ export default function CrmBoard() {
         onDealMove={handleMove}
       />
 
-      <Dialog
+      <Sheet
         open={open}
         onOpenChange={(v) => {
           setOpen(v);
           if (v) setError(false);
         }}
       >
-        <DialogContent className="sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>{t("crm.formTitle")}</DialogTitle>
-            <DialogDescription>{t("crm.formDesc")}</DialogDescription>
-          </DialogHeader>
+        <SheetContent className="sm:max-w-2xl">
+          <SheetHeader>
+            <SheetTitle>{t("crm.formTitle")}</SheetTitle>
+            <SheetDescription>{t("crm.formDesc")}</SheetDescription>
+          </SheetHeader>
           <form
             className="flex flex-col gap-4"
             onSubmit={(e) => {
@@ -283,7 +283,7 @@ export default function CrmBoard() {
             </div>
 
             {error && <p className="text-sm text-red-500">{t("crm.createFailed")}</p>}
-            <DialogFooter>
+            <SheetFooter>
               <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                 {t("common.cancel")}
               </Button>
@@ -293,10 +293,10 @@ export default function CrmBoard() {
               >
                 {t("common.save")}
               </Button>
-            </DialogFooter>
+            </SheetFooter>
           </form>
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
     </Stack>
   );
 }

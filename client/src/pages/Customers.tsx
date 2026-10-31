@@ -7,13 +7,13 @@ import { HeaderAction } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -187,21 +187,21 @@ export default function Customers() {
       )}
 
       {/* 新建公司 */}
-      <Dialog
+      <Sheet
         open={createOpen}
         onOpenChange={(v) => {
           setCreateOpen(v);
           if (v) setCreateErr(false);
         }}
       >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>{t("customer.panel")}</DialogTitle>
-            <DialogDescription>{t("customer.empty")}</DialogDescription>
-          </DialogHeader>
+        <SheetContent className="sm:max-w-md">
+          <SheetHeader>
+            <SheetTitle>{t("customer.panel")}</SheetTitle>
+            <SheetDescription>{t("customer.empty")}</SheetDescription>
+          </SheetHeader>
           <CustomerForm values={values} onChange={setValues} />
           {createErr && <p className="text-sm text-red-500">{t("crm.createFailed")}</p>}
-          <DialogFooter>
+          <SheetFooter>
             <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>
               {t("common.cancel")}
             </Button>
@@ -212,12 +212,12 @@ export default function Customers() {
             >
               {t("common.save")}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
 
       {/* 公司详情 + 联系人 */}
-      <Dialog
+      <Sheet
         open={!!detail}
         onOpenChange={(v) => {
           if (!v) {
@@ -226,13 +226,13 @@ export default function Customers() {
           }
         }}
       >
-        <DialogContent className="sm:max-w-lg">
+        <SheetContent className="sm:max-w-lg">
           {detail && (
             <>
-              <DialogHeader>
-                <DialogTitle>{detail.name}</DialogTitle>
-                <DialogDescription>{t("customer.detail")}</DialogDescription>
-              </DialogHeader>
+              <SheetHeader>
+                <SheetTitle>{detail.name}</SheetTitle>
+                <SheetDescription>{t("customer.detail")}</SheetDescription>
+              </SheetHeader>
 
               <div className="flex flex-col gap-1 text-sm text-muted-foreground">
                 {detail.customerType && (
@@ -359,8 +359,8 @@ export default function Customers() {
               </div>
             </>
           )}
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
     </Stack>
   );
 }
