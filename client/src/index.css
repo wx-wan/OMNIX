@@ -17,9 +17,9 @@
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  /* 品牌主色：OMNIX Indigo #4F46E5，前景白 */
-  --primary: #4F46E5;
-  --primary-foreground: oklch(0.985 0 0);
+  /* 品牌主色：Joylifetoy 品牌黄 #FFD54F，前景黑 */
+  --primary: #FFD54F;
+  --primary-foreground: #000000;
   --secondary: #f5f5f5;
   --secondary-foreground: #000000;
   --muted: #eaeaea;
@@ -30,7 +30,7 @@
   --border: oklch(0.94 0 0);
   --input: oklch(0.93 0 0);
   /* 焦点环用品牌主题色 */
-  --ring: #4F46E5;
+  --ring: #FFD54F;
   /* VIS 辅助色 */
   --chart-1: oklch(0.78 0.15 60);
   --chart-2: oklch(0.87 0.05 240);
@@ -55,8 +55,8 @@
   --card-foreground: oklch(0.985 0 0);
   --popover: oklch(0.205 0 0);
   --popover-foreground: oklch(0.985 0 0);
-  --primary: #6366F1;
-  --primary-foreground: oklch(0.985 0 0);
+  --primary: #FFD54F;
+  --primary-foreground: #000000;
   --secondary: oklch(0.269 0 0);
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.269 0 0);
@@ -66,7 +66,7 @@
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
-  --ring: #6366F1;
+  --ring: #FFD54F;
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
@@ -131,6 +131,20 @@
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
+/* ── Motion Token Foundation（从 Joylifetoy 同步）──
+   语义化动效令牌：Speed（fast / base / slow）× Intent（enter / exit / move / emphasize）。
+   单一 overlay 系统 = Base UI data-open/data-closed + tw-animate-css。 */
+@theme {
+  --duration-fast: 120ms; /* L1 微交互：hover / focus / 校验 */
+  --duration-base: 180ms; /* L2/L3 浮层进出：popover / select / dialog */
+  --duration-slow: 260ms; /* 大面 / 后续 L4/L5 连续性 */
+
+  --ease-enter: cubic-bezier(0.22, 1, 0.36, 1); /* 指数缓出，落点柔和（enter） */
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1); /* 加速退出（exit） */
+  --ease-move: cubic-bezier(0.4, 0, 0.2, 1); /* 位置 / 位移（move） */
+  --ease-emphasize: cubic-bezier(0.34, 1.56, 0.64, 1); /* 轻微回弹，仅用于强调（emphasize） */
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -183,6 +197,83 @@
   .search-field-icon {
     @apply size-4 shrink-0 text-muted-foreground;
   }
+}
+
+/* ── 全局减弱动效策略（从 Joylifetoy 同步）────────────
+   原则：减少动效，不减信息。保留 focus / selection / visibility / state / loading / error。
+   - 中和 tw-animate-css 的 enter/exit 变换变量 → 浮层进出不再位移/缩放，但仍触发 animationend。
+   - 全局过渡时长压到近 0（保留 transition-property，状态反馈即时可见）。 */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --tw-enter-opacity: 1;
+    --tw-enter-scale: 1;
+    --tw-enter-rotate: 0;
+    --tw-enter-translate-x: 0;
+    --tw-enter-translate-y: 0;
+    --tw-exit-opacity: 1;
+    --tw-exit-scale: 1;
+    --tw-exit-rotate: 0;
+    --tw-exit-translate-x: 0;
+    --tw-exit-translate-y: 0;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* 首登引导背景（错位点阵 + 中心径向暗角 + 淡入） */
+.onboarding-bg {
+  position: relative;
+  background-color: var(--canvas);
+  background-image:
+    radial-gradient(oklch(0 0 0 / 0.2) 1px, transparent 1px),
+    radial-gradient(oklch(0 0 0 / 0.2) 1px, transparent 1px);
+  background-size: 12px 12px;
+  background-position: 0 0, 12px 12px;
+}
+.onboarding-bg::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse 50vh 50vw, transparent 0%, var(--canvas) 90%);
+}
+.onboarding-fade {
+  animation: onboarding-fade-in 1s ease both;
+}
+.onboarding-check {
+  animation: onboarding-check-in 450ms cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+@keyframes onboarding-check-in {
+  from { opacity: 0; transform: scale(0.7); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes onboarding-fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .onboarding-fade,
+  .onboarding-check { animation: none; }
+}
+
+/* 主页（操作台）画布（Odoo o_home_menu_background 风格）：
+   底色纯白，叠柔和渐变 + 12px 圆点网格纹理。 */
+.o-app-switcher-bg {
+  @apply bg-background;
+  background-image:
+    linear-gradient(45deg, #eaeaea 0%, transparent 50%),
+    linear-gradient(135deg, #eaeaea 0%, transparent 30%, transparent 60%, #eaeaea 95%),
+    linear-gradient(180deg, #eaeaea 0%, transparent 100%),
+    radial-gradient(circle at 50% 50%, rgba(233, 236, 239, 0.95) 20%, transparent 400%),
+    radial-gradient(black 1px, #eaeaea 1px);
+  background-repeat: no-repeat, no-repeat, no-repeat, no-repeat, repeat;
+  background-size: auto, auto, 100% 40%, auto, 12px 12px;
 }
 
 /* ── 消息提示（sonner）────────────────────────────

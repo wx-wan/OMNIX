@@ -8,6 +8,7 @@ const resources = {
       nav: {
         dashboard: "仪表盘",
         users: "用户",
+        components: "组件",
         settings: "设置",
       },
       dashboard: {
@@ -35,6 +36,7 @@ const resources = {
       nav: {
         dashboard: "Dashboard",
         users: "Users",
+        components: "Components",
         settings: "Settings",
       },
       dashboard: {
