@@ -152,7 +152,7 @@ export default function CrmBoard() {
 
   return (
     <Stack gap={4}>
-      <div className="flex items-center justify-end">
+      <div className="flex items-center">
         <Button
           onClick={() => {
             setError(false);
@@ -166,7 +166,6 @@ export default function CrmBoard() {
 
       <KanbanBoard
         stages={stages}
-        fill
         draggable={CRM_DRAG_ENABLED}
         onDealMove={handleMove}
       />
