@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Outlet, NavLink, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "@/components/theme/ThemeProvider";
@@ -28,6 +29,16 @@ const navItems = [
   { to: "/showcase", labelKey: "nav.components", icon: Puzzle, end: false },
   { to: "/settings", labelKey: "nav.settings", icon: Settings, end: false },
 ];
+
+/** 页面级操作栏：portal 到顶栏右侧 #header-actions（空时自动隐藏，不留空隙）。 */
+export function HeaderAction({ children }: { children: ReactNode }) {
+  const [container, setContainer] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    setContainer(document.getElementById("header-actions"));
+  }, []);
+  if (!container) return null;
+  return createPortal(children, container);
+}
 
 export function AppShell() {
   const { t, i18n } = useTranslation();
@@ -99,6 +110,10 @@ export function AppShell() {
             )}
           </div>
           <div className="flex items-center gap-2">
+            <div
+              id="header-actions"
+              className="flex items-center gap-2 [&:not(:has(*))]:hidden"
+            />
             <Button variant="ghost" size="icon" onClick={toggleLang} aria-label="toggle language">
               <Languages className="size-5" />
             </Button>

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Plus } from "lucide-react";
 import { api } from "@/lib/api";
+import { HeaderAction } from "@/components/layout/AppShell";
 import { KanbanBoard, type KanbanItem, type KanbanPriority, type KanbanStage } from "@/components/kanban/KanbanBoard";
 import { Stack } from "@/components/layout/Stack";
 import { Button } from "@/components/ui/button";
@@ -163,7 +164,8 @@ export default function CrmBoard() {
 
   return (
     <Stack gap={4} className="h-full min-h-0">
-      <div className="flex items-center">
+      {/* 「新增」作为顶栏操作栏（portal 到顶栏右侧） */}
+      <HeaderAction>
         <Button
           onClick={() => {
             resetForm();
@@ -173,7 +175,7 @@ export default function CrmBoard() {
           <Plus />
           {t("crm.newDeal")}
         </Button>
-      </div>
+      </HeaderAction>
 
       <KanbanBoard
         stages={stages}
