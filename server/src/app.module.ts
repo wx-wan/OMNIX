@@ -1,6 +1,9 @@
 import { Module } from "@nestjs/common";
+import { APP_GUARD } from "@nestjs/core";
 import { ConfigModule } from "@nestjs/config";
 import { PrismaModule } from "./prisma/prisma.module";
+import { AuthModule } from "./modules/auth/auth.module";
+import { AuthGuard } from "./modules/auth/auth.guard";
 import { HealthController } from "./modules/health/health.controller";
 import { UsersModule } from "./modules/users/users.module";
 import { DashboardModule } from "./modules/dashboard/dashboard.module";
@@ -12,6 +15,7 @@ import { ProductsModule } from "./modules/products/products.module";
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     PrismaModule,
+    AuthModule,
     UsersModule,
     DashboardModule,
     CrmModule,
@@ -19,6 +23,11 @@ import { ProductsModule } from "./modules/products/products.module";
     ProductsModule,
   ],
   controllers: [HealthController],
-  providers: [],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: AuthGuard,
+    },
+  ],
 })
 export class AppModule {}

@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Outlet, NavLink, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "@/components/theme/ThemeProvider";
+import { useAuth, userInitials } from "@/lib/auth";
 import {
   LayoutDashboard,
   Users,
@@ -15,10 +16,20 @@ import {
   KanbanSquare,
   Contact,
   Package,
+  LogOut,
 } from "lucide-react";
 import { cn } from "cn";
 import { Button } from "@/components/ui/button";
 import { Container } from "@/components/layout/Container";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const navItems = [
   { to: "/", labelKey: "nav.dashboard", icon: LayoutDashboard, end: true },
@@ -43,6 +54,7 @@ export function HeaderAction({ children }: { children: ReactNode }) {
 export function AppShell() {
   const { t, i18n } = useTranslation();
   const { theme, setTheme } = useTheme();
+  const { user, logout } = useAuth();
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
 
@@ -107,6 +119,27 @@ export function AppShell() {
             className="flex items-center gap-2 [&:not(:has(*))]:hidden"
           />
           <div className="flex items-center gap-2">
+            {user && (
+              <DropdownMenu>
+                <DropdownMenuTrigger className="flex items-center gap-2 rounded-lg px-2 py-1 text-sm hover:bg-muted">
+                  <Avatar size="sm">
+                    <AvatarFallback>{userInitials(user.name)}</AvatarFallback>
+                  </Avatar>
+                  <span className="max-w-24 truncate">{user.name}</span>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuLabel className="font-normal">
+                    <div className="text-sm font-medium">{user.name}</div>
+                    <div className="truncate text-xs text-muted-foreground">{user.email}</div>
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem variant="destructive" onClick={() => void logout()}>
+                    <LogOut className="size-4" />
+                    {t("auth.logout")}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
             <Button variant="ghost" size="icon" onClick={toggleLang} aria-label="toggle language">
               <Languages className="size-5" />
             </Button>

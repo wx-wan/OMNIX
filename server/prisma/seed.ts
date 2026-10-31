@@ -1,4 +1,5 @@
 import { PrismaClient, Priority } from "@prisma/client";
+import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
@@ -60,6 +61,21 @@ async function main() {
     });
   }
   console.log(`✓ seeded ${stages.length} stages`);
+
+  // 默认管理员账号（便于登录体验）；已存在则同步密码，保证可登录。
+  const adminEmail = "admin@omnix.dev";
+  const adminHash = await bcrypt.hash("admin123", 10);
+  await prisma.user.upsert({
+    where: { email: adminEmail },
+    update: { name: "管理员", role: "admin", passwordHash: adminHash },
+    create: {
+      email: adminEmail,
+      name: "管理员",
+      role: "admin",
+      passwordHash: adminHash,
+    },
+  });
+  console.log("✓ ensured admin user (admin@omnix.dev / admin123)");
 
   const existing = await prisma.deal.count();
   if (existing === 0) {
