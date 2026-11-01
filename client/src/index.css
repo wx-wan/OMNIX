@@ -1,6 +1,11 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+
+/* 阶段强调色（accent）存于数据库并由服务端下发，Tailwind 扫描不到这些类名，
+   必须显式 safelist，否则看板/阶段条的顶部色条与圆点会因类未生成而透明消失。 */
+@source inline("bg-slate-400 bg-sky-500 bg-violet-500 bg-cyan-500 bg-blue-500 bg-blue-600 bg-emerald-500 bg-amber-500 bg-teal-500 bg-lime-500 bg-orange-500 bg-pink-500 bg-rose-500 bg-indigo-500");
+
 /* 品牌字体：Montserrat（拉丁）+ 思源黑体/Noto Sans SC（中文） */
 @import "@fontsource-variable/montserrat";
 @import "@fontsource-variable/noto-sans-sc";

@@ -32,6 +32,7 @@ model Stage {
   accent    String   @default("bg-slate-400") // 阶段强调色（tailwind 背景类）
   position  Int      @default(0)
   deals     Deal[]
+  stageLogs DealStageLog[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -46,6 +47,7 @@ model Stage {
 model Contact {
   id        String      @id @default(cuid())
   type      ContactType @default(customer)
+  customerType String? // 客户类型（业务类型：终端客户/贸易商/工厂 等；区别于 type 实体类型）
   name      String // 组织名称 或 个人姓名 *
   company   String? // 个人所属公司
   email     String? @unique // 邮箱唯一（登录按邮箱定位）
@@ -54,6 +56,8 @@ model Contact {
   website   String? // 官网
   password  String? // 仅 type=user 用于登录
   role      String? // 仅 type=user：admin | user
+  isSystem  Boolean @default(false) // 系统级机器人（如 ominXBot），拥有最高权限并负责记录操作历史
+  botCharacter String? @default("mochi") // 系统机器人的 3D 形象（wobnimo 角色 id），仅 isSystem 使用
   deals     Deal[]
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
@@ -65,13 +69,15 @@ model Contact {
 // 产品（新建商机时落库；也可在「产品」页独立维护）
 model Product {
   id          String   @id @default(cuid())
-  name        String // 产品名称 *
-  category    String? // 类别
-  spec        String? // 规格 / 型号
+  description String? // 描述（表单必填）
+  mode        String? // 模式
+  process     String? // 工艺
+  audience    String? // 受众
+  category    String? // 品类
   price       Decimal? @db.Decimal(12, 2) // 单价（元）
-  quantity    Int      @default(1) // 数量
-  unit        String? // 单位
-  description String? // 描述
+  costPrice   Decimal? @db.Decimal(12, 2) // 成本价（元）
+  tax         Decimal? @db.Decimal(5, 2) // 税项（%）
+  quantity    Int      @default(0) // 数量
   deals       Deal[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -89,6 +95,7 @@ model Deal {
   amount      Decimal?  @db.Decimal(12, 2) // 金额（元，可由 单价×数量 派生）
   assignee    String? // 业务员
   meta        String? // 备注 / 日期
+  source      String? // 来源（官网 / 转介绍 / 展会 等）
   stage       Stage     @relation(fields: [stageId], references: [id])
   stageId     String
   position    Int       @default(0) // 同阶段内排序
@@ -96,6 +103,7 @@ model Deal {
   contactId   String?   @map("contact_id")
   product     Product?  @relation(fields: [productId], references: [id])
   productId   String?   @map("product_id")
+  stageLogs   DealStageLog[]
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
@@ -103,4 +111,36 @@ model Deal {
   @@index([contactId])
   @@index([productId])
   @@map("deals")
+}
+
+// CRM 阶段停留日志：每次进入某阶段记一条，leftAt 为空表示当前所处阶段。
+model DealStageLog {
+  id         String   @id @default(cuid())
+  deal       Deal     @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  dealId     String
+  stage      Stage    @relation(fields: [stageId], references: [id])
+  stageId    String
+  stageKey   String // 快照阶段 key，阶段被删也不影响展示
+  stageTitle String // 快照阶段标题
+  enteredAt  DateTime @default(now())
+  leftAt     DateTime?
+
+  @@index([dealId])
+  @@map("deal_stage_logs")
+}
+
+// Chatter 操作/讨论记录：通用挂载到任意业务单据（resModel + resId）。
+// 系统机器人（ominXBot）会把「创建 / 字段修改 / 阶段变更」等操作历史写入此处。
+model ChatterMessage {
+  id          String   @id @default(cuid())
+  resModel    String // 业务模型标识，如 "deal"
+  resId       String // 业务记录 id（如 deal.id）
+  authorId    String? // 作者 Contact id（系统记录用机器人 id；人工评论用登录用户 id）
+  authorName  String // 作者名快照（便于展示，避免作者被删后丢失）
+  authorIsBot Boolean  @default(false) // 是否系统机器人（ominXBot）发出的操作记录
+  body        String // 消息/操作历史正文
+  createdAt   DateTime @default(now())
+
+  @@index([resModel, resId])
+  @@map("chatter_messages")
 }

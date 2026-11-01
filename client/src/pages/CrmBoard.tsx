@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { Plus } from "lucide-react";
+
 import { api } from "@/lib/api";
-import { HeaderAction } from "@/components/layout/AppShell";
-import { KanbanBoard, type KanbanItem, type KanbanStage } from "@/components/kanban/KanbanBoard";
+import { PageMeta } from "@/components/layout/PageMeta";
+import { KanbanBoard, type KanbanItem, type KanbanStage, type CardField } from "@/components/kanban/KanbanBoard";
 import { Stack } from "@/components/layout/Stack";
 import { Button } from "@/components/ui/button";
 import { CRM_DRAG_ENABLED } from "@/config";
@@ -18,14 +18,25 @@ interface RawDeal {
   amount: number | null;
   assignee: string | null;
   meta: string | null;
+  source: string | null;
+  createdAt: string;
 }
 
 interface RawStage {
   id: string;
+  key: string;
   title: string;
   accent: string;
   deals: RawDeal[];
 }
+
+// 各阶段卡片展示字段（按阶段 key 定制，控制顺序与显隐）。
+// 未配置的阶段沿用 KanbanCard 的默认完整布局。
+const STAGE_CARD_FIELDS: Record<string, CardField[]> = {
+  // 线索到达：商机标题(始终显示) + 商机金额 + 备注 + 来源 + 创建时间
+  // 负责人以「仅头像」形式放在卡片底部居右，名称悬停显示（见 KanbanCard）
+  lead: ["amount", "description", "source", "createdAt"],
+};
 
 // 兜底阶段：接口无数据 / 失败时也完整展示 11 个阶段（加载成功后替换为服务端数据）
 const FALLBACK_STAGES: KanbanStage[] = [
@@ -46,7 +57,7 @@ function formatAmount(n: number) {
   return `¥${n.toLocaleString("zh-CN")}`;
 }
 
-function toItem(d: RawDeal): KanbanItem {
+function toItem(d: RawDeal, stageKey: string): KanbanItem {
   return {
     id: d.id,
     title: d.title,
@@ -58,6 +69,11 @@ function toItem(d: RawDeal): KanbanItem {
       ? { name: d.assignee, initials: d.assignee.trim().slice(0, 1) }
       : undefined,
     meta: d.meta ?? undefined,
+    source: d.source ?? undefined,
+    createdAt: d.createdAt,
+    fields: STAGE_CARD_FIELDS[stageKey],
+    // 线索到达阶段：负责人仅显示头像（卡片底部居右），名称悬停显示
+    assigneeCompact: stageKey === "lead",
   };
 }
 
@@ -76,7 +92,7 @@ export default function CrmBoard() {
                 id: s.id,
                 title: s.title,
                 accent: s.accent,
-                items: s.deals.map(toItem),
+                items: s.deals.map((d) => toItem(d, s.key)),
               }))
             : FALLBACK_STAGES,
         );
@@ -101,13 +117,14 @@ export default function CrmBoard() {
 
   return (
     <Stack gap={4}>
-      {/* 「新增」作为顶栏操作栏（portal 到顶栏右侧） */}
-      <HeaderAction>
-        <Button onClick={() => navigate("/crm/deals/new")}>
-          <Plus />
-          {t("crm.newDeal")}
-        </Button>
-      </HeaderAction>
+      <PageMeta
+        title={t("nav.crm")}
+        actions={
+          <Button onClick={() => navigate("/crm/deals/new")}>
+            {t("crm.newDeal")}
+          </Button>
+        }
+      />
 
       <KanbanBoard
         stages={stages}

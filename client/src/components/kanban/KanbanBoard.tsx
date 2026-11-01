@@ -10,6 +10,18 @@ export interface KanbanAssignee {
   initials: string;
 }
 
+/** 卡片可展示的字段（按阶段定制内容的原子单元）。 */
+export type CardField =
+  | "title"
+  | "amount"
+  | "description"
+  | "source"
+  | "createdAt"
+  | "assignee"
+  | "priority"
+  | "tag"
+  | "meta";
+
 export interface KanbanItem {
   id: string;
   title: string;
@@ -17,9 +29,17 @@ export interface KanbanItem {
   tag?: string;
   priority?: KanbanPriority;
   assignee?: KanbanAssignee;
+  /** 紧凑展示负责人：仅显示头像（卡片底部居右），名称悬停显示。用于线索到达阶段。 */
+  assigneeCompact?: boolean;
   /** 金额（如 "¥86,000"），CRM 交易卡展示用，可选。 */
   amount?: string;
   meta?: string;
+  /** 来源（如 官网 / 转介绍 / 展会），CRM 交易卡展示用，可选。 */
+  source?: string;
+  /** 创建时间（ISO 字符串），CRM 交易卡展示用，可选。 */
+  createdAt?: string;
+  /** 按阶段定制的展示字段（控制顺序与显隐）。为空则使用默认完整布局。 */
+  fields?: CardField[];
 }
 
 export interface KanbanStage {
@@ -42,6 +62,65 @@ const priorityKey: Record<KanbanPriority, string> = {
   low: "kanban.priorityLow",
 };
 
+function formatDateTime(iso?: string) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+/** 单字段渲染（按阶段定制的卡片布局复用）。 */
+function FieldBlock({ field, item }: { field: CardField; item: KanbanItem }) {
+  const { t } = useTranslation();
+  switch (field) {
+    case "amount":
+      return item.amount ? (
+        <p className="text-sm font-semibold tabular-nums text-foreground">{item.amount}</p>
+      ) : null;
+    case "description":
+      return item.description ? (
+        <p className="line-clamp-2 text-xs text-muted-foreground">{item.description}</p>
+      ) : null;
+    case "source":
+      return item.source ? (
+        <p className="text-[11px] text-muted-foreground/80">来源 · {item.source}</p>
+      ) : null;
+    case "createdAt":
+      return item.createdAt ? (
+        <p className="text-[11px] text-muted-foreground/80">创建 · {formatDateTime(item.createdAt)}</p>
+      ) : null;
+    case "assignee":
+      return item.assignee ? (
+        <div className="flex items-center gap-1.5">
+          <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[11px] font-medium text-primary">
+            {item.assignee.initials}
+          </span>
+          <span className="text-xs text-muted-foreground">{item.assignee.name}</span>
+        </div>
+      ) : null;
+    case "priority":
+      return item.priority ? (
+        <span
+          className={cn(
+            "rounded-4xl px-2 py-0.5 text-[11px] font-medium",
+            priorityClasses[item.priority],
+          )}
+        >
+          {t(priorityKey[item.priority])}
+        </span>
+      ) : null;
+    case "tag":
+      return item.tag ? <Badge variant="secondary">{item.tag}</Badge> : null;
+    case "meta":
+      return item.meta ? (
+        <p className="text-[11px] text-muted-foreground">{item.meta}</p>
+      ) : null;
+    default:
+      return null;
+  }
+}
+
 function KanbanCard({
   item,
   draggable,
@@ -54,6 +133,7 @@ function KanbanCard({
   onClick?: () => void;
 }) {
   const { t } = useTranslation();
+  const fields = item.fields;
   return (
     <div
       className={cn(
@@ -66,37 +146,63 @@ function KanbanCard({
       onClick={onClick}
     >
       <p className="text-sm font-medium text-foreground">{item.title}</p>
-      {item.amount && (
-        <p className="mt-0.5 text-sm font-semibold tabular-nums text-foreground">{item.amount}</p>
-      )}
-      {item.description && (
-        <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{item.description}</p>
-      )}
-      <div className="mt-3 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5">
-          {item.priority && (
-            <span
-              className={cn(
-                "rounded-4xl px-2 py-0.5 text-[11px] font-medium",
-                priorityClasses[item.priority],
-              )}
-            >
-              {t(priorityKey[item.priority])}
-            </span>
+      {fields ? (
+        <div className="mt-1.5 flex flex-col gap-1.5">
+          {fields
+            .filter((f) => f !== "title")
+            .map((f) => (
+              <FieldBlock key={f} field={f} item={item} />
+            ))}
+          {/* 线索到达阶段：负责人仅头像，居右；名称悬停显示 */}
+          {item.assignee && item.assigneeCompact && (
+            <div className="flex justify-end">
+              <span
+                className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[11px] font-medium text-primary"
+                title={item.assignee.name}
+              >
+                {item.assignee.initials}
+              </span>
+            </div>
           )}
-          {item.tag && <Badge variant="secondary">{item.tag}</Badge>}
         </div>
-        {item.assignee && (
-          <span
-            className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[11px] font-medium text-primary"
-            title={item.assignee.name}
-          >
-            {item.assignee.initials}
-          </span>
-        )}
-      </div>
-      {item.meta && (
-        <p className="mt-2 text-[11px] text-muted-foreground">{item.meta}</p>
+      ) : (
+        <>
+          {item.amount && (
+            <p className="mt-0.5 text-sm font-semibold tabular-nums text-foreground">{item.amount}</p>
+          )}
+          {item.description && (
+            <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{item.description}</p>
+          )}
+          <div className="mt-3 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5">
+              {item.priority && (
+                <span
+                  className={cn(
+                    "rounded-4xl px-2 py-0.5 text-[11px] font-medium",
+                    priorityClasses[item.priority],
+                  )}
+                >
+                  {t(priorityKey[item.priority])}
+                </span>
+              )}
+              {item.tag && <Badge variant="secondary">{item.tag}</Badge>}
+            </div>
+            {item.assignee && (
+              <span
+                className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[11px] font-medium text-primary"
+                title={item.assignee.name}
+              >
+                {item.assignee.initials}
+              </span>
+            )}
+          </div>
+          {item.meta && (
+            <p className="mt-2 text-[11px] text-muted-foreground">{item.meta}</p>
+          )}
+          {item.source && (
+            <p className="mt-1 text-[11px] text-muted-foreground/80">来源 · {item.source}</p>
+          )}
+        </>
       )}
     </div>
   );
@@ -155,11 +261,15 @@ export function KanbanBoard({
               : undefined
           }
           className={cn(
-            "flex flex-col rounded-2xl bg-card shadow-card",
+            "flex flex-col overflow-hidden rounded-2xl bg-card shadow-card",
             fill ? "min-w-0 flex-1" : "w-72 shrink-0",
             dragOverStage === stage.id && "ring-2 ring-primary",
           )}
         >
+          <span
+            className={cn("h-1 w-full shrink-0", stage.accent ?? "bg-primary")}
+            aria-hidden
+          />
           <div className="flex items-center justify-between gap-2 px-4 py-3">
             <div className="flex items-center gap-2">
               <span className={cn("size-2 rounded-full", stage.accent ?? "bg-primary")} />

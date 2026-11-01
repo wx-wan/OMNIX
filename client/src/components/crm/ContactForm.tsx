@@ -14,6 +14,7 @@ export type ContactTypeValue = "customer" | "supplier" | "user";
 
 export interface ContactValues {
   type: ContactTypeValue;
+  customerType: string;
   name: string;
   company: string;
   email: string;
@@ -26,6 +27,7 @@ export interface ContactValues {
 
 export const EMPTY_CONTACT: ContactValues = {
   type: "customer",
+  customerType: "",
   name: "",
   company: "",
   email: "",

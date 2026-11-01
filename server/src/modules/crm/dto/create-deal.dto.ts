@@ -34,6 +34,10 @@ export class CreateDealDto {
   @IsString()
   meta?: string;
 
+  @IsOptional()
+  @IsString()
+  source?: string;
+
   /** 不传则默认落入第一个阶段（线索到达）。 */
   @IsOptional()
   @IsString()

@@ -10,7 +10,6 @@ import {
   Moon,
   Sun,
   Languages,
-  Boxes,
   Puzzle,
   KanbanSquare,
   Contact,
@@ -48,6 +47,16 @@ export function HeaderAction({ children }: { children: ReactNode }) {
   return createPortal(children, container);
 }
 
+/** 页面级中央区域：portal 到顶栏中央 #header-center（空时自动隐藏，不留空隙）。 */
+export function HeaderCenter({ children }: { children: ReactNode }) {
+  const [container, setContainer] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    setContainer(document.getElementById("header-center"));
+  }, []);
+  if (!container) return null;
+  return createPortal(children, container);
+}
+
 export function AppShell() {
   const { t, i18n } = useTranslation();
   const { theme, setTheme } = useTheme();
@@ -69,9 +78,7 @@ export function AppShell() {
       {/* Sidebar — floating card (island) */}
       <aside className="flex flex-col overflow-hidden rounded-2xl bg-card p-3 shadow-card">
         <div className={cn("flex h-14 items-center gap-2 px-1", collapsed && "justify-center")}>
-          <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <Boxes className="size-5" />
-          </div>
+          <img src="/logo.png" alt="logo" className="size-8" />
           {!collapsed && (
             <span className="text-base font-semibold tracking-tight">{t("appName")}</span>
           )}
@@ -110,10 +117,14 @@ export function AppShell() {
 
       {/* Main column */}
       <div className="flex min-h-0 min-w-0 flex-col gap-3">
-        <header className="flex h-12 shrink-0 items-center justify-between px-4 md:px-6">
+        <header className="relative flex h-12 shrink-0 items-center justify-between">
           <div
             id="header-actions"
             className="flex items-center gap-2 [&:not(:has(*))]:hidden"
+          />
+          <div
+            id="header-center"
+            className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 [&:not(:has(*))]:hidden"
           />
           <div className="ml-auto flex items-center gap-2">
             {user && (

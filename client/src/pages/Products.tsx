@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Plus } from "lucide-react";
+
 import { api } from "@/lib/api";
 import { Stack } from "@/components/layout/Stack";
-import { HeaderAction } from "@/components/layout/AppShell";
+import { PageMeta } from "@/components/layout/PageMeta";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -22,13 +22,15 @@ import {
 
 interface Product {
   id: string;
-  name: string;
-  category: string | null;
-  spec: string | null;
-  price: number | null;
-  quantity: number;
-  unit: string | null;
   description: string | null;
+  mode: string | null;
+  process: string | null;
+  audience: string | null;
+  category: string | null;
+  price: number | null;
+  costPrice: number | null;
+  tax: number | null;
+  quantity: number;
 }
 
 function formatPrice(n: number | null, unit?: string | null) {
@@ -57,13 +59,15 @@ export default function Products() {
   }, []);
 
   const handleCreate = async () => {
-    if (!values.name.trim() || saving) return;
+    if (!values.description.trim() || saving) return;
     setSaving(true);
     try {
       await api.post("/products", {
         ...values,
-        name: values.name.trim(),
+        description: values.description.trim(),
         price: values.price ? Number(values.price) : undefined,
+        costPrice: values.costPrice ? Number(values.costPrice) : undefined,
+        tax: values.tax ? Number(values.tax) : undefined,
         quantity: values.quantity ? Number(values.quantity) : undefined,
       });
       setOpen(false);
@@ -79,18 +83,20 @@ export default function Products() {
 
   return (
     <Stack gap={4}>
-      <HeaderAction>
-        <Button
-          onClick={() => {
-            setError(false);
-            setValues(EMPTY_PRODUCT);
-            setOpen(true);
-          }}
-        >
-          <Plus />
-          {t("crm.newDeal")}
-        </Button>
-      </HeaderAction>
+      <PageMeta
+        title={t("nav.products")}
+        actions={
+          <Button
+            onClick={() => {
+              setError(false);
+              setValues(EMPTY_PRODUCT);
+              setOpen(true);
+            }}
+          >
+            {t("product.add")}
+          </Button>
+        }
+      />
 
       {list.length === 0 ? (
         <Card>
@@ -103,18 +109,21 @@ export default function Products() {
           {list.map((p) => (
             <Card key={p.id}>
               <CardHeader>
-                <CardTitle>{p.name}</CardTitle>
+                <CardTitle>{p.description}</CardTitle>
               </CardHeader>
               <CardContent className="flex flex-col gap-1 text-sm text-muted-foreground">
                 {p.category && <span>{p.category}</span>}
-                {p.spec && <span>{p.spec}</span>}
+                {p.mode && <span>模式：{p.mode}</span>}
+                {p.process && <span>工艺：{p.process}</span>}
+                {p.audience && <span>受众：{p.audience}</span>}
                 <span>
-                  {formatPrice(p.price, p.unit) || "—"}
+                  {formatPrice(p.price) || "—"}
                   {p.quantity ? ` × ${p.quantity}` : ""}
                 </span>
-                {p.description && (
-                  <span className="line-clamp-2">{p.description}</span>
+                {p.costPrice != null && (
+                  <span>成本价：{formatPrice(p.costPrice)}</span>
                 )}
+                {p.tax != null && <span>税项：{p.tax}%</span>}
               </CardContent>
             </Card>
           ))}
@@ -139,7 +148,7 @@ export default function Products() {
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               {t("common.cancel")}
             </Button>
-            <Button type="submit" disabled={!values.name.trim() || saving} onClick={handleCreate}>
+            <Button type="submit" disabled={!values.description.trim() || saving} onClick={handleCreate}>
               {t("common.save")}
             </Button>
           </DialogFooter>

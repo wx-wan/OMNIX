@@ -14,6 +14,10 @@ export class UpdateDealContactDto {
 
   @IsOptional()
   @IsString()
+  customerType?: string; // 客户类型（业务类型，区别于 type 实体类型）
+
+  @IsOptional()
+  @IsString()
   company?: string;
 
   @IsOptional()
@@ -37,19 +41,23 @@ export class UpdateDealContactDto {
 export class UpdateDealProductDto {
   @IsOptional()
   @IsString()
-  name?: string;
+  description?: string;
+
+  @IsOptional()
+  @IsString()
+  mode?: string;
+
+  @IsOptional()
+  @IsString()
+  process?: string;
+
+  @IsOptional()
+  @IsString()
+  audience?: string;
 
   @IsOptional()
   @IsString()
   category?: string;
-
-  @IsOptional()
-  @IsString()
-  spec?: string;
-
-  @IsOptional()
-  @IsString()
-  unit?: string;
 
   @IsOptional()
   @IsNumber()
@@ -57,11 +65,15 @@ export class UpdateDealProductDto {
 
   @IsOptional()
   @IsNumber()
-  quantity?: number;
+  costPrice?: number;
 
   @IsOptional()
-  @IsString()
-  description?: string;
+  @IsNumber()
+  tax?: number;
+
+  @IsOptional()
+  @IsNumber()
+  quantity?: number;
 }
 
 export class UpdateDealDto {
@@ -92,6 +104,10 @@ export class UpdateDealDto {
   @IsOptional()
   @IsString()
   meta?: string;
+
+  @IsOptional()
+  @IsString()
+  source?: string;
 
   @IsOptional()
   @IsString()

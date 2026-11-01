@@ -16,6 +16,11 @@ export class UpdateContactDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(60)
+  customerType?: string; // 客户类型（业务类型，区别于 type 实体类型）
+
+  @IsOptional()
+  @IsString()
   @IsNotEmpty()
   @MaxLength(80)
   name?: string;
@@ -54,4 +59,9 @@ export class UpdateContactDto {
   @IsString()
   @MaxLength(20)
   role?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  botCharacter?: string; // 系统机器人的 3D 形象（wobnimo 角色 id）
 }

@@ -9,29 +9,37 @@ import {
 export class CreateProductDto {
   @IsString()
   @IsNotEmpty()
-  name: string;
+  description: string; // 描述 *
+
+  @IsOptional()
+  @IsString()
+  mode?: string;
+
+  @IsOptional()
+  @IsString()
+  process?: string;
+
+  @IsOptional()
+  @IsString()
+  audience?: string;
 
   @IsOptional()
   @IsString()
   category?: string;
 
   @IsOptional()
-  @IsString()
-  spec?: string;
-
-  @IsOptional()
   @IsNumber()
   price?: number;
 
   @IsOptional()
+  @IsNumber()
+  costPrice?: number;
+
+  @IsOptional()
+  @IsNumber()
+  tax?: number;
+
+  @IsOptional()
   @IsInt()
   quantity?: number;
-
-  @IsOptional()
-  @IsString()
-  unit?: string;
-
-  @IsOptional()
-  @IsString()
-  description?: string;
 }

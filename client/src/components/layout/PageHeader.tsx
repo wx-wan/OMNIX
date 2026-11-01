@@ -23,7 +23,7 @@ export function PageHeader({
       className={cn(
         "flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between",
         sticky &&
-          "sticky top-0 z-20 -mx-4 border-b border-border bg-canvas px-4 py-3 md:-mx-6 md:px-6",
+          "sticky top-0 z-20 -mx-4 bg-canvas px-4 py-3 md:-mx-6 md:px-6",
         className,
       )}
     >

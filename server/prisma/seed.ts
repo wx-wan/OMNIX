@@ -78,10 +78,86 @@ async function main() {
   });
   console.log("✓ ensured admin contact (admin@omnix.dev / admin123)");
 
+  // 系统级机器人 ominXBot：拥有最高权限（role=admin），负责把「创建 / 字段修改 / 阶段变更」
+  // 等操作历史写入各单据的 Chatter。不可登录（password 为空），仅作系统操作记录作者身份。
+  await prisma.contact.upsert({
+    where: { email: "bot@omnix.dev" },
+    update: { name: "ominXBot", type: ContactType.user, role: "admin", isSystem: true, password: null },
+    create: {
+      email: "bot@omnix.dev",
+      name: "ominXBot",
+      type: ContactType.user,
+      role: "admin",
+      isSystem: true,
+      password: null,
+      botCharacter: "mochi",
+    },
+  });
+  console.log("✓ ensured system bot (ominXBot)");
+
+  // 演示用「客户」类型联系人：联系人页的客户标签、商机「所属公司」下拉共用
+  const customers: Array<{
+    email: string;
+    name: string;
+    company: string;
+    customerType: string | null;
+    phone: string | null;
+    country: string | null;
+  }> = [
+    { email: "lin@hengxing.com", name: "林经理", company: "深圳恒星电子", customerType: "跨境电商类型", phone: "138-0011-2233", country: "中国" },
+    { email: "wang@yuan.cn", name: "王经理", company: "宁波远洋贸易", customerType: "传统贸易类型", phone: "139-0022-3344", country: "中国" },
+    { email: "chen@jinggong.com", name: "陈工", company: "东莞精工模具", customerType: "品牌 & 代工类型", phone: "137-0033-4455", country: "中国" },
+    { email: "zhao@liantuo.com", name: "赵经理", company: "上海联拓科技", customerType: "教育文旅类型", phone: "136-0044-5566", country: "中国" },
+    { email: "sun@hina.com", name: "孙主管", company: "广州海纳塑胶", customerType: "渠道分销 & 代理类", phone: "135-0055-6677", country: "中国" },
+    { email: "li@ruichi.com", name: "李经理", company: "苏州锐驰电机", customerType: "政企 & 单位采购类", phone: "134-0066-7788", country: "中国" },
+    { email: "amy@yihao.com", name: "Amy", company: "Hangzhou Yihao", customerType: "跨境电商类型", phone: "+86-571-8888", country: "中国" },
+    { email: "zhou@desheng.com", name: "周经理", company: "佛山德胜五金", customerType: "传统商超类型", phone: "133-0077-8899", country: "中国" },
+  ];
+  for (const c of customers) {
+    await prisma.contact.upsert({
+      where: { email: c.email },
+      update: {
+        name: c.name,
+        company: c.company,
+        type: ContactType.customer,
+        customerType: c.customerType,
+        phone: c.phone,
+        country: c.country,
+      },
+      create: {
+        email: c.email,
+        name: c.name,
+        company: c.company,
+        type: ContactType.customer,
+        customerType: c.customerType,
+        phone: c.phone,
+        country: c.country,
+      },
+    });
+  }
+  console.log(`✓ seeded ${customers.length} customer contacts`);
+
+  // 演示用产品：清掉历史 description 为空的脏数据后，仅在无产品时写入
+  await prisma.product.deleteMany({ where: { description: null } });
+  if ((await prisma.product.count()) === 0) {
+    const products = [
+      { description: "无线蓝牙耳机 Pro", price: 299, tax: 13, quantity: 100, category: "消费电子", mode: "成品" },
+      { description: "智能手环 S1", price: 199, tax: 13, quantity: 200, category: "消费电子", mode: "成品" },
+      { description: "便携榨汁杯", price: 89, tax: 13, quantity: 300, category: "家居", mode: "成品" },
+      { description: "工业级螺丝刀套装", price: 159, tax: 13, quantity: 150, category: "五金工具", mode: "成品" },
+      { description: "定制工服（夏季）", price: 49, tax: 13, quantity: 500, category: "服饰定制", mode: "定制" },
+      { description: "智能温控器", price: 359, tax: 13, quantity: 80, category: "智能家居", mode: "成品" },
+    ];
+    await prisma.product.createMany({ data: products });
+    console.log(`✓ seeded ${products.length} products`);
+  } else {
+    console.log("✓ products already exist, skip");
+  }
+
   const existing = await prisma.deal.count();
+  const byKey = await prisma.stage.findMany();
+  const keyToId = Object.fromEntries(byKey.map((s) => [s.key, s.id]));
   if (existing === 0) {
-    const byKey = await prisma.stage.findMany();
-    const keyToId = Object.fromEntries(byKey.map((s) => [s.key, s.id]));
     let pos = 0;
     let lastStage = "";
     for (const d of deals) {
@@ -107,6 +183,37 @@ async function main() {
   } else {
     console.log("✓ deals already exist, skip");
   }
+
+  // 阶段停留日志回填：仅为「还没有任何阶段日志」的商机（种子演示商机）重建停留路径。
+  // 已存在日志的商机（用户新建的）保留其真实停留时间，避免被随机时长覆盖。
+  const dealsForLog = await prisma.deal.findMany({
+    where: { stageLogs: { none: {} } },
+    select: { id: true, stageId: true },
+  });
+  const stageList = [...byKey].sort((a, b) => a.position - b.position);
+  const stageIndex = Object.fromEntries(stageList.map((s, i) => [s.id, i]));
+  for (const d of dealsForLog) {
+    const k = stageIndex[d.stageId] ?? 0;
+    // 先清空旧日志，再按 阶段0..k 顺序写入（前序阶段闭合、当前阶段进行中）
+    await prisma.dealStageLog.deleteMany({ where: { dealId: d.id } });
+    let cursor = Date.now();
+    for (let j = 0; j <= k; j++) {
+      const span = (Math.floor(Math.random() * 10) + 1) * 86400000;
+      const st = stageList[j];
+      await prisma.dealStageLog.create({
+        data: {
+          dealId: d.id,
+          stageId: st.id,
+          stageKey: st.key,
+          stageTitle: st.title,
+          enteredAt: new Date(cursor - span),
+          leftAt: j < k ? new Date(cursor) : null,
+        },
+      });
+      cursor -= span;
+    }
+  }
+  console.log(`✓ seeded stage logs for ${dealsForLog.length} deals`);
 }
 
 main()

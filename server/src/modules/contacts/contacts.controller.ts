@@ -29,6 +29,12 @@ export class ContactsController {
     );
   }
 
+  /** 系统机器人配置（前端选择 3D 形象）。静态路由必须声明在 :id 之前。 */
+  @Get("bot")
+  getBot() {
+    return this.svc.getBot();
+  }
+
   @Get(":id")
   getOne(@Param("id") id: string) {
     return this.svc.getOne(id);
@@ -38,6 +44,11 @@ export class ContactsController {
   @HttpCode(201)
   create(@Body() dto: CreateContactDto) {
     return this.svc.create(dto);
+  }
+
+  @Patch("bot")
+  updateBot(@Body() dto: UpdateContactDto) {
+    return this.svc.updateBot(dto);
   }
 
   @Patch(":id")

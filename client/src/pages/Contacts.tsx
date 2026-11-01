@@ -1,15 +1,22 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Plus, Search } from "lucide-react";
+import { Search } from "lucide-react";
+import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Stack } from "@/components/layout/Stack";
-import { HeaderAction } from "@/components/layout/AppShell";
-import { PageHeader } from "@/components/layout/PageHeader";
+import { PageMeta } from "@/components/layout/PageMeta";
 import { Section } from "@/components/layout/Section";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Sheet,
   SheetContent,
@@ -19,6 +26,8 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Chatter } from "@/components/chatter/Chatter";
+import { RobotAvatar } from "@/components/common/RobotAvatar";
+import { useBotConfig, saveBotConfig } from "@/lib/botConfig";
 import {
   ContactForm,
   EMPTY_CONTACT,
@@ -31,6 +40,7 @@ type ContactType = ContactTypeValue;
 interface Contact {
   id: string;
   type: ContactType;
+  customerType?: string | null;
   name: string;
   company?: string | null;
   email?: string | null;
@@ -40,6 +50,13 @@ interface Contact {
   role?: string | null;
   _count?: { deals: number };
 }
+
+// wobnimo 内置 3D 形象（角色 id），供系统机器人形象选择。
+const BOT_CHARACTERS = [
+  "mochi", "bao", "berry", "boo", "bumble", "cacti", "cap", "drift",
+  "ember", "hop", "inky", "latte", "microduck", "miso", "pebble", "pip",
+  "rex", "swirl", "tad", "volt",
+];
 
 const TABS: { value: "" | ContactType; labelKey: string }[] = [
   { value: "", labelKey: "common.all" },
@@ -73,6 +90,30 @@ export default function Contacts() {
 
   const [detail, setDetail] = useState<Contact | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
+
+  // 系统机器人形象设置
+  const bot = useBotConfig();
+  const [botName, setBotName] = useState("ominXBot");
+  const [botChar, setBotChar] = useState("mochi");
+  const [botSaving, setBotSaving] = useState(false);
+  useEffect(() => {
+    if (bot) {
+      setBotName(bot.name);
+      setBotChar(bot.botCharacter);
+    }
+  }, [bot]);
+  const saveBot = async () => {
+    if (botSaving) return;
+    setBotSaving(true);
+    try {
+      await saveBotConfig({ name: botName.trim() || "ominXBot", botCharacter: botChar });
+      toast.success("机器人形象已更新");
+    } catch {
+      toast.error("保存失败，请重试");
+    } finally {
+      setBotSaving(false);
+    }
+  };
 
   const load = () => {
     setLoading(true);
@@ -110,6 +151,7 @@ export default function Contacts() {
     setEditing(c);
     setForm({
       type: c.type,
+      customerType: c.customerType ?? "",
       name: c.name,
       company: c.company ?? "",
       email: c.email ?? "",
@@ -160,14 +202,62 @@ export default function Contacts() {
 
   return (
     <Stack gap={6}>
-      <HeaderAction>
-        <Button onClick={openCreate}>
-          <Plus />
-          {t("contact.add")}
-        </Button>
-      </HeaderAction>
+      <PageMeta
+        title={t("nav.contacts")}
+        actions={
+          <Button onClick={openCreate}>
+            {t("contact.add")}
+          </Button>
+        }
+      />
 
-      <PageHeader title={t("nav.contacts")} description={t("contact.empty")} />
+      {/* 系统机器人形象设置：选择 3D 形象与名称，作用于全站机器人头像与提示 */}
+      <Section>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-4">
+            <RobotAvatar size={64} state="idle" character={botChar} />
+            <div>
+              <h3 className="text-sm font-semibold">系统机器人形象</h3>
+              <p className="text-xs text-muted-foreground">
+                设置 ominXBot 的 3D 形象与名称，将作用于全站机器人头像与各类提示。
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-end gap-3">
+            <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+              名称
+              <Input
+                className="w-40"
+                value={botName}
+                onChange={(e) => setBotName(e.target.value)}
+                placeholder="ominXBot"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+              形象
+              <Select
+                items={Object.fromEntries(BOT_CHARACTERS.map((c) => [c, c]))}
+                value={botChar}
+                onValueChange={(v) => setBotChar(String(v))}
+              >
+                <SelectTrigger className="w-28">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {BOT_CHARACTERS.map((c) => (
+                    <SelectItem key={c} value={c}>
+                      {c}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </label>
+            <Button onClick={saveBot} disabled={botSaving || !bot}>
+              {botSaving ? "保存中…" : t("common.save")}
+            </Button>
+          </div>
+        </div>
+      </Section>
 
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative max-w-xs">
@@ -194,7 +284,7 @@ export default function Contacts() {
       </div>
 
       <Section noPadding>
-        <div className="divide-y divide-border">
+        <div className="flex flex-col gap-1">
           {filtered.map((c) => (
             <div
               key={c.id}
@@ -292,6 +382,9 @@ export default function Contacts() {
               <section className="flex flex-col gap-3">
                 <h3 className="text-sm font-semibold">{t("contact.panel")}</h3>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <InfoItem label={t("crm.fieldCustomerType")}>
+                    {detail.customerType || "—"}
+                  </InfoItem>
                   <InfoItem label={t("contact.email")}>{detail.email}</InfoItem>
                   <InfoItem label={t("contact.phone")}>{detail.phone}</InfoItem>
                   <InfoItem label={t("contact.country")}>{detail.country}</InfoItem>

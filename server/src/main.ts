@@ -2,14 +2,23 @@ import "reflect-metadata";
 import { NestFactory } from "@nestjs/core";
 import { ValidationPipe } from "@nestjs/common";
 import session from "express-session";
+import connectPgSimple from "connect-pg-simple";
 import { AppModule } from "./app.module";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   // 会话：登录态以 httpOnly cookie 存储（同源反代下随 /api 自动携带）
+  // session 落 Postgres（connect-pg-simple）：后端重启不再导致全员掉线
+  const PgSession = connectPgSimple(session);
   app.use(
     session({
+      store: new PgSession({
+        conString:
+          process.env.DATABASE_URL ??
+          "postgresql://stra@localhost:5432/omnix_dev?schema=public",
+        createTableIfMissing: true,
+      }),
       secret: process.env.SESSION_SECRET || "omnix-dev-secret",
       resave: false,
       saveUninitialized: false,

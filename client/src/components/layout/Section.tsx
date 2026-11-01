@@ -31,7 +31,7 @@ export function Section({
       )}
     >
       {hasHeader && (
-        <header className="flex items-center justify-between gap-3 border-b border-border px-5 py-4">
+        <header className="flex items-center justify-between gap-3 px-5 py-4">
           <div className="flex min-w-0 items-center gap-2.5">
             {Icon && <Icon className="size-5 shrink-0 text-muted-foreground" />}
             <div className="min-w-0">

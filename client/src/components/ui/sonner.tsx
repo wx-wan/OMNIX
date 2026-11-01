@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { Toaster as Sonner, type ToasterProps } from "sonner"
-import { CircleCheckIcon, CircleHelpIcon, TriangleAlertIcon, OctagonXIcon, Loader2Icon } from "lucide-react"
+import { RobotAvatar } from "@/components/common/RobotAvatar"
 
 /**
  * 消息提示（sonner）——全站唯一的 toast 出口。
@@ -34,11 +34,12 @@ const Toaster = ({ ...props }: ToasterProps) => {
       theme={theme}
       className="toaster group"
       icons={{
-        success: <CircleCheckIcon className="size-4" />,
-        info: <CircleHelpIcon className="size-4" />,
-        warning: <TriangleAlertIcon className="size-4" />,
-        error: <OctagonXIcon className="size-4" />,
-        loading: <Loader2Icon className="size-4 animate-spin" />,
+        // 各 toast 状态对应机器人不同表情（wobnimo MascotState）：
+        success: <RobotAvatar size={26} state="celebrating" />, // 庆祝（完成）
+        info: <RobotAvatar size={26} state="idle" />, // 普通待命
+        warning: <RobotAvatar size={26} state="thinking" />, // 注意/思考
+        error: <RobotAvatar size={26} state="error" />, // 报错
+        loading: <RobotAvatar size={26} state="working" />, // 工作中
       }}
       style={
         {

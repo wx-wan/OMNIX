@@ -73,11 +73,14 @@ import { Stack } from "@/components/layout/Stack";
 import { Grid } from "@/components/layout/Grid";
 import { Split } from "@/components/layout/Split";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { PageMeta } from "@/components/layout/PageMeta";
 import { StatCard } from "@/components/layout/StatCard";
 import { KanbanBoard, type KanbanStage } from "@/components/kanban/KanbanBoard";
 import { Chatter, type ChatterMessage } from "@/components/chatter/Chatter";
 import { Image } from "@/components/ui/image";
 import { ImageUpload } from "@/components/ui/image-upload";
+import { SearchableSelect, type SelectRecord } from "@/components/common/SearchableSelect";
+import { OrderLinesTable } from "@/components/crm/OrderLinesTable";
 
 // 演示用图片（内联 SVG，避免依赖网络）
 const SAMPLE_IMAGE = `data:image/svg+xml;utf8,${encodeURIComponent(
@@ -176,6 +179,36 @@ const chatterMessages: ChatterMessage[] = [
   },
 ];
 
+// 演示数据：客户（many2one 选择器用，含使用率与更多字段）
+const demoCustomers: SelectRecord[] = [
+  { id: "c1", label: "深圳恒星电子", sublabel: "采购 · lin@hengxing.com", avatarText: "恒", usage: 42, details: [{ label: "联系人", value: "林经理" }, { label: "电话", value: "138-0011-2233" }, { label: "国家", value: "中国" }, { label: "客户类型", value: "终端客户" }] },
+  { id: "c2", label: "宁波远洋贸易", sublabel: "外贸 · wang@yuan.cn", avatarText: "宁", usage: 38, details: [{ label: "联系人", value: "王经理" }, { label: "电话", value: "139-0022-3344" }, { label: "国家", value: "中国" }, { label: "客户类型", value: "贸易商" }] },
+  { id: "c3", label: "东莞精工模具", sublabel: "工厂 · chen@jinggong.com", avatarText: "东", usage: 31, details: [{ label: "联系人", value: "陈工" }, { label: "电话", value: "137-0033-4455" }, { label: "国家", value: "中国" }, { label: "客户类型", value: "工厂" }] },
+  { id: "c4", label: "上海联拓科技", sublabel: "采购 · zhao@liantuo.com", avatarText: "上", usage: 27, details: [{ label: "联系人", value: "赵经理" }, { label: "电话", value: "136-0044-5566" }, { label: "国家", value: "中国" }, { label: "客户类型", value: "终端客户" }] },
+  { id: "c5", label: "广州海纳塑胶", sublabel: "工厂 · sun@haina.com", avatarText: "广", usage: 24, details: [{ label: "联系人", value: "孙主管" }, { label: "电话", value: "135-0055-6677" }, { label: "国家", value: "中国" }, { label: "客户类型", value: "工厂" }] },
+  { id: "c6", label: "苏州锐驰电机", sublabel: "外贸 · li@ruichi.com", avatarText: "苏", usage: 19, details: [{ label: "联系人", value: "李经理" }, { label: "电话", value: "134-0066-7788" }, { label: "国家", value: "中国" }, { label: "客户类型", value: "贸易商" }] },
+  { id: "c7", label: "Hangzhou Yihao", sublabel: "采购 · amy@yihao.com", avatarText: "H", usage: 15, details: [{ label: "联系人", value: "Amy" }, { label: "电话", value: "+86-571-8888" }, { label: "国家", value: "中国" }, { label: "客户类型", value: "终端客户" }] },
+  { id: "c8", label: "佛山德胜五金", sublabel: "工厂 · zhou@desheng.com", avatarText: "佛", usage: 12, details: [{ label: "联系人", value: "周经理" }, { label: "电话", value: "133-0077-8899" }, { label: "国家", value: "中国" }, { label: "客户类型", value: "工厂" }] },
+  { id: "c9", label: "天津北洋实业", sublabel: "贸易 · wu@beiyang.com", avatarText: "天", usage: 9, details: [{ label: "联系人", value: "吴经理" }, { label: "电话", value: "132-0088-9900" }, { label: "国家", value: "中国" }, { label: "客户类型", value: "贸易商" }] },
+  { id: "c10", label: "Ningbo Vast", sublabel: "外贸 · tom@vast.com", avatarText: "N", usage: 7, details: [{ label: "联系人", value: "Tom" }, { label: "电话", value: "+86-574-6666" }, { label: "国家", value: "中国" }, { label: "客户类型", value: "贸易商" }] },
+  { id: "c11", label: "成都天府智造", sublabel: "工厂 · qian@tianfu.com", avatarText: "成", usage: 4, details: [{ label: "联系人", value: "钱工" }, { label: "电话", value: "131-0099-0011" }, { label: "国家", value: "中国" }, { label: "客户类型", value: "工厂" }] },
+  { id: "c12", label: "Wuhan Changjiang", sublabel: "采购 · lily@cj.com", avatarText: "W", usage: 2, details: [{ label: "联系人", value: "Lily" }, { label: "电话", value: "+86-27-5555" }, { label: "国家", value: "中国" }, { label: "客户类型", value: "终端客户" }] },
+];
+
+// 演示数据：产品（订单明细表格的产品选择器用）
+const demoProducts: SelectRecord[] = [
+  { id: "p1", label: "无线蓝牙耳机 Pro", sublabel: "电子 · 台", avatarText: "耳", usage: 56, details: [{ label: "品类", value: "消费电子" }, { label: "单价", value: "¥299.00" }, { label: "单位", value: "台" }] },
+  { id: "p2", label: "USB-C 快充适配器", sublabel: "电子 · 个", avatarText: "充", usage: 48, details: [{ label: "品类", value: "配件" }, { label: "单价", value: "¥89.00" }, { label: "单位", value: "个" }] },
+  { id: "p3", label: "铝合金笔记本支架", sublabel: "五金 · 件", avatarText: "支", usage: 40, details: [{ label: "品类", value: "办公" }, { label: "单价", value: "¥129.00" }, { label: "单位", value: "件" }] },
+  { id: "p4", label: "硅胶手机壳", sublabel: "塑胶 · 个", avatarText: "壳", usage: 33, details: [{ label: "品类", value: "配件" }, { label: "单价", value: "¥39.00" }, { label: "单位", value: "个" }] },
+  { id: "p5", label: "智能手环 5", sublabel: "电子 · 只", avatarText: "环", usage: 29, details: [{ label: "品类", value: "穿戴" }, { label: "单价", value: "¥199.00" }, { label: "单位", value: "只" }] },
+  { id: "p6", label: "机械键盘 87 键", sublabel: "电子 · 台", avatarText: "键", usage: 22, details: [{ label: "品类", value: "办公" }, { label: "单价", value: "¥359.00" }, { label: "单位", value: "台" }] },
+  { id: "p7", label: "便携投影仪 1080P", sublabel: "电子 · 台", avatarText: "投", usage: 17, details: [{ label: "品类", value: "影音" }, { label: "单价", value: "¥999.00" }, { label: "单位", value: "台" }] },
+  { id: "p8", label: "运动水壶 750ml", sublabel: "塑胶 · 个", avatarText: "壶", usage: 11, details: [{ label: "品类", value: "户外" }, { label: "单价", value: "¥49.00" }, { label: "单位", value: "个" }] },
+  { id: "p9", label: "桌面收纳盒", sublabel: "塑胶 · 个", avatarText: "盒", usage: 6, details: [{ label: "品类", value: "办公" }, { label: "单价", value: "¥25.00" }, { label: "单位", value: "个" }] },
+  { id: "p10", label: "降噪耳麦 Studio", sublabel: "电子 · 副", avatarText: "麦", usage: 3, details: [{ label: "品类", value: "影音" }, { label: "单价", value: "¥599.00" }, { label: "单位", value: "副" }] },
+];
+
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex flex-col gap-2">
@@ -190,15 +223,11 @@ export default function Showcase() {
   const [checked, setChecked] = useState(true);
   const [on, setOn] = useState(true);
   const [uploaded, setUploaded] = useState<string | null>(SAMPLE_IMAGE);
+  const [pickedCustomer, setPickedCustomer] = useState<string | null>(null);
 
   return (
     <div className="flex flex-col gap-8">
-      <div>
-        <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
-          <Puzzle className="size-6 text-primary" /> {t("showcase.title")}
-        </h1>
-        <p className="text-sm text-muted-foreground">{t("showcase.subtitle")}</p>
-      </div>
+      <PageMeta title={t("showcase.title")} description={t("showcase.subtitle")} />
 
       <Section
         title={t("showcase.layoutTitle")}
@@ -479,6 +508,38 @@ export default function Showcase() {
           </Row>
         </CardContent>
       </Card>
+
+      <Section
+        title={t("showcase.pickerTitle")}
+        description={t("showcase.pickerDesc")}
+        icon={Puzzle}
+      >
+        <div className="flex flex-col gap-3">
+          <div className="max-w-xs">
+            <Label htmlFor="demo-picker">{t("orderLines.product")}</Label>
+            <SearchableSelect
+              id="demo-picker"
+              records={demoCustomers}
+              value={pickedCustomer}
+              onChange={(r) => setPickedCustomer(r?.id ?? null)}
+            />
+          </div>
+          <p className="text-sm text-muted-foreground">
+            {t("showcase.pickerSelected")}：
+            {pickedCustomer
+              ? demoCustomers.find((c) => c.id === pickedCustomer)?.label
+              : "—"}
+          </p>
+        </div>
+      </Section>
+
+      <Section
+        title={t("showcase.orderLinesTitle")}
+        description={t("showcase.orderLinesDesc")}
+        icon={Puzzle}
+      >
+        <OrderLinesTable products={demoProducts} />
+      </Section>
     </div>
   );
 }

@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  LayoutDashboard,
   Users as UsersIcon,
   Activity,
   DollarSign,
@@ -10,7 +9,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { api } from "@/lib/api";
 import { Stack } from "@/components/layout/Stack";
-import { PageHeader } from "@/components/layout/PageHeader";
+import { PageMeta } from "@/components/layout/PageMeta";
 import { Section } from "@/components/layout/Section";
 import { Grid } from "@/components/layout/Grid";
 import { StatCard } from "@/components/layout/StatCard";
@@ -57,10 +56,9 @@ export default function Dashboard() {
 
   return (
     <Stack gap={6}>
-      <PageHeader
+      <PageMeta
         title={t("dashboard.title")}
         description={t("dashboard.subtitle")}
-        icon={LayoutDashboard}
       />
 
       <Grid min="14rem">
@@ -77,7 +75,7 @@ export default function Dashboard() {
       </Grid>
 
       <Section title={t("dashboard.recentUsers")} icon={UsersIcon} noPadding>
-        <div className="divide-y divide-border">
+        <div className="flex flex-col gap-1">
           {(recent.length ? recent : seedUsers()).map((u) => (
             <div key={u.id} className="flex items-center justify-between gap-3 px-5 py-3">
               <div className="min-w-0">

@@ -15,6 +15,11 @@ export class CreateContactDto {
   @IsEnum(ContactType)
   type?: ContactType;
 
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  customerType?: string; // 客户类型（业务类型，区别于 type 实体类型）
+
   @IsString()
   @IsNotEmpty()
   @MaxLength(80)

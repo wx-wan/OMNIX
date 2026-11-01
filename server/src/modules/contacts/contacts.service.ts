@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { Injectable, NotFoundException, ForbiddenException } from "@nestjs/common";
 import bcrypt from "bcryptjs";
 import { ContactType, Prisma } from "@prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
@@ -9,10 +9,11 @@ import { UpdateContactDto } from "./dto/update-contact.dto";
 export class ContactsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  /** 往来单位 / 联系人列表：可按 type 过滤、限制条数。含关联商机数。 */
+  /** 往来单位 / 联系人列表：可按 type 过滤、限制条数。含关联商机数。
+   *  系统机器人（isSystem）不出现在管理列表，避免被编辑/删除。 */
   list(type?: ContactType, limit?: number) {
     return this.prisma.contact.findMany({
-      where: type ? { type } : undefined,
+      where: { ...(type ? { type } : {}), isSystem: false },
       orderBy: { createdAt: "desc" },
       take: limit,
       include: { _count: { select: { deals: true } } },
@@ -42,6 +43,7 @@ export class ContactsService {
   async update(id: string, dto: UpdateContactDto) {
     const existing = await this.prisma.contact.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException(`Contact ${id} not found`);
+    if (existing.isSystem) throw new ForbiddenException("系统机器人不可编辑");
     const data: Prisma.ContactUpdateInput = { ...dto };
     if (dto.password) data.password = await bcrypt.hash(dto.password, 10);
     return this.prisma.contact.update({ where: { id }, data });
@@ -50,6 +52,43 @@ export class ContactsService {
   async remove(id: string) {
     const existing = await this.prisma.contact.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException(`Contact ${id} not found`);
+    if (existing.isSystem) throw new ForbiddenException("系统机器人不可删除");
     return this.prisma.contact.delete({ where: { id } });
+  }
+
+  /** 系统机器人配置（用于前端选择 3D 形象）。仅返回安全字段，避免泄露 password。 */
+  async getBot() {
+    const bot = await this.prisma.contact.findFirst({
+      where: { isSystem: true },
+      select: {
+        id: true,
+        name: true,
+        type: true,
+        email: true,
+        botCharacter: true,
+      },
+    });
+    if (!bot) throw new NotFoundException("系统机器人不存在");
+    return bot;
+  }
+
+  /** 更新系统机器人配置（名称 / 3D 形象）。绕过 isSystem 的编辑保护（仅限此专用接口）。 */
+  async updateBot(dto: UpdateContactDto) {
+    const bot = await this.prisma.contact.findFirst({ where: { isSystem: true } });
+    if (!bot) throw new NotFoundException("系统机器人不存在");
+    return this.prisma.contact.update({
+      where: { id: bot.id },
+      data: {
+        ...(dto.name !== undefined ? { name: dto.name } : {}),
+        ...(dto.botCharacter !== undefined ? { botCharacter: dto.botCharacter } : {}),
+      },
+      select: {
+        id: true,
+        name: true,
+        type: true,
+        email: true,
+        botCharacter: true,
+      },
+    });
   }
 }
