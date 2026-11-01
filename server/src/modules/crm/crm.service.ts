@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
 } from "@nestjs/common";
 import { Priority, Prisma } from "@prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
@@ -199,6 +200,9 @@ export class CrmService {
       body: m.body,
       timestamp: this.formatTs(m.createdAt),
       isBot: m.authorIsBot,
+      isRecall: m.isRecall,
+      authorId: m.authorId,
+      createdAt: m.createdAt.toISOString(),
     }));
   }
 
@@ -226,7 +230,33 @@ export class CrmService {
       body: msg.body,
       timestamp: this.formatTs(msg.createdAt),
       isBot: msg.authorIsBot,
+      isRecall: msg.isRecall,
+      authorId: msg.authorId,
+      createdAt: msg.createdAt.toISOString(),
     };
+  }
+
+  /** 撤回一条 Chatter 消息：仅本人发送、且距发送不超过 3 分钟可撤回，删除后持久化。 */
+  async deleteChatter(resId: string, msgId: string, actorId?: string) {
+    const msg = await this.prisma.chatterMessage.findFirst({
+      where: { id: msgId, resModel: "deal", resId },
+    });
+    if (!msg) throw new NotFoundException("消息不存在");
+    if (!actorId || msg.authorId !== actorId) {
+      throw new ForbiddenException("只能撤回自己发送的消息");
+    }
+    if (Date.now() - msg.createdAt.getTime() > 3 * 60 * 1000) {
+      throw new ForbiddenException("只能撤回 3 分钟内的消息");
+    }
+    // 仿微信：不物理删除，而是把该消息转为「撤回」系统记录，保留一条提示
+    await this.prisma.chatterMessage.update({
+      where: { id: msgId },
+      data: {
+        isRecall: true,
+        body: `${msg.authorName} 撤回了一条信息`,
+      },
+    });
+    return { ok: true };
   }
 
   async updateDeal(id: string, dto: UpdateDealDto, actorId?: string) {

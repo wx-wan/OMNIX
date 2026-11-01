@@ -9,6 +9,7 @@ import { DashboardModule } from "./modules/dashboard/dashboard.module";
 import { CrmModule } from "./modules/crm/crm.module";
 import { ContactsModule } from "./modules/contacts/contacts.module";
 import { ProductsModule } from "./modules/products/products.module";
+import { UploadModule } from "./modules/upload/upload.module";
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { ProductsModule } from "./modules/products/products.module";
     CrmModule,
     ContactsModule,
     ProductsModule,
+    UploadModule,
   ],
   controllers: [HealthController],
   providers: [

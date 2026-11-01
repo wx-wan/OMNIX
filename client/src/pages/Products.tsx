@@ -6,6 +6,7 @@ import { Stack } from "@/components/layout/Stack";
 import { PageMeta } from "@/components/layout/PageMeta";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Image } from "@/components/ui/image";
 import {
   Dialog,
   DialogContent,
@@ -31,6 +32,7 @@ interface Product {
   costPrice: number | null;
   tax: number | null;
   quantity: number;
+  image?: string | null;
 }
 
 function formatPrice(n: number | null, unit?: string | null) {
@@ -69,6 +71,7 @@ export default function Products() {
         costPrice: values.costPrice ? Number(values.costPrice) : undefined,
         tax: values.tax ? Number(values.tax) : undefined,
         quantity: values.quantity ? Number(values.quantity) : undefined,
+        image: values.image || undefined,
       });
       setOpen(false);
       setValues(EMPTY_PRODUCT);
@@ -108,6 +111,14 @@ export default function Products() {
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {list.map((p) => (
             <Card key={p.id}>
+              {p.image && (
+                <Image
+                  src={p.image}
+                  alt={p.description ?? ""}
+                  ratio="16/9"
+                  className="w-full rounded-t-xl"
+                />
+              )}
               <CardHeader>
                 <CardTitle>{p.description}</CardTitle>
               </CardHeader>

@@ -77,6 +77,7 @@ model Product {
   price       Decimal? @db.Decimal(12, 2) // 单价（元）
   costPrice   Decimal? @db.Decimal(12, 2) // 成本价（元）
   tax         Decimal? @db.Decimal(5, 2) // 税项（%）
+  image       String? // 产品主图 URL（上传接口返回）
   quantity    Int      @default(0) // 数量
   deals       Deal[]
   createdAt   DateTime @default(now())
@@ -138,6 +139,7 @@ model ChatterMessage {
   authorId    String? // 作者 Contact id（系统记录用机器人 id；人工评论用登录用户 id）
   authorName  String // 作者名快照（便于展示，避免作者被删后丢失）
   authorIsBot Boolean  @default(false) // 是否系统机器人（ominXBot）发出的操作记录
+  isRecall    Boolean  @default(false) // 是否为「撤回」系统记录（撤回后保留一条提示，仿微信）
   body        String // 消息/操作历史正文
   createdAt   DateTime @default(now())
 

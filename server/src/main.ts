@@ -3,7 +3,11 @@ import { NestFactory } from "@nestjs/core";
 import { ValidationPipe } from "@nestjs/common";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
+import express from "express";
+import { existsSync, mkdirSync } from "fs";
+import { join } from "path";
 import { AppModule } from "./app.module";
+import { UPLOAD_DIR } from "./modules/upload/upload.controller";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -45,6 +49,10 @@ async function bootstrap() {
     origin: true,
     credentials: true,
   });
+
+  // 静态托管上传目录：/uploads/xxx 可直接访问（图片由上传接口落盘，DB 仅存相对 URL）
+  if (!existsSync(UPLOAD_DIR)) mkdirSync(UPLOAD_DIR, { recursive: true });
+  app.use("/uploads", express.static(UPLOAD_DIR));
 
   const port = Number(process.env.PORT) || 4000;
   await app.listen(port);

@@ -2,6 +2,8 @@ import type { ChangeEvent, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ImageUpload } from "@/components/ui/image-upload";
+import { api } from "@/lib/api";
 
 export interface ProductValues {
   description: string;
@@ -13,6 +15,7 @@ export interface ProductValues {
   price: string;
   costPrice: string;
   tax: string;
+  image: string;
 }
 
 export const EMPTY_PRODUCT: ProductValues = {
@@ -25,6 +28,7 @@ export const EMPTY_PRODUCT: ProductValues = {
   price: "",
   costPrice: "",
   tax: "",
+  image: "",
 };
 
 function Field({
@@ -61,10 +65,29 @@ export function ProductForm({ values, onChange, idPrefix = "p" }: Props) {
       onChange({ ...values, [k]: e.target.value });
   const id = (k: string) => `${idPrefix}-prod-${k}`;
 
+  // 上传产品图：通过后端 /upload 接口落盘，返回可访问 URL 存入 image 字段
+  const uploadImage = async (file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    const r = await api.post("/upload", fd, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+    return r.data.url as string;
+  };
+
   return (
     <div className="flex flex-col gap-3">
       <Field label={t("product.description")} required>
         <Input id={id("description")} value={values.description} onChange={set("description")} />
+      </Field>
+      <Field label={t("product.image")}>
+        <ImageUpload
+          value={values.image || null}
+          onChange={(v) => onChange({ ...values, image: v ?? "" })}
+          onUpload={uploadImage}
+          ratio="4/3"
+          className="max-w-xs"
+        />
       </Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label={t("product.quantity")}>

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type DragEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { UploadCloud, Eye, Pencil, Trash2 } from "lucide-react";
+import { UploadCloud, Pencil, Trash2 } from "lucide-react";
 import { cn } from "cn";
 import { Image } from "@/components/ui/image";
 import { Button } from "@/components/ui/button";
@@ -20,9 +20,18 @@ export interface ImageUploadProps {
   ratio?: string;
   accept?: string;
   className?: string;
+  /** 空态只显示上传图标、隐藏提示文案（用于表格内紧凑单元格） */
+  hideHint?: boolean;
+  /** 紧凑模式：缩小空态图标（用于表格窄单元格） */
+  compact?: boolean;
 }
 
-/** 图片上传组件：空态为拖拽/点击上传区；有图时悬停出现 预览 / 修改 / 删除 操作，预览走 Dialog 放大。 */
+/**
+ * 图片上传组件：
+ * - 空态为拖拽/点击上传区；
+ * - 有图时，点击缩略图打开预览 Dialog；更换 / 删除 操作放在预览弹窗内执行
+ *   （不在缩略图上悬浮工具条，避免窄单元格溢出）。
+ */
 export function ImageUpload({
   value,
   defaultValue = null,
@@ -31,6 +40,8 @@ export function ImageUpload({
   ratio,
   accept = "image/*",
   className,
+  hideHint = false,
+  compact = false,
 }: ImageUploadProps) {
   const { t } = useTranslation();
   const [src, setSrc] = useState<string | null>(value ?? defaultValue);
@@ -88,46 +99,19 @@ export function ImageUpload({
       />
 
       {src ? (
-        <>
+        <button
+          type="button"
+          onClick={() => setPreviewOpen(true)}
+          aria-label={t("image.preview")}
+          className="block w-full cursor-pointer overflow-hidden rounded-xl"
+        >
           <Image
             src={src}
             alt={t("image.preview")}
             ratio={ratio}
             className="transition-transform duration-300 group-hover:scale-[1.02]"
           />
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-end gap-1.5 rounded-b-xl bg-gradient-to-t from-black/60 via-black/20 to-transparent p-2 opacity-0 transition-opacity duration-200 group-hover:opacity-100 focus-within:opacity-100">
-            <Button
-              type="button"
-              variant="secondary"
-              size="icon-sm"
-              className="pointer-events-auto shadow-sm"
-              aria-label={t("image.preview")}
-              onClick={() => setPreviewOpen(true)}
-            >
-              <Eye />
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              size="icon-sm"
-              className="pointer-events-auto shadow-sm"
-              aria-label={t("image.modify")}
-              onClick={openPicker}
-            >
-              <Pencil />
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              size="icon-sm"
-              className="pointer-events-auto shadow-sm"
-              aria-label={t("image.delete")}
-              onClick={remove}
-            >
-              <Trash2 />
-            </Button>
-          </div>
-        </>
+        </button>
       ) : (
         <button
           type="button"
@@ -146,12 +130,14 @@ export function ImageUpload({
             ratio ? "aspect-[var(--img-ratio)]" : "h-44",
           )}
         >
-          <span className="flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary ring-1 ring-primary/20 transition-transform duration-200 group-hover/drop:scale-110">
+          <span className={cn("flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary ring-1 ring-primary/20 transition-transform duration-200 group-hover/drop:scale-110", compact && "size-8")}>
             <UploadCloud className="size-6" />
           </span>
-          <span className="px-4 text-center text-sm font-medium text-foreground">
-            {t("image.dragHint")}
-          </span>
+          {!hideHint && (
+            <span className="px-4 text-center text-sm font-medium text-foreground">
+              {t("image.dragHint")}
+            </span>
+          )}
         </button>
       )}
 
@@ -167,6 +153,31 @@ export function ImageUpload({
               className="max-h-[70vh] w-full rounded-xl object-contain shadow-card"
             />
           )}
+          {/* 操作：更换 / 删除 放在预览弹窗内执行 */}
+          <div className="flex justify-end gap-2 pt-1">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setPreviewOpen(false);
+                openPicker();
+              }}
+            >
+              <Pencil />
+              {t("image.modify")}
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => {
+                setPreviewOpen(false);
+                remove();
+              }}
+            >
+              <Trash2 />
+              {t("image.delete")}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

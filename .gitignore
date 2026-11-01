@@ -31,5 +31,8 @@ pnpm-debug.log*
 # Local DB dumps
 *.dump
 
+# Uploaded product images (runtime artifacts, regenerated via /upload)
+server/uploads/
+
 # Coverage
 coverage/

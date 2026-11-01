@@ -17,7 +17,10 @@ import type { SelectRecord } from "@/components/common/SearchableSelect";
 import { Picker } from "@/components/common/Picker";
 import { InputNumber } from "@/components/common/InputNumber";
 import { Input } from "@/components/ui/input";
+import { Image } from "@/components/ui/image";
+import { ImageUpload } from "@/components/ui/image-upload";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { api } from "@/lib/api";
 import { cn } from "cn";
 
 export type OrderRowType = "product" | "combo" | "note";
@@ -41,6 +44,8 @@ export interface OrderLine {
   taxId?: string | null;
   /** 折扣（%） */
   discount: number;
+  /** 产品需求图片（每行独立上传，存 URL） */
+  image?: string;
 }
 
 type DropPos = "before" | "after" | "inside";
@@ -67,6 +72,7 @@ function makeRow(type: OrderRowType): OrderLine {
     taxRate: isProduct ? 13 : 0,
     taxId: isProduct ? "tax-13g-s" : null,
     discount: 0,
+    image: "",
   };
 }
 
@@ -441,14 +447,28 @@ export function OrderLinesTable({
     />
   );
 
+  // 上传产品需求图片：经后端 /upload 落盘，返回可访问 URL
+  const uploadLineImage = async (file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    const r = await api.post("/upload", fd, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+    return r.data.url as string;
+  };
+
   return (
     <div className={cn("rounded-lg border border-border bg-card", className)}>
       <div className="max-h-[460px] overflow-auto">
-        <table className="w-full min-w-[920px] table-fixed text-sm">
+        <table className="w-full min-w-[1000px] table-fixed text-sm">
           <thead>
             <tr className="sticky top-0 z-10 bg-muted">
               {/* 固定布局下唯一未设宽的列（描述）自动吸收剩余宽度 */}
               {headerCell(t("orderLines.description"))}
+              {/* 产品需求图片（每行独立上传） */}
+              <th className="w-12 px-2 py-2 text-center text-xs font-medium text-muted-foreground">
+                {t("orderLines.image")}
+              </th>
               {headerCell(t("orderLines.quantity"), "right", "w-16")}
               {headerCell(t("orderLines.unit"), "left", "w-20")}
               {headerCell(t("orderLines.unitPrice"), "right", "w-28")}
@@ -511,6 +531,7 @@ export function OrderLinesTable({
                         )}
                       </div>
                     </td>
+                    <td className="w-12 p-1 align-middle" />
                     <td className="w-16 p-1 align-middle">
                       <InputNumber
                         value={l.quantity}
@@ -551,7 +572,7 @@ export function OrderLinesTable({
                       dragging && "opacity-40",
                     )}
                   >
-                    <td colSpan={7} className="p-1">
+                    <td colSpan={8} className="p-1">
                       <div className="flex items-center gap-1.5">
                         {grip()}
                         <Input
@@ -630,6 +651,17 @@ export function OrderLinesTable({
                       </div>
                     </div>
                   </td>
+                  <td className="w-12 p-1 align-middle">
+                    <ImageUpload
+                      value={l.image || null}
+                      onChange={(v) => patch(l.id, { image: v ?? "" })}
+                      onUpload={uploadLineImage}
+                      ratio="1/1"
+                      className="w-10"
+                      hideHint
+                      compact
+                    />
+                  </td>
                   <td className="w-16 p-1 align-middle">
                     <InputNumber
                       value={l.quantity}
@@ -694,7 +726,7 @@ export function OrderLinesTable({
               );
             })}
             <tr>
-              <td colSpan={8} className="p-0">
+              <td colSpan={9} className="p-0">
                 <div className="flex flex-wrap items-center gap-1 border-t border-dashed border-border px-2 py-1.5">
                   <ButtonVariantGhost
                     onClick={() => addRow("product")}
@@ -790,6 +822,18 @@ export function OrderLinesTable({
                     onClick={() => addFromCatalog(p)}
                     className="flex items-start gap-2.5 rounded-lg border border-border p-3 text-left transition-colors hover:bg-accent"
                   >
+                    {p.image ? (
+                      <Image
+                        src={p.image}
+                        alt={p.label}
+                        ratio="1/1"
+                        className="size-12 shrink-0 rounded-md"
+                      />
+                    ) : (
+                      <span className="flex size-12 shrink-0 items-center justify-center rounded-md bg-primary/10 text-sm font-medium text-primary">
+                        {p.avatarText ?? p.label.slice(0, 1)}
+                      </span>
+                    )}
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-medium">
                         {p.label}

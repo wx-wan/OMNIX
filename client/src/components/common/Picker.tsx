@@ -3,9 +3,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
-import { X, ChevronsUpDown, ArrowRight } from "lucide-react";
+import { X, ChevronsUpDown, ArrowRight, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "cn";
+import { Image } from "@/components/ui/image";
 import type { SelectRecord } from "./SearchableSelect";
 import { SearchMoreModal } from "./SearchMoreModal";
 
@@ -232,6 +233,20 @@ export function Picker({
                           i === active && "bg-accent",
                         )}
                       >
+                        {r.image ? (
+                          <Image
+                            src={r.image}
+                            alt={r.label}
+                            ratio="1/1"
+                            className="size-7 shrink-0 rounded-md"
+                          />
+                        ) : r.avatarText ? (
+                          <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
+                            {r.avatarText}
+                          </span>
+                        ) : (
+                          <Search className="size-4 shrink-0 text-muted-foreground" />
+                        )}
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-sm font-medium">
                             {r.label}

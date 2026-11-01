@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Param,
   Body,
   BadRequestException,
@@ -60,5 +61,16 @@ export class CrmController {
     if (!text) throw new BadRequestException("text required");
     const userId = (req.session as { userId?: string } | undefined)?.userId;
     return this.crm.addComment(id, text, userId);
+  }
+
+  // DELETE /api/crm/deals/:id/chatter/:msgId —— 撤回一条评论（仅本人、3 分钟内）
+  @Delete("deals/:id/chatter/:msgId")
+  deleteChatter(
+    @Param("id") id: string,
+    @Param("msgId") msgId: string,
+    @Req() req: Request,
+  ) {
+    const userId = (req.session as { userId?: string } | undefined)?.userId;
+    return this.crm.deleteChatter(id, msgId, userId);
   }
 }

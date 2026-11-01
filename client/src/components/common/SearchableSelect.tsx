@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { Input } from "@/components/ui/input";
 import { Search, ChevronsUpDown, ArrowRight, X } from "lucide-react";
 import { cn } from "cn";
+import { Image } from "@/components/ui/image";
 import { SearchMoreModal } from "./SearchMoreModal";
 
 export interface SelectRecord {
@@ -18,6 +19,8 @@ export interface SelectRecord {
   usage?: number;
   /** 弹窗中展示的更多字段 */
   details?: { label: string; value: string }[];
+  /** 产品主图 URL（选择器选项可显示缩略图） */
+  image?: string;
 }
 
 interface SearchableSelectProps {
@@ -156,7 +159,7 @@ export function SearchableSelect({
               bare &&
                 "h-8 border-0 bg-transparent shadow-none focus-visible:ring-0",
             )}
-            onFocus={openDropdown}
+            onClick={openDropdown}
             onChange={(e) => {
               setQuery(e.target.value);
               onInputChange?.(e.target.value);
@@ -269,7 +272,14 @@ function RecordOption({
         active && "bg-accent",
       )}
     >
-      {record.avatarText ? (
+      {record.image ? (
+        <Image
+          src={record.image}
+          alt={record.label}
+          ratio="1/1"
+          className="size-7 rounded-md"
+        />
+      ) : record.avatarText ? (
         <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
           {record.avatarText}
         </span>

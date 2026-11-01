@@ -40,6 +40,10 @@ export class CreateProductDto {
   tax?: number;
 
   @IsOptional()
+  @IsString()
+  image?: string;
+
+  @IsOptional()
   @IsInt()
   quantity?: number;
 }

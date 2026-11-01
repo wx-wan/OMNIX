@@ -11,7 +11,7 @@ import {
   Truck,
 } from "lucide-react";
 import { api } from "@/lib/api";
-import { useAuth, userInitials } from "@/lib/auth";
+import { useAuth } from "@/lib/auth";
 import { toast } from "sonner";
 import { PageMeta } from "@/components/layout/PageMeta";
 import { HeaderCenter } from "@/components/layout/AppShell";
@@ -20,7 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { PillToggle } from "@/components/common/PillToggle";
-import type { SalesPerson } from "@/components/common/SalespersonPicker";
+import { SalespersonPicker, type SalesPerson } from "@/components/common/SalespersonPicker";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -30,7 +30,7 @@ import { EMPTY_CONTACT } from "@/components/crm/ContactForm";
 import type { ProductValues } from "@/components/crm/ProductForm";
 import { OrderLinesTable, TAXES, type OrderLine } from "@/components/crm/OrderLinesTable";
 import { Picker } from "@/components/common/Picker";
-import { SearchableSelect, type SelectRecord } from "@/components/common/SearchableSelect";
+import type { SelectRecord } from "@/components/common/SearchableSelect";
 
 interface DealDetailData {
   id: string;
@@ -283,6 +283,29 @@ export default function DealForm() {
   // Chatter 操作/讨论记录（由系统机器人 ominXBot 写入操作历史 + 人工评论）
   const [chatter, setChatter] = useState<ChatterMessage[]>([]);
   const [chatterKey, setChatterKey] = useState(0);
+
+  // 真实产品目录（来自后端，含已上传的产品主图）；与演示目录合并，使上传产品图在明细中可见
+  const [apiProducts, setApiProducts] = useState<SelectRecord[]>([]);
+  useEffect(() => {
+    api
+      .get<Array<{ id: string; description: string | null; image?: string | null }>>(
+        "/products",
+      )
+      .then((r) =>
+        setApiProducts(
+          r.data.map((p) => ({
+            id: p.id,
+            label: p.description ?? "",
+            image: p.image ?? undefined,
+          })),
+        ),
+      )
+      .catch(() => {});
+  }, []);
+  const products = useMemo<SelectRecord[]>(
+    () => [...apiProducts, ...DEAL_PRODUCTS],
+    [apiProducts],
+  );
   // 价格含税方式：true=含税（默认），false=不含税
   const [priceIncludeTax, setPriceIncludeTax] = useState(true);
   // 业务员（负责人）：默认当前登录用户，同时承担创建人 + 负责人
@@ -297,20 +320,10 @@ export default function DealForm() {
     [user],
   );
 
-  // 负责人下拉数据：支持搜索 + 「搜索更多」分页弹窗（仿 Odoo many2one）
-  const salespersonRecords = useMemo<SelectRecord[]>(
-    () =>
-      users.map((u) => ({
-        id: u.id,
-        label: u.name,
-        sublabel: u.email,
-        avatarText: userInitials(u.name),
-      })),
-    [users],
-  );
+  // 负责人下拉数据由 SalespersonPicker 直接消费 users（头像 + 名称 + 点击下拉 + 浮层内搜索）
 
   // 创建人 = 当前选中的负责人（两者统一）；自动计入关注人。
-  const creatorName = salespersonRecords.find((r) => r.id === salespersonId)?.label;
+  const creatorName = users.find((u) => u.id === salespersonId)?.name;
 
   // 新建时默认负责人为当前用户
   useEffect(() => {
@@ -389,7 +402,12 @@ export default function DealForm() {
   const loadChatter = async (dealId: string) => {
     try {
       const r = await api.get<ChatterMessage[]>(`/crm/deals/${dealId}/chatter`);
-      setChatter(r.data);
+      setChatter(
+        r.data.map((m) => ({
+          ...m,
+          sentAt: m.createdAt ? Date.parse(m.createdAt) : undefined,
+        })),
+      );
       setChatterKey((k) => k + 1);
     } catch {
       /* 忽略 chatter 加载失败，不影响主流程 */
@@ -514,6 +532,18 @@ export default function DealForm() {
     }
   };
 
+  // 撤回一条本人发送、3 分钟内的评论（乐观移除已在前端完成，这里负责持久化删除）
+  const handleChatterRecall = async (msgId: string) => {
+    if (!isEdit || !id) return;
+    try {
+      await api.delete(`/crm/deals/${id}/chatter/${msgId}`);
+    } catch (e) {
+      console.error("[DealForm] recall chatter failed:", e);
+      toast.error(t("chatter.recallFailed"));
+      loadChatter(id); // 失败回滚：重新拉取恢复该消息
+    }
+  };
+
   const handleSave = async () => {
     if (!canSave) return;
     setSaving(true);
@@ -587,13 +617,12 @@ export default function DealForm() {
                 <h1 className="min-w-0 flex-1 break-all font-heading text-2xl font-semibold tracking-tight text-foreground">
                   {composedTitle || "—"}
                 </h1>
-                <SearchableSelect
-                  records={salespersonRecords}
+                <SalespersonPicker
+                  users={users}
                   value={salespersonId}
-                  onChange={(r) => r && handleSalespersonChange(r.id)}
-                  placeholder={t("crm.salesperson")}
+                  onChange={handleSalespersonChange}
                   searchMoreTitle={t("crm.selectSalesperson")}
-                  className="w-56"
+                  className="shrink-0"
                 />
               </div>
 
@@ -773,7 +802,7 @@ export default function DealForm() {
               {/* 产品需求（可编辑订单明细：描述内嵌产品选择、组合、备注、拖拽、折叠） */}
               <TabsContent value="product" className="flex flex-col gap-3">
                 <OrderLinesTable
-                  products={DEAL_PRODUCTS}
+                  products={products}
                   lines={lines}
                   onLinesChange={setLines}
                   currency="¥"
@@ -847,6 +876,7 @@ export default function DealForm() {
               initialMessages={isEdit ? chatter : newDealChatter}
               currentUser={user?.name}
               onSend={isEdit && id ? handleChatterSend : undefined}
+              onRecall={isEdit && id ? handleChatterRecall : undefined}
               followers={creatorName ? [creatorName] : undefined}
             />
           </div>
