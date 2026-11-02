@@ -876,7 +876,6 @@ export default function DealForm() {
             {/* 往来单位 / 联系人 */}
             <section className="flex flex-col gap-3">
               <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold">{t("crm.contactSection")}</span>
                 {contact.aiGenerated && (
                   <Badge
                     variant="outline"
