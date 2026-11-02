@@ -248,8 +248,15 @@ export function Picker({
                           <Search className="size-4 shrink-0 text-muted-foreground" />
                         )}
                         <span className="min-w-0 flex-1">
-                          <span className="block truncate text-sm font-medium">
-                            {r.label}
+                          <span className="flex min-w-0 items-center gap-1.5">
+                            <span className="truncate text-sm font-medium">
+                              {r.label}
+                            </span>
+                            {r.isRequirement && (
+                              <span className="shrink-0 rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-600">
+                                {t("common.requirement")}
+                              </span>
+                            )}
                           </span>
                           {r.sublabel && (
                             <span className="block truncate text-xs text-muted-foreground">

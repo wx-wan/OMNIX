@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException } from "@nestjs/common";
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from "@nestjs/common";
 import bcrypt from "bcryptjs";
 import { ContactType, Prisma } from "@prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
@@ -10,10 +10,15 @@ export class ContactsService {
   constructor(private readonly prisma: PrismaService) {}
 
   /** 往来单位 / 联系人列表：可按 type 过滤、限制条数。含关联商机数。
-   *  系统机器人（isSystem）不出现在管理列表，避免被编辑/删除。 */
-  list(type?: ContactType, limit?: number) {
+   *  系统机器人（isSystem）不出现在管理列表，避免被编辑/删除。
+   *  archived 默认过滤已归档项；includeArchived=true 时一并返回。 */
+  list(type?: ContactType, limit?: number, includeArchived = false) {
     return this.prisma.contact.findMany({
-      where: { ...(type ? { type } : {}), isSystem: false },
+      where: {
+        ...(type ? { type } : {}),
+        isSystem: false,
+        ...(includeArchived ? {} : { archived: false }),
+      },
       orderBy: { createdAt: "desc" },
       take: limit,
       include: { _count: { select: { deals: true } } },
@@ -49,10 +54,28 @@ export class ContactsService {
     return this.prisma.contact.update({ where: { id }, data });
   }
 
+  /** 归档 / 取消归档：关联了商机的往来单位不允许删除，用归档隐藏代替。 */
+  async archive(id: string, archived: boolean) {
+    const existing = await this.prisma.contact.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException(`Contact ${id} not found`);
+    if (existing.isSystem) throw new ForbiddenException("系统机器人不可归档");
+    await this.prisma.contact.update({ where: { id }, data: { archived } });
+    return { ok: true };
+  }
+
   async remove(id: string) {
     const existing = await this.prisma.contact.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException(`Contact ${id} not found`);
     if (existing.isSystem) throw new ForbiddenException("系统机器人不可删除");
+    // 关联了商机的往来单位禁止删除，只能归档
+    const dealCount = await this.prisma.deal.count({
+      where: { contactId: id },
+    });
+    if (dealCount > 0) {
+      throw new BadRequestException(
+        "该客户已关联商机，无法删除，请先归档",
+      );
+    }
     return this.prisma.contact.delete({ where: { id } });
   }
 

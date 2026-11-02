@@ -2,6 +2,7 @@ import { useState, type DragEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "cn";
 import { Badge } from "@/components/ui/badge";
+import { Building2, User } from "lucide-react";
 
 export type KanbanPriority = "low" | "medium" | "high";
 
@@ -33,11 +34,15 @@ export interface KanbanItem {
   assigneeCompact?: boolean;
   /** 金额（如 "¥86,000"），CRM 交易卡展示用，可选。 */
   amount?: string;
+  /** 金额原始数值（未格式化），用于列头阶段金额合计；可选。 */
+  amountValue?: number;
   meta?: string;
   /** 来源（如 官网 / 转介绍 / 展会），CRM 交易卡展示用，可选。 */
   source?: string;
   /** 创建时间（ISO 字符串），CRM 交易卡展示用，可选。 */
   createdAt?: string;
+  /** 往来单位 / 联系人（商机关联的 customer/contact），看板卡片展示用，可选。 */
+  contact?: { name?: string | null; company?: string | null; type?: string | null } | null;
   /** 按阶段定制的展示字段（控制顺序与显隐）。为空则使用默认完整布局。 */
   fields?: CardField[];
 }
@@ -50,18 +55,6 @@ export interface KanbanStage {
   items: KanbanItem[];
 }
 
-const priorityClasses: Record<KanbanPriority, string> = {
-  high: "bg-red-500/10 text-red-500",
-  medium: "bg-amber-500/15 text-amber-600",
-  low: "bg-emerald-500/10 text-emerald-600",
-};
-
-const priorityKey: Record<KanbanPriority, string> = {
-  high: "kanban.priorityHigh",
-  medium: "kanban.priorityMedium",
-  low: "kanban.priorityLow",
-};
-
 function formatDateTime(iso?: string) {
   if (!iso) return "";
   const d = new Date(iso);
@@ -70,9 +63,66 @@ function formatDateTime(iso?: string) {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
+function formatAmount(n: number) {
+  return `¥${n.toLocaleString("zh-CN")}`;
+}
+
+/** 是否由 MCP（Accio）创建：meta 以 "accio:" 开头代表 Accio 自动导入的商机。 */
+function isMcpCreated(meta?: string): boolean {
+  return !!meta && meta.startsWith("accio:");
+}
+
+/** 来源行：展示「来源 · {店铺}」，若为 MCP 创建则追加「概率同款AI」徽标。 */
+function SourceLine({ source, meta }: { source?: string; meta?: string }) {
+  const { t } = useTranslation();
+  if (!source) return null;
+  return (
+    <p className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground/80">
+      <span>来源 · {source}</span>
+      {isMcpCreated(meta) && (
+        <span
+          className="flex items-center gap-0.5 text-[11px] font-medium text-foreground/80"
+          title={t("kanban.aiSourceHint")}
+        >
+          {t("kanban.aiSourcePrefix")}
+          {t("kanban.aiSourceMark") && (
+            <span className="bg-gradient-to-r from-violet-500 to-amber-500 bg-clip-text text-[10px] font-bold text-transparent">
+              {t("kanban.aiSourceMark")}
+            </span>
+          )}
+        </span>
+      )}
+    </p>
+  );
+}
+
+/** 往来单位 / 联系人行：优先展示公司（往来单位），否则展示联系人姓名。 */
+function ContactLine({ contact }: { contact?: KanbanItem["contact"] }) {
+  const label = contact?.company || contact?.name;
+  if (!label) return null;
+  const Icon = contact?.company ? Building2 : User;
+  return (
+    <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
+      <Icon className="size-3 shrink-0" />
+      <span className="truncate">{label}</span>
+    </p>
+  );
+}
+
+/** 阶段列商机金额合计：优先用数值字段，缺失时从格式化字符串兜底解析。 */
+function sumStageAmount(items: KanbanItem[]): number {
+  return items.reduce((sum, it) => {
+    if (typeof it.amountValue === "number") return sum + it.amountValue;
+    if (it.amount) {
+      const n = Number(it.amount.replace(/[^\d.]/g, ""));
+      if (!Number.isNaN(n)) return sum + n;
+    }
+    return sum;
+  }, 0);
+}
+
 /** 单字段渲染（按阶段定制的卡片布局复用）。 */
 function FieldBlock({ field, item }: { field: CardField; item: KanbanItem }) {
-  const { t } = useTranslation();
   switch (field) {
     case "amount":
       return item.amount ? (
@@ -83,9 +133,7 @@ function FieldBlock({ field, item }: { field: CardField; item: KanbanItem }) {
         <p className="line-clamp-2 text-xs text-muted-foreground">{item.description}</p>
       ) : null;
     case "source":
-      return item.source ? (
-        <p className="text-[11px] text-muted-foreground/80">来源 · {item.source}</p>
-      ) : null;
+      return <SourceLine source={item.source} meta={item.meta} />;
     case "createdAt":
       return item.createdAt ? (
         <p className="text-[11px] text-muted-foreground/80">创建 · {formatDateTime(item.createdAt)}</p>
@@ -98,17 +146,6 @@ function FieldBlock({ field, item }: { field: CardField; item: KanbanItem }) {
           </span>
           <span className="text-xs text-muted-foreground">{item.assignee.name}</span>
         </div>
-      ) : null;
-    case "priority":
-      return item.priority ? (
-        <span
-          className={cn(
-            "rounded-4xl px-2 py-0.5 text-[11px] font-medium",
-            priorityClasses[item.priority],
-          )}
-        >
-          {t(priorityKey[item.priority])}
-        </span>
       ) : null;
     case "tag":
       return item.tag ? <Badge variant="secondary">{item.tag}</Badge> : null;
@@ -132,7 +169,6 @@ function KanbanCard({
   onDragStart?: (e: DragEvent) => void;
   onClick?: () => void;
 }) {
-  const { t } = useTranslation();
   const fields = item.fields;
   return (
     <div
@@ -146,6 +182,7 @@ function KanbanCard({
       onClick={onClick}
     >
       <p className="text-sm font-medium text-foreground">{item.title}</p>
+      <ContactLine contact={item.contact} />
       {fields ? (
         <div className="mt-1.5 flex flex-col gap-1.5">
           {fields
@@ -175,16 +212,6 @@ function KanbanCard({
           )}
           <div className="mt-3 flex items-center justify-between gap-2">
             <div className="flex items-center gap-1.5">
-              {item.priority && (
-                <span
-                  className={cn(
-                    "rounded-4xl px-2 py-0.5 text-[11px] font-medium",
-                    priorityClasses[item.priority],
-                  )}
-                >
-                  {t(priorityKey[item.priority])}
-                </span>
-              )}
               {item.tag && <Badge variant="secondary">{item.tag}</Badge>}
             </div>
             {item.assignee && (
@@ -199,9 +226,7 @@ function KanbanCard({
           {item.meta && (
             <p className="mt-2 text-[11px] text-muted-foreground">{item.meta}</p>
           )}
-          {item.source && (
-            <p className="mt-1 text-[11px] text-muted-foreground/80">来源 · {item.source}</p>
-          )}
+          {item.source && <SourceLine source={item.source} meta={item.meta} />}
         </>
       )}
     </div>
@@ -277,9 +302,17 @@ export function KanbanBoard({
                 {stage.title}
               </h3>
             </div>
-            <span className="rounded-4xl bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
-              {stage.items.length}
-            </span>
+            <div className="flex items-center gap-2">
+              <span
+                className="text-xs font-medium tabular-nums text-muted-foreground"
+                title={t("kanban.stageAmount")}
+              >
+                {formatAmount(sumStageAmount(stage.items))}
+              </span>
+              <span className="rounded-4xl bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                {stage.items.length}
+              </span>
+            </div>
           </div>
           <div className="flex flex-col gap-2 px-3 pb-3">
             {stage.items.length === 0 ? (

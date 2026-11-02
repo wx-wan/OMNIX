@@ -58,7 +58,11 @@ model Contact {
   role      String? // 仅 type=user：admin | user
   isSystem  Boolean @default(false) // 系统级机器人（如 ominXBot），拥有最高权限并负责记录操作历史
   botCharacter String? @default("mochi") // 系统机器人的 3D 形象（wobnimo 角色 id），仅 isSystem 使用
+  avatarUrl String? @map("avatar_url") // 头像 URL（如 MCP 代理用户 Accio work 用 web 头像）
+  aiGenerated Boolean @default(false) @map("ai_generated") // 是否由 Accio AI 抓取生成（信息不保真，待核实）
+  archived  Boolean @default(false) @map("archived") // 归档：关联了商机的往来单位不允许删除，只能归档隐藏
   deals     Deal[]
+  quotations Quotation[]
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
 
@@ -79,10 +83,17 @@ model Product {
   tax         Decimal? @db.Decimal(5, 2) // 税项（%）
   image       String? // 产品主图 URL（上传接口返回）
   quantity    Int      @default(0) // 数量
+  unit        String? // 单位（台 / 个 / 件 …）
+  parentId    String?   @map("parent_id") // 变体来源产品 id（为空=标准产品）
+  parent      Product?  @relation("ProductVariants", fields: [parentId], references: [id])
+  variants    Product[] @relation("ProductVariants")
+  isRequirement Boolean  @default(false) @map("is_requirement") // 是否为需求阶段新建的产品（需求产品）
+  archived     Boolean  @default(false) @map("archived") // 归档：关联了商机的产品不允许删除，只能归档隐藏
   deals       Deal[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  @@index([parentId])
   @@map("products")
 }
 
@@ -104,6 +115,8 @@ model Deal {
   contactId   String?   @map("contact_id")
   product     Product?  @relation(fields: [productId], references: [id])
   productId   String?   @map("product_id")
+  linesJson   String? @map("lines_json") // 订单明细（含组合/备注/排序；行级数量与折扣随行存；空 productId 的产品行会落入产品库）
+  quotations  Quotation[]
   stageLogs   DealStageLog[]
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -139,10 +152,62 @@ model ChatterMessage {
   authorId    String? // 作者 Contact id（系统记录用机器人 id；人工评论用登录用户 id）
   authorName  String // 作者名快照（便于展示，避免作者被删后丢失）
   authorIsBot Boolean  @default(false) // 是否系统机器人（ominXBot）发出的操作记录
+  authorAvatar String? @map("author_avatar") // 作者头像 URL 快照（如 Accio work 的 web 头像），优先于首字母
   isRecall    Boolean  @default(false) // 是否为「撤回」系统记录（撤回后保留一条提示，仿微信）
   body        String // 消息/操作历史正文
   createdAt   DateTime @default(now())
 
   @@index([resModel, resId])
   @@map("chatter_messages")
+}
+
+// 系统级键值配置（设置页可写）。目前用于存储 MCP Server 的启用状态与访问令牌。
+model Setting {
+  key        String   @id
+  value      String
+  updatedAt  DateTime @updatedAt
+
+  @@map("settings")
+}
+
+// 报价单：商机推进到「报价」阶段时生成（一商多单）。客户引用商机的客户（同步展示），
+// 订单明细为创建时对商机产品需求的快照（linesJson 结构与 Deal 一致），金额由明细派生。
+model Quotation {
+  id              String    @id @default(cuid())
+  number          String    @unique // 报价单号（S00001 起步）
+  deal            Deal      @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  dealId          String    @map("deal_id")
+  contact         Contact?  @relation(fields: [contactId], references: [id])
+  contactId       String?   @map("contact_id") // 与商机同步：引用商机选中的客户
+  shippingAddress String?   @map("shipping_address") // 收货地址（多行文本，预填客户国家）
+  validUntil      DateTime? @map("valid_until") // 有效期至（默认创建 +14 天）
+  paymentTerms    String?   @map("payment_terms") // 付款条款
+  deliveryDate    DateTime? @map("delivery_date") // 交付日期
+  linesJson       String?   @map("lines_json") // 订单明细（快照，结构同 Deal.linesJson）
+  amount          Decimal?  @db.Decimal(12, 2) // 合计（由明细派生：Σ 单价×数量×(1-折扣)）
+  notes           String? // 备注
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([dealId])
+  @@index([contactId])
+  @@map("quotations")
+}
+
+// OAuth 令牌持久化（替代原内存 Map）：access_token 用于鉴权，refresh_token 用于静默续期；
+// 同时隐含“授权确认(consent)”记录——存在未过期的 refresh 即代表该用户已授权过该客户端，
+// 授权端点可据此自动放行，跳过「允许授权」手动点击。
+model OAuthToken {
+  id               String   @id @default(cuid())
+  userId           String
+  clientId         String
+  scope            String   @default("mcp")
+  accessToken      String   @unique
+  refreshToken     String   @unique
+  accessExpiresAt  DateTime
+  refreshExpiresAt DateTime
+  createdAt        DateTime @default(now())
+
+  @@index([userId, clientId, scope])
+  @@map("oauth_tokens")
 }

@@ -6,6 +6,7 @@ import {
   Delete,
   Param,
   Body,
+  Query,
   BadRequestException,
   Req,
 } from "@nestjs/common";
@@ -31,6 +32,17 @@ export class CrmController {
     return this.crm.createDeal(dto, actorId);
   }
 
+  // GET /api/crm/deals/by-contact/:contactId/count?excludeDealId= —— 同一客户商机数（类似商机展示）
+  @Get("deals/by-contact/:contactId/count")
+  countDealsByContact(
+    @Param("contactId") contactId: string,
+    @Query("excludeDealId") excludeDealId?: string,
+  ) {
+    return this.crm
+      .countDealsByContact(contactId, excludeDealId)
+      .then((count) => ({ count }));
+  }
+
   // GET /api/crm/deals/:id —— 商机详情（含客户/联系人/产品/阶段）
   @Get("deals/:id")
   getDeal(@Param("id") id: string) {
@@ -44,10 +56,24 @@ export class CrmController {
     return this.crm.updateDeal(id, dto, actorId);
   }
 
+  // DELETE /api/crm/deals/:id —— 删除商机（级联报价单/阶段日志，清理 Chatter）
+  @Delete("deals/:id")
+  deleteDeal(@Param("id") id: string) {
+    return this.crm.deleteDeal(id);
+  }
+
   // GET /api/crm/deals/:id/chatter —— 取该商机的 Chatter 消息流（机器人操作历史 + 评论）
+  // 支持分页：?limit=30&before=<最旧已加载消息 createdAt>，用于瀑布流加载更早消息
   @Get("deals/:id/chatter")
-  getChatter(@Param("id") id: string) {
-    return this.crm.listChatter(id);
+  getChatter(
+    @Param("id") id: string,
+    @Query("limit") limit?: string,
+    @Query("before") before?: string,
+  ) {
+    return this.crm.listChatter(id, {
+      limit: limit ? Number(limit) : undefined,
+      before,
+    });
   }
 
   // POST /api/crm/deals/:id/chatter —— 人工发布一条评论

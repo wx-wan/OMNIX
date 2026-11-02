@@ -14,6 +14,7 @@ import {
   KanbanSquare,
   Contact,
   Package,
+  FileText,
   LogOut,
 } from "lucide-react";
 import { cn } from "cn";
@@ -33,6 +34,7 @@ const navItems = [
   { to: "/contacts", labelKey: "nav.contacts", icon: Contact, end: false },
   { to: "/crm", labelKey: "nav.crm", icon: KanbanSquare, end: false },
   { to: "/products", labelKey: "nav.products", icon: Package, end: false },
+  { to: "/quotations", labelKey: "nav.quotations", icon: FileText, end: false },
   { to: "/showcase", labelKey: "nav.components", icon: Puzzle, end: false },
   { to: "/settings", labelKey: "nav.settings", icon: Settings, end: false },
 ];
@@ -162,8 +164,16 @@ export function AppShell() {
           </div>
         </header>
         <main className="min-h-0 flex-1 overflow-y-auto">
-          {/* CRM 看板及其商机页（/crm/deals/*）均脱离 Container 做全宽；其余页面保持居中容器 */}
-          {location.pathname.startsWith("/crm") ? <Outlet /> : <Container size="lg"><Outlet /></Container>}
+          {/* CRM 看板及其商机页（/crm/deals/*）、报价单详情（/quotations/:id）均脱离 Container 做全宽（h-full 才能撑满）；
+              其余页面（含报价单列表）保持居中容器 */}
+          {location.pathname.startsWith("/crm") ||
+          /^\/quotations\/[^/]+$/.test(location.pathname) ? (
+            <Outlet />
+          ) : (
+            <Container size="lg">
+              <Outlet />
+            </Container>
+          )}
         </main>
       </div>
     </div>

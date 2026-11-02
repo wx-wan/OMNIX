@@ -3,6 +3,7 @@ import { Type } from "class-transformer";
 import { Priority } from "@prisma/client";
 import { CreateContactDto } from "../../contacts/dto/create-contact.dto";
 import { CreateProductDto } from "../../products/dto/create-product.dto";
+import { DealLineDto } from "./deal-line.dto";
 
 export class CreateDealDto {
   /** 可不传：默认由 往来单位名 · 产品名 派生。 */
@@ -63,4 +64,10 @@ export class CreateDealDto {
   @ValidateNested()
   @Type(() => CreateProductDto)
   product?: CreateProductDto;
+
+  /** 订单明细（产品需求）：整张表随商机保存；空 productId 的产品行会在产品库新建。 */
+  @IsOptional()
+  @ValidateNested({ each: true })
+  @Type(() => DealLineDto)
+  lines?: DealLineDto[];
 }

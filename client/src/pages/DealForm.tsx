@@ -9,6 +9,7 @@ import {
   Receipt,
   PackageCheck,
   Truck,
+  Repeat,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -18,12 +19,21 @@ import { HeaderCenter } from "@/components/layout/AppShell";
 import { StageStepper, type StageOption } from "@/components/crm/StageStepper";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { PillToggle } from "@/components/common/PillToggle";
 import { SalespersonPicker, type SalesPerson } from "@/components/common/SalespersonPicker";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 import { Chatter, type ChatterMessage } from "@/components/chatter/Chatter";
 import type { ContactValues } from "@/components/crm/ContactForm";
 import { EMPTY_CONTACT } from "@/components/crm/ContactForm";
@@ -50,6 +60,8 @@ interface DealDetailData {
   }[];
   contact: (ContactValues & { id: string }) | null;
   product: (ProductValues & { id: string }) | null;
+  /** 订单明细（整张表 JSON，含组合/备注/排序；行级数量与折扣随行）。后端字段名为 linesJson。 */
+  linesJson?: string | null;
 }
 
 /** 产物栏：固定单据类型，按固定阶段解锁（minStage = 阶段有序下标，到达该阶段才出现），数量先占位 0。 */
@@ -83,16 +95,21 @@ function formatMoney(n: number) {
 }
 
 // 演示用商机来源（Picker 下拉用，id 与 label 一致，便于按 label 存取）
+// 注意：选项须与 MCP 实际写入的来源值对齐（国际站寿春店=espdzi、国际站微它店=weitapet、Accio=无店铺时的默认来源），
+// 否则 Picker 匹配不到会空白；picker 另设 fallbackText 兜底任何未在列表中的存量值。
 const DEAL_SOURCE_RECORDS: SelectRecord[] = [
-  "1688景元店",
   "国际站寿春店",
-  "国家站微它店",
+  "国际站微它店",
+  "1688景元店",
   "展会",
   "转介绍",
+  "Accio",
   "社媒",
 ].map((s) => ({ id: s, label: s }));
 
-// 演示用客户类型（Picker 下拉用，id 与 label 一致）
+// 客户类型：纯业务分类（终端客户/贸易商/工厂 等的归类）。
+// 注意：「待完善」不是客户类型，它是系统对「由 Accio AI 生成、信息不保真」客户打的“信息待核实”标记（见 contact.aiGenerated），
+// 单独以徽标展示，绝不混入本下拉选项。
 const DEAL_CUSTOMER_TYPE_RECORDS: SelectRecord[] = [
   "跨境电商类型",
   "传统商超类型",
@@ -180,6 +197,7 @@ function emptyLine(): OrderLine {
     quantity: "",
     unit: "",
     price: 0,
+    costPrice: 0,
     // 默认税项：13% 货 专票（与 OrderLinesTable 的 TAXES 中该记录 id 一致）
     taxId: "tax-13g-s",
     taxRate: 13,
@@ -198,12 +216,27 @@ function productToLine(p: ProductValues): OrderLine {
     description: p.description ?? "",
     name: "",
     quantity: Number(p.quantity) > 0 ? Number(p.quantity) : 1,
-    unit: "",
+    unit: p.unit ?? "",
     price: Number(p.price) || 0,
+    costPrice: 0,
     taxRate,
     // 按税率回填一个默认税项（如 13% → 13% 货 专票）；无法区分货/服、专票/其他票时取首个
     taxId: TAXES.find((t) => t.label.startsWith(`${taxRate}%`))?.id ?? null,
     discount: 0,
+  };
+}
+
+// 恢复 linesJson 时规范化行数据：旧数据/MCP 建单可能缺 quantity/price 等键，
+// 直接透传会让 InputNumber 显示 "undefined"、合计算出 ¥NaN —— 统一补齐默认值。
+function normalizeRestoredLine(l: OrderLine): OrderLine {
+  return {
+    ...l,
+    quantity: typeof l.quantity === "number" && Number.isFinite(l.quantity) && l.quantity > 0 ? l.quantity : "",
+    unit: typeof l.unit === "string" ? l.unit : "",
+    price: typeof l.price === "number" && Number.isFinite(l.price) ? l.price : 0,
+    costPrice: typeof l.costPrice === "number" && Number.isFinite(l.costPrice) ? l.costPrice : 0,
+    taxRate: typeof l.taxRate === "number" && Number.isFinite(l.taxRate) ? l.taxRate : 0,
+    discount: typeof l.discount === "number" && Number.isFinite(l.discount) ? l.discount : 0,
   };
 }
 
@@ -281,22 +314,34 @@ export default function DealForm() {
   const [companyId, setCompanyId] = useState<string | null>(null);
   const [lines, setLines] = useState<OrderLine[]>(() => [emptyLine()]);
   // Chatter 操作/讨论记录（由系统机器人 ominXBot 写入操作历史 + 人工评论）
-  const [chatter, setChatter] = useState<ChatterMessage[]>([]);
-  const [chatterKey, setChatterKey] = useState(0);
+  const [initialChatter, setInitialChatter] = useState<ChatterMessage[] | null>(null);
+  const [chatterHasMore, setChatterHasMore] = useState(false);
+  const [refreshToken, setRefreshToken] = useState(0);
 
   // 真实产品目录（来自后端，含已上传的产品主图）；与演示目录合并，使上传产品图在明细中可见
   const [apiProducts, setApiProducts] = useState<SelectRecord[]>([]);
   useEffect(() => {
     api
-      .get<Array<{ id: string; description: string | null; image?: string | null }>>(
-        "/products",
-      )
+      .get<
+        Array<{
+          id: string;
+          description: string | null;
+          image?: string | null;
+          unit?: string | null;
+          isRequirement?: boolean;
+          costPrice?: number | null;
+        }>
+      >("/products")
       .then((r) =>
         setApiProducts(
           r.data.map((p) => ({
             id: p.id,
             label: p.description ?? "",
             image: p.image ?? undefined,
+            // 带上单位，使从接口选择真实产品时单位能带入明细行
+            sublabel: p.unit ? p.unit : undefined,
+            isRequirement: p.isRequirement ?? false,
+            costPrice: p.costPrice ?? undefined,
           })),
         ),
       )
@@ -308,6 +353,8 @@ export default function DealForm() {
   );
   // 价格含税方式：true=含税（默认），false=不含税
   const [priceIncludeTax, setPriceIncludeTax] = useState(true);
+  // 产品需求 / 备注 Tab 当前项（控制含税/不含税胶囊仅在「产品需求」显示）
+  const [productTab, setProductTab] = useState("product");
   // 业务员（负责人）：默认当前登录用户，同时承担创建人 + 负责人
   const [salespersonId, setSalespersonId] = useState("");
 
@@ -343,16 +390,37 @@ export default function DealForm() {
   // 阶段流转（确认需求）进行中
   const [moving, setMoving] = useState(false);
 
-  // 确认线索：将阶段从「线索到达」推进到「需求确认」
+  // 推进到下一阶段：取当前阶段在有序阶段列表中的下一项
   const handleAdvanceStage = async () => {
     if (!isEdit || !id) return;
-    const next = stages.find((s) => s.key === "qualify");
+    const idx = currentStageIndex;
+    if (idx < 0) return;
+    const next = stages[idx + 1];
     if (!next) return;
+    // 推进到「报价」阶段：同步生成报价单（产物），并跳转到报价单详情。
+    // 阶段推进由后端在建单时一并完成（未到报价阶段才推进，不会回退）。
+    if (next.key === "quote") {
+      setMoving(true);
+      try {
+        const r = await api.post<{ id: string; number: string }>("/quotations", {
+          dealId: id,
+        });
+        toast.success(t("quotation.created", { number: r.data.number }));
+        navigate(`/quotations/${r.data.id}`);
+      } catch (e) {
+        console.error("[DealForm] create quotation failed:", e);
+        toast.error(extractErrorDetail(e));
+      } finally {
+        setMoving(false);
+      }
+      return;
+    }
     setMoving(true);
     try {
       await api.patch(`/crm/deals/${id}`, { stageId: next.id });
       const r = await api.get<DealDetailData>(`/crm/deals/${id}`);
       setDetail(r.data);
+      setRefreshToken((k) => k + 1); // 增量刷新讨论区，显示推进相关的系统记录
       toast.success(t("crm.stageAdvanced"));
     } catch (e) {
       console.error("[DealForm] advance stage failed:", e);
@@ -372,6 +440,45 @@ export default function DealForm() {
       .catch(() => setStages([]));
   }, []);
 
+  // 当前商机的报价单数量（产物栏「报价」计数）；推进/保存后随 refreshToken 刷新
+  const [quoteCount, setQuoteCount] = useState(0);
+  // 同一客户（往来单位/联系人）下的其他商机数量（产物栏「类似商机」展示）
+  const [similarCount, setSimilarCount] = useState(0);
+  const [customerContactId, setCustomerContactId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!isEdit || !id) return;
+    let alive = true;
+    api
+      .get<{ id: string }[]>("/quotations", { params: { dealId: id } })
+      .then((r) => {
+        if (alive) setQuoteCount(r.data.length);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [isEdit, id, refreshToken]);
+
+  // 同一客户的其他商机数量（产物栏「类似商机」计数）；保存/推进后随 refreshToken 刷新
+  useEffect(() => {
+    if (!isEdit || !id || !customerContactId) {
+      setSimilarCount(0);
+      return;
+    }
+    let alive = true;
+    api
+      .get<{ count: number }>(`/crm/deals/by-contact/${customerContactId}/count`, {
+        params: { excludeDealId: id },
+      })
+      .then((r) => {
+        if (alive) setSimilarCount(r.data.count);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [isEdit, id, customerContactId, refreshToken]);
+
   const leadStageId = stages[0]?.id ?? null;
 
   const currentStageIndex =
@@ -388,6 +495,19 @@ export default function DealForm() {
     return Math.round(((idx + 1) / stages.length) * 100);
   }, [stages, currentStageIndex, isEdit]);
 
+  // 下一阶段（用于「确认 / 报价」等推进按钮）：取当前阶段在有序列表中的下一项
+  const nextStage =
+    isEdit && currentStageIndex >= 0 ? stages[currentStageIndex + 1] : undefined;
+  // 推进按钮文案：线索到达→需求确认 显示「确认」，需求确认→报价阶段 显示「报价」，其余阶段用通用文案
+  const advanceLabel =
+    detail?.stage.key === "lead"
+      ? t("crm.confirmStage")
+      : detail?.stage.key === "qualify"
+        ? t("crm.quoteStage")
+        : nextStage
+          ? `推进到「${nextStage.title}」`
+          : null;
+
   // 每个阶段停留时长：leftAt 为空表示当前阶段（用当前时间计算进行中时长）
   const stageDurations: Record<string, string> = {};
   if (detail?.stageLogs) {
@@ -398,20 +518,32 @@ export default function DealForm() {
     }
   }
 
-  // 拉取商机的 Chatter 消息流（机器人操作历史 + 评论），并通过 key 重置组件内部状态
-  const loadChatter = async (dealId: string) => {
-    try {
-      const r = await api.get<ChatterMessage[]>(`/crm/deals/${dealId}/chatter`);
-      setChatter(
-        r.data.map((m) => ({
-          ...m,
-          sentAt: m.createdAt ? Date.parse(m.createdAt) : undefined,
-        })),
-      );
-      setChatterKey((k) => k + 1);
-    } catch {
-      /* 忽略 chatter 加载失败，不影响主流程 */
-    }
+  // 讨论区：拉取更早一页（before=最旧已加载消息 createdAt），用于瀑布流
+  const loadOlderChatter = async (oldest: ChatterMessage) => {
+    const r = await api.get<{ messages: ChatterMessage[]; hasMore: boolean }>(
+      `/crm/deals/${id}/chatter?limit=30&before=${encodeURIComponent(oldest.createdAt ?? "")}`,
+    );
+    return {
+      messages: r.data.messages.map((m) => ({
+        ...m,
+        sentAt: m.createdAt ? Date.parse(m.createdAt) : undefined,
+      })),
+      hasMore: r.data.hasMore,
+    };
+  };
+
+  // 讨论区：增量刷新最新一屏并合并（发消息/保存/推进阶段后）
+  const loadLatestChatter = async () => {
+    const r = await api.get<{ messages: ChatterMessage[]; hasMore: boolean }>(
+      `/crm/deals/${id}/chatter?limit=30`,
+    );
+    return {
+      messages: r.data.messages.map((m) => ({
+        ...m,
+        sentAt: m.createdAt ? Date.parse(m.createdAt) : undefined,
+      })),
+      hasMore: r.data.hasMore,
+    };
   };
 
   // 新建页：机器人先本地显示「正在创建」占位消息，保存成功跳详情后由服务端真实记录替换
@@ -428,17 +560,21 @@ export default function DealForm() {
     [],
   );
 
-  // 编辑：拉取详情并回填
+  // 编辑：拉取详情并回填（含讨论区初始分页）
   useEffect(() => {
     if (!isEdit || !id) return;
+    let cancelled = false;
     setLoading(true);
     setError(false);
     setDetail(null);
-    api
-      .get<DealDetailData>(`/crm/deals/${id}`)
-      .then((r) => {
+    (async () => {
+      try {
+        const r = await api.get<DealDetailData>(`/crm/deals/${id}`);
+        if (cancelled) return;
         const d = r.data;
         setDetail(d);
+        // 记录该商机关联的客户（往来单位/联系人）id，用于「类似商机」统计
+        setCustomerContactId(d.contact?.id ?? null);
         setAssignee(d.assignee ?? "");
         const matched = users.find((u) => u.name === d.assignee);
         setSalespersonId(matched?.id ?? user?.id ?? "");
@@ -454,17 +590,50 @@ export default function DealForm() {
           phone: d.contact?.phone ?? "",
           country: d.contact?.country ?? "",
           website: d.contact?.website ?? "",
+          aiGenerated: d.contact?.aiGenerated ?? false,
         });
         // 编辑回填：按公司名称匹配所属公司的客户联系人 id
         const matchedCompany = DEAL_CUSTOMER_CONTACTS.find(
           (c) => c.label === d.contact?.company,
         );
         setCompanyId(matchedCompany?.id ?? null);
-        setLines(d.product ? [productToLine(d.product)] : [emptyLine()]);
-        loadChatter(id);
-      })
-      .catch(() => setError(true))
-      .finally(() => setLoading(false));
+        // 优先从订单明细 JSON 恢复整张表（含组合/备注/排序，行级数量与折扣随行）；
+        // 旧数据无 lines 时回退到遗留单产品
+        const restored = d.linesJson
+          ? (() => {
+              try {
+                const arr = JSON.parse(d.linesJson);
+                return Array.isArray(arr) && arr.length
+                  ? (arr as OrderLine[]).map(normalizeRestoredLine)
+                  : null;
+              } catch {
+                return null;
+              }
+            })()
+          : null;
+        setLines(restored ?? (d.product ? [productToLine(d.product)] : [emptyLine()]));
+        // 讨论区初始分页：拉取最新一屏
+        const chatterR = await api.get<{
+          messages: ChatterMessage[];
+          hasMore: boolean;
+        }>(`/crm/deals/${id}/chatter?limit=30`);
+        if (cancelled) return;
+        setInitialChatter(
+          chatterR.data.messages.map((m) => ({
+            ...m,
+            sentAt: m.createdAt ? Date.parse(m.createdAt) : undefined,
+          })),
+        );
+        setChatterHasMore(chatterR.data.hasMore);
+      } catch {
+        if (!cancelled) setError(true);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [isEdit, id]);
 
   // 商机名称自动组成：首个产品描述 + 总数量 + 客户国别（不可手动输入）
@@ -476,12 +645,15 @@ export default function DealForm() {
     (!isEdit ||
       (!!contact.name.trim() || !!contact.company.trim()) && hasProduct);
 
-  const primaryLine = lines.find((l) => l.type === "product");
-  const totalQty = lines
-    .filter((l) => l.type === "product")
-    .reduce((s, l) => s + (Number(l.quantity) || 0), 0);
+  const productLines = lines.filter((l) => l.type === "product");
+  const primaryLine = productLines[0];
+  const multiProduct = productLines.length > 1;
+  const totalQty = productLines.reduce((s, l) => s + (Number(l.quantity) || 0), 0);
+  const titleDesc =
+    (primaryLine?.description?.trim() ?? "") +
+    (multiProduct && primaryLine?.description?.trim() ? "等" : "");
   const composedTitle = [
-    primaryLine?.description?.trim() ?? "",
+    titleDesc,
     totalQty ? String(totalQty) : "",
     contact.country.trim(),
   ]
@@ -515,24 +687,45 @@ export default function DealForm() {
       price: primaryLine ? primaryLine.price : undefined,
       tax: primaryLine ? primaryLine.taxRate : undefined,
       quantity: primaryLine ? primaryLine.quantity : undefined,
+      unit: primaryLine?.unit?.trim() || undefined,
     },
     priceIncludeTax,
-    lines,
+    // 订单明细整张表随商机保存（行级数量/折扣随行）；空 productId 的新产品行由后端建产品库
+    lines: lines.map((l) => ({
+      id: l.id,
+      parentId: l.parentId ?? null,
+      type: l.type,
+      name: l.name,
+      productId: l.productId ?? null,
+      description: l.description,
+      quantity: typeof l.quantity === "number" ? l.quantity : 0,
+      unit: l.unit,
+      price: l.price,
+      costPrice: l.costPrice,
+      taxRate: l.taxRate,
+      taxId: l.taxId ?? null,
+      discount: l.discount,
+      image: l.image || null,
+    })),
   });
 
-  // 在 Chatter 中发布一条人工评论（区别于机器人操作记录）
-  const handleChatterSend = async (text: string) => {
+  // 在 Chatter 中发布一条人工评论（区别于机器人操作记录）；返回服务端消息供组件回填
+  const handleChatterSend = async (text: string): Promise<ChatterMessage | void> => {
     if (!isEdit || !id) return;
     try {
-      await api.post(`/crm/deals/${id}/chatter`, { text });
-      await loadChatter(id);
+      const r = await api.post<ChatterMessage>(`/crm/deals/${id}/chatter`, { text });
+      return {
+        ...r.data,
+        sentAt: r.data.createdAt ? Date.parse(r.data.createdAt) : undefined,
+      };
     } catch (e) {
       console.error("[DealForm] post chatter failed:", e);
       toast.error(t("crm.saveFailed"));
+      throw e;
     }
   };
 
-  // 撤回一条本人发送、3 分钟内的评论（乐观移除已在前端完成，这里负责持久化删除）
+  // 撤回一条本人发送、3 分钟内的评论（乐观更新已在组件内完成，这里负责持久化删除）
   const handleChatterRecall = async (msgId: string) => {
     if (!isEdit || !id) return;
     try {
@@ -540,7 +733,7 @@ export default function DealForm() {
     } catch (e) {
       console.error("[DealForm] recall chatter failed:", e);
       toast.error(t("chatter.recallFailed"));
-      loadChatter(id); // 失败回滚：重新拉取恢复该消息
+      throw e; // 交由 Chatter 本地回滚乐观更新
     }
   };
 
@@ -553,7 +746,7 @@ export default function DealForm() {
         await api.patch(`/crm/deals/${id}`, buildPayload());
         const r = await api.get<DealDetailData>(`/crm/deals/${id}`);
         setDetail(r.data);
-        loadChatter(id);
+        setRefreshToken((k) => k + 1); // 增量刷新讨论区，显示本次操作相关的系统记录
         toast.success(t("crm.saveSuccess"));
       } else {
         const res = await api.post("/crm/deals", {
@@ -573,16 +766,45 @@ export default function DealForm() {
     }
   };
 
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDelete = async () => {
+    if (!id || deleting) return;
+    setDeleting(true);
+    try {
+      await api.delete(`/crm/deals/${id}`);
+      toast.success(t("crm.delete") + " " + t("common.success"));
+      navigate("/crm");
+    } catch (e) {
+      setDeleteOpen(false);
+      console.error("[DealForm] delete failed:", e);
+      toast.error(extractErrorDetail(e) || t("crm.saveFailed"));
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">
       <PageMeta
         title={isEdit ? t("crm.detailTitle") : t("crm.formTitle")}
         back={() => navigate("/crm")}
         actions={
-          isEdit && detail?.stage.key === "lead" ? (
-            <Button onClick={handleAdvanceStage} disabled={moving}>
-              {moving ? t("crm.advancing") : t("crm.confirmStage")}
-            </Button>
+          isEdit ? (
+            <div className="flex items-center gap-2">
+              {nextStage && (
+                <Button onClick={handleAdvanceStage} disabled={moving}>
+                  {moving ? t("crm.advancing") : advanceLabel}
+                </Button>
+              )}
+              <Button
+                variant="destructive"
+                onClick={() => setDeleteOpen(true)}
+              >
+                {t("crm.delete")}
+              </Button>
+            </div>
           ) : undefined
         }
       />
@@ -653,6 +875,18 @@ export default function DealForm() {
 
             {/* 往来单位 / 联系人 */}
             <section className="flex flex-col gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold">{t("crm.contactSection")}</span>
+                {contact.aiGenerated && (
+                  <Badge
+                    variant="outline"
+                    className="border-amber-500 text-amber-600"
+                    title={t("contact.aiPendingHint")}
+                  >
+                    {t("contact.aiPending")}
+                  </Badge>
+                )}
+              </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-x-4">
                 {/* 左列 */}
                 <div className="flex flex-col gap-3">
@@ -724,9 +958,10 @@ export default function DealForm() {
                       id="deal-source"
                       records={DEAL_SOURCE_RECORDS}
                       value={source}
-                      topN={6}
+                      topN={7}
                       searchMoreTitle={t("crm.fieldSource")}
                       placeholder={t("crm.fieldSourcePlaceholder")}
+                      fallbackText={source}
                       onChange={(rec) => setSource(rec?.label ?? "")}
                     />
                   </div>
@@ -782,21 +1017,27 @@ export default function DealForm() {
               </div>
             </section>
 
-            {/* 产品需求 / 备注：Tab 切换 + 右侧含税/不含税胶囊 */}
-            <Tabs defaultValue="product" className="flex flex-col gap-3">
+            {/* 产品需求 / 备注：Tab 切换 + 右侧含税/不含税胶囊（仅产品需求 Tab 显示） */}
+            <Tabs
+              value={productTab}
+              onValueChange={setProductTab}
+              className="flex flex-col gap-3"
+            >
               <div className="flex items-center justify-between gap-3">
                 <TabsList>
                   <TabsTrigger value="product">{t("crm.tabProduct")}</TabsTrigger>
                   <TabsTrigger value="desc">{t("crm.fieldDesc")}</TabsTrigger>
                 </TabsList>
-                <PillToggle
-                  options={[
-                    { value: "excluded", label: t("orderLines.taxExcluded") },
-                    { value: "included", label: t("orderLines.taxIncluded") },
-                  ]}
-                  value={priceIncludeTax ? "included" : "excluded"}
-                  onChange={(v) => setPriceIncludeTax(v === "included")}
-                />
+                {productTab === "product" && (
+                  <PillToggle
+                    options={[
+                      { value: "excluded", label: t("orderLines.taxExcluded") },
+                      { value: "included", label: t("orderLines.taxIncluded") },
+                    ]}
+                    value={priceIncludeTax ? "included" : "excluded"}
+                    onChange={(v) => setPriceIncludeTax(v === "included")}
+                  />
+                )}
               </div>
 
               {/* 产品需求（可编辑订单明细：描述内嵌产品选择、组合、备注、拖拽、折叠） */}
@@ -830,15 +1071,36 @@ export default function DealForm() {
                 {DELIVERABLES.filter((d) => currentStageIndex >= d.minStage).map(
                   (d) => {
                     const Icon = d.icon;
+                    const label = t(`crm.deliverables.${d.key}`);
+                    // 「报价」产物：显示真实报价单数量，点击查看该商机的报价单列表
+                    if (d.key === "quote" && isEdit && id) {
+                      return (
+                        <button
+                          key={d.key}
+                          type="button"
+                          className="flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1 transition-colors hover:bg-muted/50"
+                          title={label}
+                          onClick={() => navigate(`/quotations?dealId=${id}`)}
+                        >
+                          <Icon className="size-4 shrink-0 text-amber-500" />
+                          <span className="max-w-24 truncate text-xs text-muted-foreground">
+                            {label}
+                          </span>
+                          <span className="font-heading text-sm font-semibold tabular-nums text-foreground">
+                            {quoteCount}
+                          </span>
+                        </button>
+                      );
+                    }
                     return (
                       <div
                         key={d.key}
                         className="flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1"
-                        title={t(`crm.deliverables.${d.key}`)}
+                        title={label}
                       >
                         <Icon className="size-4 shrink-0 text-amber-500" />
                         <span className="max-w-24 truncate text-xs text-muted-foreground">
-                          {t(`crm.deliverables.${d.key}`)}
+                          {label}
                         </span>
                         <span className="font-heading text-sm font-semibold tabular-nums text-foreground">
                           0
@@ -846,6 +1108,22 @@ export default function DealForm() {
                       </div>
                     );
                   },
+                )}
+                {/* 类似商机：同一客户下的其他商机数量（多于 1 条时出现） */}
+                {similarCount >= 1 && (
+                  <div
+                    key="similar"
+                    className="flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1"
+                    title={t("crm.deliverables.similarDeals")}
+                  >
+                    <Repeat className="size-4 shrink-0 text-sky-500" />
+                    <span className="max-w-24 truncate text-xs text-muted-foreground">
+                      {t("crm.deliverables.similarDeals")}
+                    </span>
+                    <span className="font-heading text-sm font-semibold tabular-nums text-foreground">
+                      {similarCount}
+                    </span>
+                  </div>
                 )}
               </div>
               <div className="flex shrink-0 items-center gap-2">
@@ -869,19 +1147,65 @@ export default function DealForm() {
 
           {/* Chatter（4） */}
           <div className="min-h-0 lg:col-span-4">
-            <Chatter
-              key={chatterKey}
-              fill
-              className="h-full"
-              initialMessages={isEdit ? chatter : newDealChatter}
-              currentUser={user?.name}
-              onSend={isEdit && id ? handleChatterSend : undefined}
-              onRecall={isEdit && id ? handleChatterRecall : undefined}
-              followers={creatorName ? [creatorName] : undefined}
-            />
+            {isEdit ? (
+              initialChatter &&
+              id && (
+                <Chatter
+                  key={id}
+                  fill
+                  className="h-full"
+                  initialMessages={initialChatter}
+                  hasMore={chatterHasMore}
+                  currentUser={user?.name}
+                  onSend={handleChatterSend}
+                  onRecall={handleChatterRecall}
+                  onLoadOlder={loadOlderChatter}
+                  onLoadLatest={loadLatestChatter}
+                  refreshToken={refreshToken}
+                  followers={creatorName ? [creatorName] : undefined}
+                />
+              )
+            ) : (
+              <Chatter
+                fill
+                className="h-full"
+                initialMessages={newDealChatter}
+                currentUser={user?.name}
+                followers={creatorName ? [creatorName] : undefined}
+              />
+            )}
           </div>
         </div>
       )}
+
+      {/* 删除商机确认 */}
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("crm.delete")}</DialogTitle>
+            <DialogDescription>
+              {t("crm.deleteConfirm", { title: detail?.title ?? "" })}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setDeleteOpen(false)}
+            >
+              {t("common.cancel")}
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={deleting}
+              onClick={handleDelete}
+            >
+              {deleting ? t("common.loading") : t("common.confirm")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

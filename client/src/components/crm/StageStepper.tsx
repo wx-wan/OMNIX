@@ -99,14 +99,25 @@ export function StageStepper({
               )}
             >
               <span className="flex items-center gap-1.5">
-                <span
-                  className={cn(
-                    "shrink-0 rounded-full",
-                    isCurrent ? "size-2.5" : "size-2",
-                    s.accent,
-                    !isCurrent && !isPast && "opacity-30",
+                <span className="relative inline-flex shrink-0">
+                  {isCurrent && (
+                    <span
+                      aria-hidden
+                      className={cn(
+                        "absolute inset-0 rounded-full animate-breathe",
+                        s.accent,
+                      )}
+                    />
                   )}
-                />
+                  <span
+                    className={cn(
+                      "relative shrink-0 rounded-full",
+                      isCurrent ? "size-2.5" : "size-2",
+                      s.accent,
+                      !isCurrent && !isPast && "opacity-30",
+                    )}
+                  />
+                </span>
                 <span
                   className={cn(
                     "whitespace-nowrap text-xs",

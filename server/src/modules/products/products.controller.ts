@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param } from "@nestjs/common";
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query } from "@nestjs/common";
 import { ProductsService } from "./products.service";
 import { CreateProductDto } from "./dto/create-product.dto";
 
@@ -7,8 +7,8 @@ export class ProductsController {
   constructor(private readonly svc: ProductsService) {}
 
   @Get()
-  list() {
-    return this.svc.list();
+  list(@Query("includeArchived") includeArchived?: string) {
+    return this.svc.list(includeArchived === "true");
   }
 
   @Get(":id")
@@ -19,5 +19,16 @@ export class ProductsController {
   @Post()
   create(@Body() dto: CreateProductDto) {
     return this.svc.create(dto);
+  }
+
+  /** 归档 / 取消归档：关联了商机的产品不允许删除，改用归档隐藏。 */
+  @Patch(":id/archive")
+  archive(@Param("id") id: string, @Body() body: { archived: boolean }) {
+    return this.svc.archive(id, body?.archived ?? true);
+  }
+
+  @Delete(":id")
+  remove(@Param("id") id: string) {
+    return this.svc.remove(id);
   }
 }

@@ -20,6 +20,7 @@ interface RawDeal {
   meta: string | null;
   source: string | null;
   createdAt: string;
+  contact: { name: string | null; company: string | null; type: string | null } | null;
 }
 
 interface RawStage {
@@ -65,12 +66,14 @@ function toItem(d: RawDeal, stageKey: string): KanbanItem {
     tag: d.tag ?? undefined,
     priority: d.priority as KanbanItem["priority"],
     amount: d.amount != null ? formatAmount(d.amount) : undefined,
+    amountValue: d.amount ?? undefined,
     assignee: d.assignee
       ? { name: d.assignee, initials: d.assignee.trim().slice(0, 1) }
       : undefined,
     meta: d.meta ?? undefined,
     source: d.source ?? undefined,
     createdAt: d.createdAt,
+    contact: d.contact ?? undefined,
     fields: STAGE_CARD_FIELDS[stageKey],
     // 线索到达阶段：负责人仅显示头像（卡片底部居右），名称悬停显示
     assigneeCompact: stageKey === "lead",

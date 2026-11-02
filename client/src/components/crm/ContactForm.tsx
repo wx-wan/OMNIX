@@ -18,6 +18,7 @@ export interface ContactValues {
   name: string;
   company: string;
   email: string;
+  aiGenerated?: boolean;
   phone: string;
   country: string;
   website: string;

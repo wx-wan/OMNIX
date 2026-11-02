@@ -21,6 +21,10 @@ export interface SelectRecord {
   details?: { label: string; value: string }[];
   /** 产品主图 URL（选择器选项可显示缩略图） */
   image?: string;
+  /** 是否为需求阶段新建的产品（需求产品），选择器内显示「需求」标 */
+  isRequirement?: boolean;
+  /** 成本价（元），选品时回填到商机明细行 */
+  costPrice?: number;
 }
 
 interface SearchableSelectProps {

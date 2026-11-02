@@ -193,7 +193,14 @@ export function SearchMoreModal({
                         />
                       </td>
                       <td className="px-3 py-2 font-medium">
-                        <span>{r.label}</span>
+                        <span className="flex items-center gap-1.5">
+                          <span>{r.label}</span>
+                          {r.isRequirement && (
+                            <span className="shrink-0 rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-600">
+                              {t("common.requirement")}
+                            </span>
+                          )}
+                        </span>
                         {r.sublabel && (
                           <span className="ml-2 text-xs font-normal text-muted-foreground">
                             {r.sublabel}

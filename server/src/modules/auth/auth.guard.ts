@@ -14,6 +14,8 @@ export class AuthGuard implements CanActivate {
     if (req.method === "OPTIONS") return true;
     const url = req.url || "";
     if (url.startsWith("/auth") || url === "/health") return true;
+    // OAuth 端点（MCP 浏览器授权流程）与元数据发现：免 session 放行，由控制器自行鉴权。
+    if (url.startsWith("/oauth") || url.startsWith("/.well-known")) return true;
     if (!req.session?.userId) {
       throw new UnauthorizedException("Not authenticated");
     }

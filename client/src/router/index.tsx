@@ -6,6 +6,8 @@ import CrmBoard from "@/pages/CrmBoard";
 import Contacts from "@/pages/Contacts";
 import DealForm from "@/pages/DealForm";
 import Products from "@/pages/Products";
+import Quotations from "@/pages/Quotations";
+import QuotationDetail from "@/pages/QuotationDetail";
 import Settings from "@/pages/Settings";
 import Showcase from "@/pages/Showcase";
 import Login from "@/pages/Login";
@@ -18,6 +20,8 @@ const protectedRoutes = [
   { path: "crm/deals/new", element: <DealForm /> },
   { path: "crm/deals/:id", element: <DealForm /> },
   { path: "products", element: <Products /> },
+  { path: "quotations", element: <Quotations /> },
+  { path: "quotations/:id", element: <QuotationDetail /> },
   { path: "showcase", element: <Showcase /> },
   { path: "settings", element: <Settings /> },
 ];

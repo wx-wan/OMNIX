@@ -16,6 +16,7 @@ export interface ProductValues {
   costPrice: string;
   tax: string;
   image: string;
+  unit: string;
 }
 
 export const EMPTY_PRODUCT: ProductValues = {
@@ -29,6 +30,7 @@ export const EMPTY_PRODUCT: ProductValues = {
   costPrice: "",
   tax: "",
   image: "",
+  unit: "",
 };
 
 function Field({

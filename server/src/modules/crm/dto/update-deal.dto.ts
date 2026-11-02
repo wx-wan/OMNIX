@@ -1,6 +1,7 @@
 import { IsOptional, IsString, IsNumber, IsEnum, ValidateNested } from "class-validator";
 import { Type } from "class-transformer";
 import { Priority, ContactType } from "@prisma/client";
+import { DealLineDto } from "./deal-line.dto";
 
 /** 商机关联的往来单位（联系人）可编辑字段（部分更新）。 */
 export class UpdateDealContactDto {
@@ -74,6 +75,10 @@ export class UpdateDealProductDto {
   @IsOptional()
   @IsNumber()
   quantity?: number;
+
+  @IsOptional()
+  @IsString()
+  unit?: string; // 单位（台 / 个 / 件 …）
 }
 
 export class UpdateDealDto {
@@ -126,4 +131,10 @@ export class UpdateDealDto {
   @ValidateNested()
   @Type(() => UpdateDealProductDto)
   product?: UpdateDealProductDto;
+
+  /** 订单明细（产品需求）：整张表随商机保存；空 productId 的产品行会在产品库新建。 */
+  @IsOptional()
+  @ValidateNested({ each: true })
+  @Type(() => DealLineDto)
+  lines?: DealLineDto[];
 }

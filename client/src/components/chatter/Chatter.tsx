@@ -1,8 +1,8 @@
-import { Fragment, useMemo, useState, type KeyboardEvent } from "react";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { SendHorizontal, Paperclip, ChevronDown, ChevronUp, Undo2 } from "lucide-react";
 import { cn } from "cn";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { RobotAvatar } from "@/components/common/RobotAvatar";
 import { useBotConfig } from "@/lib/botConfig";
 import { Button } from "@/components/ui/button";
@@ -27,6 +27,8 @@ export interface ChatterMessage {
   isBot?: boolean;
   /** 是否为「撤回」系统记录（撤回后保留的一条提示，仿微信）。 */
   isRecall?: boolean;
+  /** 作者头像 URL（如 Accio work 的 web 头像）；优先于首字母展示。 */
+  authorAvatar?: string;
   /** 发送时间戳（epoch ms），用于「3 分钟内可撤回」的窗口判断；由前端发送或后端 createdAt 映射得到。 */
   sentAt?: number;
   /** 服务端原始创建时间（ISO 字符串），用于映射 sentAt。 */
@@ -40,13 +42,23 @@ export interface ChatterProps {
   currentUser?: string;
   /** 关注者名单（头像组，Odoo chatter 风格）。 */
   followers?: string[];
-  onSend?: (text: string) => void;
-  /** 撤回某条消息（仅本人、3 分钟内）。传入后组件内会显示撤回按钮。 */
-  onRecall?: (id: string) => void;
+  onSend?: (text: string) => Promise<ChatterMessage | void> | void;
+  /** 撤回某条消息（仅本人、3 分钟内）。传入后组件内会显示撤回按钮；reject 时组件回滚本地乐观更新。 */
+  onRecall?: (id: string) => Promise<void> | void;
   placeholder?: string;
   className?: string;
   /** 充满父容器高度（消息区 flex-1 自适应滚动），用于详情页分栏布局。 */
   fill?: boolean;
+  /** 是否还有更早消息未加载（瀑布流）；父组件初始传入，内部随分页更新。 */
+  hasMore?: boolean;
+  /** 加载更早的一页（oldest=当前最旧消息）。返回该页消息(asc)与是否还有更早。 */
+  onLoadOlder?: (
+    oldest: ChatterMessage,
+  ) => Promise<{ messages: ChatterMessage[]; hasMore: boolean }>;
+  /** 增量刷新：拉取最新一屏并与现有消息合并（发消息/保存后调用）。 */
+  onLoadLatest?: () => Promise<{ messages: ChatterMessage[]; hasMore: boolean }>;
+  /** 递增触发 onLoadLatest（父组件在保存/推进阶段后自增）。 */
+  refreshToken?: number;
 }
 
 function deriveInitials(name: string): string {
@@ -77,10 +89,17 @@ export function Chatter({
   placeholder,
   className,
   fill,
+  hasMore: hasMoreProp,
+  onLoadOlder,
+  onLoadLatest,
+  refreshToken,
 }: ChatterProps) {
   const { t } = useTranslation();
   const [messages, setMessages] = useState<ChatterMessage[]>(initialMessages);
   const [draft, setDraft] = useState("");
+  const [hasMore, setHasMore] = useState<boolean>(hasMoreProp ?? false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
   // 系统机器人名称取自「联系人」中的设置（实时），回退到消息自带 author
   const bot = useBotConfig();
   // 仅「最新一条」机器人消息实时渲染 3D，其余用静态切片（省资源，避免大量 WebGL 并行）
@@ -88,15 +107,8 @@ export function Chatter({
     () => [...messages].reverse().find((m) => m.isBot)?.id,
     [messages],
   );
-  // 连续同一用户超过 3 条时，可折叠（默认收起，显示最后 3 条），点击展开/收起
-  const [expandedRuns, setExpandedRuns] = useState<Set<string>>(new Set());
-  const toggleRun = (key: string) =>
-    setExpandedRuns((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
+  // 消息展开/收起：全局功能键统一控制，默认全部展开
+  const [allExpanded, setAllExpanded] = useState(true);
   // 按 author 把连续消息分成「组」，便于对超长连续串做折叠
   const runs = useMemo(() => {
     const out: { start: number; end: number }[] = [];
@@ -111,8 +123,10 @@ export function Chatter({
     return out;
   }, [messages]);
 
-  // 撤回：仿微信——不真正删除，而是把该消息就地转为「X 撤回了一条信息」系统记录（乐观更新），再回调后端持久化
-  const recall = (id: string) => {
+  // 撤回：仿微信——就地转为「X 撤回了一条信息」系统记录（乐观更新）；后端失败时回滚
+  const recall = async (id: string) => {
+    const original = messages.find((m) => m.id === id);
+    if (!original) return;
     setMessages((prev) =>
       prev.map((m) =>
         m.id === id
@@ -120,7 +134,11 @@ export function Chatter({
           : m,
       ),
     );
-    onRecall?.(id);
+    try {
+      await onRecall?.(id);
+    } catch {
+      setMessages((prev) => prev.map((m) => (m.id === id ? original : m)));
+    }
   };
 
   const renderMessage = (m: ChatterMessage) => {
@@ -163,6 +181,7 @@ export function Chatter({
     const right = !!currentUser && m.author === currentUser;
     const avatarEl = (
       <Avatar size="sm">
+        {m.authorAvatar ? <AvatarImage src={m.authorAvatar} alt={m.author} /> : null}
         <AvatarFallback>{m.initials ?? deriveInitials(m.author)}</AvatarFallback>
       </Avatar>
     );
@@ -227,22 +246,43 @@ export function Chatter({
     return <Fragment key={m.id}>{bubble}</Fragment>;
   };
 
-  const send = () => {
+  const send = async () => {
     const text = draft.trim();
     if (!text) return;
+    const tempId =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : String(Date.now());
     const msg: ChatterMessage = {
-      id:
-        typeof crypto !== "undefined" && "randomUUID" in crypto
-          ? crypto.randomUUID()
-          : String(Date.now()),
+      id: tempId,
       author: currentUser ?? t("chatter.you"),
       body: text,
       timestamp: formatNow(),
       sentAt: Date.now(),
     };
     setMessages((prev) => [...prev, msg]);
-    onSend?.(text);
     setDraft("");
+    requestAnimationFrame(() => scrollToBottom());
+    try {
+      const created = await onSend?.(text);
+      if (created) {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === tempId
+              ? {
+                  ...created,
+                  sentAt: created.createdAt
+                    ? Date.parse(created.createdAt)
+                    : undefined,
+                }
+              : m,
+          ),
+        );
+      }
+    } catch {
+      // 发送失败：移除乐观消息
+      setMessages((prev) => prev.filter((m) => m.id !== tempId));
+    }
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -251,6 +291,78 @@ export function Chatter({
       send();
     }
   };
+
+  // 滚动到底部（最新消息）——默认定位到最新位置
+  const scrollToBottom = () => {
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  };
+
+  // 瀑布流：加载更早的一页并前插，保持视觉位置不跳动
+  const loadOlder = async () => {
+    if (loadingOlder || !hasMore || !onLoadOlder || messages.length === 0) return;
+    setLoadingOlder(true);
+    try {
+      const oldest = messages[0];
+      const res = await onLoadOlder(oldest);
+      const el = scrollRef.current;
+      const prevHeight = el?.scrollHeight ?? 0;
+      const prevTop = el?.scrollTop ?? 0;
+      setMessages((prev) => [...res.messages, ...prev]);
+      setHasMore(res.hasMore);
+      requestAnimationFrame(() => {
+        const el2 = scrollRef.current;
+        if (!el2) return;
+        el2.scrollTop = el2.scrollHeight - prevHeight + prevTop;
+      });
+    } catch {
+      /* 忽略加载失败 */
+    } finally {
+      setLoadingOlder(false);
+    }
+  };
+
+  // 增量刷新：拉取最新一屏并与现有消息按 id 合并（保留已加载的旧消息视图）
+  const loadLatest = async () => {
+    if (!onLoadLatest) return;
+    try {
+      const res = await onLoadLatest();
+      setMessages((prev) => {
+        const map = new Map<string, ChatterMessage>();
+        [...prev, ...res.messages].forEach((m) => map.set(m.id, m));
+        return [...map.values()].sort((a, b) =>
+          (a.createdAt ?? "") < (b.createdAt ?? "")
+            ? -1
+            : (a.createdAt ?? "") > (b.createdAt ?? "")
+              ? 1
+              : a.id < b.id
+                ? -1
+                : 1,
+        );
+      });
+      setHasMore((h) => h || res.hasMore);
+      requestAnimationFrame(() => {
+        const el = scrollRef.current;
+        if (!el) return;
+        const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+        if (atBottom) scrollToBottom();
+      });
+    } catch {
+      /* 忽略刷新失败 */
+    }
+  };
+
+  // 挂载：默认滚动到最新位置
+  useLayoutEffect(() => {
+    scrollToBottom();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 父组件在保存/推进阶段后自增 refreshToken → 增量拉取最新消息
+  useEffect(() => {
+    if ((refreshToken ?? 0) > 0) void loadLatest();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshToken]);
 
   return (
     <div className={cn("flex flex-col rounded-2xl bg-card shadow-card", fill && "h-full", className)}>
@@ -264,22 +376,42 @@ export function Chatter({
             {messages.length}
           </span>
         </div>
-        {followers && followers.length > 0 && (
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">{t("chatter.followers")}</span>
-            <div className="flex -space-x-2">
-              {followers.map((f, i) => (
-                <Avatar key={i} size="sm" className="ring-2 ring-background">
-                  <AvatarFallback>{deriveInitials(f)}</AvatarFallback>
-                </Avatar>
-              ))}
-            </div>
-          </div>
-        )}
+        <div className="flex items-center gap-3">
+          {/* 消息展开/收起功能键：位于关注者左侧，默认全部展开 */}
+          <button
+            type="button"
+            onClick={() => setAllExpanded((v) => !v)}
+            aria-label={allExpanded ? t("chatter.collapseAll") : t("chatter.expandAll")}
+            className="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            {allExpanded ? (
+              <ChevronUp className="size-3.5" />
+            ) : (
+              <ChevronDown className="size-3.5" />
+            )}
+            {allExpanded ? t("chatter.collapseAll") : t("chatter.expandAll")}
+          </button>
+          {followers && followers.length > 0 && (
+            <>
+              <span className="text-xs text-muted-foreground">{t("chatter.followers")}</span>
+              <div className="flex -space-x-2">
+                {followers.map((f, i) => (
+                  <Avatar key={i} size="sm" className="ring-2 ring-background">
+                    <AvatarFallback>{deriveInitials(f)}</AvatarFallback>
+                  </Avatar>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Message thread */}
       <div
+        ref={scrollRef}
+        onScroll={(e) => {
+          if (e.currentTarget.scrollTop <= 24) void loadOlder();
+        }}
         className={cn(
           "flex flex-col gap-4 overflow-y-auto px-4 py-4",
           fill ? "min-h-0 flex-1" : "max-h-80",
@@ -288,41 +420,56 @@ export function Chatter({
         {messages.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted-foreground">{t("chatter.empty")}</p>
         ) : (
-          runs.map((run) => {
-            const firstId = messages[run.start].id;
-            const group = messages.slice(run.start, run.end + 1);
-            const count = group.length;
-            const expandable = count > 3;
-            const expanded = expandedRuns.has(firstId);
-            // 默认收起：仅显示最后 1 条，其余全部隐藏；展开后显示整组
-            const visible = expandable && !expanded ? group.slice(-1) : group;
-            const hidden = count - visible.length;
-            return (
-              <Fragment key={firstId}>
-                {expandable && !expanded && (
-                  <button
-                    type="button"
-                    onClick={() => toggleRun(firstId)}
-                    className="mx-auto flex items-center gap-1.5 rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                  >
-                    <ChevronDown className="size-3.5" />
-                    {t("chatter.expand", { n: hidden })}
-                  </button>
-                )}
-                {visible.map(renderMessage)}
-                {expandable && expanded && (
-                  <button
-                    type="button"
-                    onClick={() => toggleRun(firstId)}
-                    className="mx-auto flex items-center gap-1.5 rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                  >
-                    <ChevronUp className="size-3.5" />
-                    {t("chatter.collapse")}
-                  </button>
-                )}
-              </Fragment>
-            );
-          })
+          <>
+            {hasMore && onLoadOlder ? (
+              loadingOlder ? (
+                <div className="py-1 text-center text-xs text-muted-foreground">
+                  {t("chatter.loading")}
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => void loadOlder()}
+                  className="mx-auto flex items-center gap-1.5 rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                >
+                  <ChevronDown className="size-3.5" />
+                  {t("chatter.loadOlder")}
+                </button>
+              )
+            ) : (
+              !hasMore &&
+              messages.length > 0 && (
+                <div className="py-1 text-center text-xs text-muted-foreground">
+                  {t("chatter.noMore")}
+                </div>
+              )
+            )}
+            {runs.map((run) => {
+              const firstId = messages[run.start].id;
+              const group = messages.slice(run.start, run.end + 1);
+              const count = group.length;
+              const expandable = count > 3;
+              const collapsed = expandable && !allExpanded;
+              // 收起时仅显示最后 1 条，其余隐藏；展开（默认）显示整组
+              const visible = collapsed ? group.slice(-1) : group;
+              const hidden = count - visible.length;
+              return (
+                <Fragment key={firstId}>
+                  {collapsed && (
+                    <button
+                      type="button"
+                      onClick={() => setAllExpanded(true)}
+                      className="mx-auto flex items-center gap-1.5 rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                    >
+                      <ChevronDown className="size-3.5" />
+                      {t("chatter.expand", { n: hidden })}
+                    </button>
+                  )}
+                  {visible.map(renderMessage)}
+                </Fragment>
+              );
+            })}
+          </>
         )}
       </div>
 

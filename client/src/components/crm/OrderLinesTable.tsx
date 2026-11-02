@@ -38,6 +38,8 @@ export interface OrderLine {
   quantity: number | "";
   unit: string;
   price: number;
+  /** 成本价（元）—— 归属产品库，新建/选品时落产品表；行上记录便于单据展示 */
+  costPrice: number;
   /** 税率（%） */
   taxRate: number;
   /** 关联税项记录 id（打开「搜索: 税项」弹窗选择），null 表示未选择 */
@@ -69,6 +71,7 @@ function makeRow(type: OrderRowType): OrderLine {
     quantity: "",
     unit: "",
     price: 0,
+    costPrice: 0,
     taxRate: isProduct ? 13 : 0,
     taxId: isProduct ? "tax-13g-s" : null,
     discount: 0,
@@ -153,6 +156,10 @@ function comboTotal(combo: OrderLine, lines: OrderLine[]) {
 function parsePrice(rec: SelectRecord) {
   const d = rec.details?.find((x) => /单价|price/i.test(x.label));
   return d ? parseFloat(d.value.replace(/[^\d.]/g, "")) || 0 : 0;
+}
+
+function parseCostPrice(rec: SelectRecord) {
+  return rec.costPrice ?? 0;
 }
 
 function parseUnit(rec: SelectRecord) {
@@ -300,6 +307,7 @@ export function OrderLinesTable({
       productId: p.id,
       unit: parseUnit(p),
       price: parsePrice(p),
+      costPrice: parseCostPrice(p),
     });
 
   // 折叠
@@ -353,10 +361,11 @@ export function OrderLinesTable({
 
   // 合计：产品行小计 ×（若在组合内则乘组合数量），避免双重计算
   // taxIncludeTax: 单价含税时按税率倒算未税金额与税额；否则税额另计
-  const { untaxed, tax, total, taxByRate } = useMemo(() => {
+  const { untaxed, tax, total, taxByRate, profit, margin } = useMemo(() => {
     const byId = new Map(lines.map((l) => [l.id, l]));
     let u = 0;
     let tx = 0;
+    let cost = 0;
     const byRate = new Map<number, number>();
     for (const l of lines) {
       if (l.type !== "product") continue;
@@ -375,12 +384,15 @@ export function OrderLinesTable({
       }
       u += lineUntaxed;
       tx += lineTax;
+      cost += (l.costPrice || 0) * (l.quantity || 0) * mult;
       if (rate > 0) byRate.set(rate, (byRate.get(rate) ?? 0) + lineTax);
     }
+    const p = u - cost;
+    const m = u > 0 ? (p / u) * 100 : 0;
     const taxByRate = Array.from(byRate.entries())
       .map(([rate, amount]) => ({ rate, amount }))
       .sort((a, b) => b.rate - a.rate);
-    return { untaxed: u, tax: tx, total: u + tx, taxByRate };
+    return { untaxed: u, tax: tx, total: u + tx, taxByRate, profit: p, margin: m };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lines, priceIncludeTax]);
 
@@ -407,21 +419,6 @@ export function OrderLinesTable({
       visibleLines.push(l);
     }
   }
-
-  const numInput = (
-    value: number,
-    onChange: (v: number) => void,
-    step = "any",
-  ) => (
-    <input
-      type="number"
-      min="0"
-      step={step}
-      value={Number.isFinite(value) ? value : 0}
-      onChange={(e) => onChange(Number(e.target.value) || 0)}
-      className="h-8 w-full rounded-md border-0 bg-transparent px-2 text-right text-sm tabular-nums outline-none focus-visible:ring-1 focus-visible:ring-primary"
-    />
-  );
 
   const headerCell = (
     label: string,
@@ -460,22 +457,21 @@ export function OrderLinesTable({
   return (
     <div className={cn("rounded-lg border border-border bg-card", className)}>
       <div className="max-h-[460px] overflow-auto">
-        <table className="w-full min-w-[1000px] table-fixed text-sm">
+        <table className="w-full min-w-[640px] table-fixed text-sm">
           <thead>
             <tr className="sticky top-0 z-10 bg-muted">
-              {/* 固定布局下唯一未设宽的列（描述）自动吸收剩余宽度 */}
+              {/* 固定布局下唯一未设宽的列（描述）自动吸收剩余宽度；其余列按百分比自适应容器 */}
               {headerCell(t("orderLines.description"))}
               {/* 产品需求图片（每行独立上传） */}
-              <th className="w-12 px-2 py-2 text-center text-xs font-medium text-muted-foreground">
+              <th className="w-[6%] px-2 py-2 text-center text-xs font-medium text-muted-foreground">
                 {t("orderLines.image")}
               </th>
-              {headerCell(t("orderLines.quantity"), "right", "w-16")}
-              {headerCell(t("orderLines.unit"), "left", "w-20")}
-              {headerCell(t("orderLines.unitPrice"), "right", "w-28")}
-              {headerCell(t("orderLines.taxes"), "left", "w-40")}
-              {headerCell(t("orderLines.discount"), "right", "w-16")}
-              {headerCell(t("orderLines.subtotal"), "right", "w-32")}
-              <th className="w-12 px-2 py-2" />
+              {headerCell(t("orderLines.quantity"), "right", "w-[8%]")}
+              {headerCell(t("orderLines.unitPrice"), "right", "w-[12%]")}
+              {headerCell(t("orderLines.costPrice"), "right", "w-[12%]")}
+              {headerCell(t("orderLines.taxes"), "left", "w-[16%]")}
+              {headerCell(t("orderLines.subtotal"), "right", "w-[15%]")}
+              <th className="w-[5%] px-2 py-2" />
             </tr>
           </thead>
           <tbody>
@@ -531,8 +527,8 @@ export function OrderLinesTable({
                         )}
                       </div>
                     </td>
-                    <td className="w-12 p-1 align-middle" />
-                    <td className="w-16 p-1 align-middle">
+                    <td className="w-[6%] p-1 align-middle" />
+                    <td className="w-[8%] p-1 align-middle">
                       <InputNumber
                         value={l.quantity}
                         onChange={(v) => patch(l.id, { quantity: v })}
@@ -541,7 +537,7 @@ export function OrderLinesTable({
                       />
                     </td>
                     <td colSpan={4} className="p-1" />
-                    <td className="w-32 truncate px-2 py-1.5 text-right align-middle text-sm font-semibold tabular-nums">
+                    <td className="w-[15%] truncate px-2 py-1.5 text-right align-middle text-sm font-semibold tabular-nums">
                       {money(comboTotal(l, lines))}
                     </td>
                     <td className="p-1 align-middle">
@@ -639,6 +635,7 @@ export function OrderLinesTable({
                               productId: rec?.id ?? null,
                               description: rec ? rec.label : "",
                               unit: rec ? parseUnit(rec) : "",
+                              costPrice: rec ? parseCostPrice(rec) : 0,
                             })
                           }
                           onInputChange={(text) =>
@@ -651,7 +648,7 @@ export function OrderLinesTable({
                       </div>
                     </div>
                   </td>
-                  <td className="w-12 p-1 align-middle">
+                  <td className="w-[6%] p-1 align-middle">
                     <ImageUpload
                       value={l.image || null}
                       onChange={(v) => patch(l.id, { image: v ?? "" })}
@@ -670,17 +667,23 @@ export function OrderLinesTable({
                       bare
                     />
                   </td>
-                  <td className="w-20 p-1 align-middle">
-                    <Input
-                      value={l.unit}
-                      className="h-8 rounded-md border-0 bg-transparent px-2 text-sm shadow-none focus-visible:ring-1 focus-visible:ring-primary"
-                      onChange={(e) => patch(l.id, { unit: e.target.value })}
+                  <td className="w-[12%] p-1 align-middle">
+                    <InputNumber
+                      value={l.price}
+                      onChange={(v) => patch(l.id, { price: v === "" ? 0 : v })}
+                      min={0}
+                      bare
                     />
                   </td>
-                  <td className="w-28 p-1 align-middle">
-                    {numInput(l.price, (v) => patch(l.id, { price: v }), "0.01")}
+                  <td className="w-[12%] p-1 align-middle">
+                    <InputNumber
+                      value={l.costPrice ?? 0}
+                      onChange={(v) => patch(l.id, { costPrice: v === "" ? 0 : v })}
+                      min={0}
+                      bare
+                    />
                   </td>
-                  <td className="w-40 p-1 align-middle">
+                  <td className="w-[16%] p-1 align-middle">
                     <Picker
                       records={TAXES}
                       value={l.taxId}
@@ -698,18 +701,7 @@ export function OrderLinesTable({
                       }
                     />
                   </td>
-                  <td className="w-16 p-1 align-middle">
-                    <InputNumber
-                      value={Math.round((l.discount || 0) * 100)}
-                      onChange={(v) =>
-                        patch(l.id, { discount: v === "" ? 0 : v / 100 })
-                      }
-                      step={1}
-                      bare
-                      suffix="%"
-                    />
-                  </td>
-                  <td className="w-32 truncate px-2 py-1.5 text-right align-middle text-sm font-medium tabular-nums">
+                  <td className="w-[15%] truncate px-2 py-1.5 text-right align-middle text-sm font-medium tabular-nums">
                     {money(lineSubtotal(l))}
                   </td>
                   <td className="p-1 align-middle">
@@ -726,7 +718,7 @@ export function OrderLinesTable({
               );
             })}
             <tr>
-              <td colSpan={9} className="p-0">
+              <td colSpan={8} className="p-0">
                 <div className="flex flex-wrap items-center gap-1 border-t border-dashed border-border px-2 py-1.5">
                   <ButtonVariantGhost
                     onClick={() => addRow("product")}
@@ -785,6 +777,20 @@ export function OrderLinesTable({
           <div className="flex justify-between border-t border-border py-1 font-semibold text-foreground">
             <span>{t("orderLines.total")}</span>
             <span className="tabular-nums">{money(total)}</span>
+          </div>
+          <div
+            className={cn(
+              "flex justify-between border-t border-border py-1 font-semibold",
+              profit >= 0 ? "text-emerald-600" : "text-red-600",
+            )}
+          >
+            <span>
+              {t("orderLines.profit")}
+              <span className="ml-1 text-xs font-normal text-muted-foreground">
+                ({margin.toFixed(1)}%)
+              </span>
+            </span>
+            <span className="tabular-nums">{money(profit)}</span>
           </div>
         </div>
       </div>

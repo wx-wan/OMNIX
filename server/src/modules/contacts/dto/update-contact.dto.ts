@@ -61,6 +61,9 @@ export class UpdateContactDto {
   role?: string;
 
   @IsOptional()
+  archived?: boolean; // 归档 / 取消归档（关联了商机的往来单位不允许删除，用归档隐藏代替）
+
+  @IsOptional()
   @IsString()
   @MaxLength(40)
   botCharacter?: string; // 系统机器人的 3D 形象（wobnimo 角色 id）

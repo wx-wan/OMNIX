@@ -54,9 +54,22 @@ export default function Login() {
       const from = (location.state as { from?: { pathname?: string } })?.from?.pathname || "/";
       navigate(from, { replace: true });
     } catch (err: unknown) {
-      const status = (err as { response?: { status?: number } })?.response?.status;
-      // 有响应 → 按状态码给业务提示；无响应（网络/后端未启动）→ 服务器不可达
-      toast.error(status ? t("auth.invalidCredentials") : t("auth.serverUnreachable"));
+      const e = err as {
+        response?: { status?: number; data?: { message?: string | string[] } };
+      };
+      const status = e.response?.status;
+      if (status === 401) {
+        // 仅认证失败才提示凭据错误
+        toast.error(t("auth.invalidCredentials"));
+      } else if (!status || status === 404) {
+        // 无响应（网络断开）或 404（代理后端未启动）→ 服务器不可达
+        toast.error(t("auth.serverUnreachable"));
+      } else {
+        const msg = Array.isArray(e.response?.data?.message)
+          ? e.response.data.message.join("；")
+          : e.response?.data?.message;
+        toast.error(msg ? `${t("auth.serverError")}：${msg}` : t("auth.serverError"));
+      }
     } finally {
       setLoading(false);
     }

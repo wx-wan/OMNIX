@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Search } from "lucide-react";
+import { Search, Archive, ArchiveRestore } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -28,6 +28,15 @@ import {
 import { Chatter } from "@/components/chatter/Chatter";
 import { RobotAvatar } from "@/components/common/RobotAvatar";
 import { useBotConfig, saveBotConfig } from "@/lib/botConfig";
+import { extractErrorDetail } from "@/lib/error";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   ContactForm,
   EMPTY_CONTACT,
@@ -41,6 +50,7 @@ interface Contact {
   id: string;
   type: ContactType;
   customerType?: string | null;
+  aiGenerated?: boolean;
   name: string;
   company?: string | null;
   email?: string | null;
@@ -49,6 +59,7 @@ interface Contact {
   website?: string | null;
   role?: string | null;
   _count?: { deals: number };
+  archived?: boolean;
 }
 
 // wobnimo 内置 3D 形象（角色 id），供系统机器人形象选择。
@@ -90,6 +101,9 @@ export default function Contacts() {
 
   const [detail, setDetail] = useState<Contact | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
 
   // 系统机器人形象设置
   const bot = useBotConfig();
@@ -118,7 +132,7 @@ export default function Contacts() {
   const load = () => {
     setLoading(true);
     api
-      .get<Contact[]>("/contacts")
+      .get<Contact[]>("/contacts", { params: { includeArchived: true } })
       .then((r) => setList(r.data))
       .catch(() => setList([]))
       .finally(() => setLoading(false));
@@ -132,13 +146,14 @@ export default function Contacts() {
   const filtered = useMemo(() => {
     return list
       .filter((c) => (tab ? c.type === tab : true))
+      .filter((c) => (showArchived ? true : !c.archived))
       .filter(
         (c) =>
           c.name.toLowerCase().includes(q.toLowerCase()) ||
           (c.company ?? "").toLowerCase().includes(q.toLowerCase()) ||
           (c.email ?? "").toLowerCase().includes(q.toLowerCase()),
       );
-  }, [list, tab, q]);
+  }, [list, tab, q, showArchived]);
 
   const openCreate = () => {
     setEditing(null);
@@ -191,10 +206,36 @@ export default function Contacts() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    await api.delete(`/contacts/${id}`).catch(() => {});
-    if (detail?.id === id) setDetailOpen(false);
-    load();
+  const handleDelete = async () => {
+    if (!detail || deleting) return;
+    setDeleting(true);
+    try {
+      await api.delete(`/contacts/${detail.id}`);
+      toast.success(t("contact.delete") + " " + t("common.success"));
+      setDeleteOpen(false);
+      setDetailOpen(false);
+      load();
+    } catch (e) {
+      setDeleteOpen(false);
+      toast.error(extractErrorDetail(e));
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  // 归档 / 取消归档：关联了商机的往来单位不允许删除，用归档隐藏代替
+  const handleArchive = async (c: Contact) => {
+    try {
+      await api.patch(`/contacts/${c.id}`, { archived: !c.archived });
+      toast.success(
+        (c.archived ? t("common.unarchive") : t("common.archive")) +
+          " " +
+          t("common.success"),
+      );
+      load();
+    } catch (e) {
+      toast.error(extractErrorDetail(e));
+    }
   };
 
   const typeLabel = (type: ContactType) =>
@@ -281,6 +322,13 @@ export default function Contacts() {
             </Button>
           ))}
         </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setShowArchived((v) => !v)}
+        >
+          {showArchived ? t("common.hideArchived") : t("common.showArchived")}
+        </Button>
       </div>
 
       <Section noPadding>
@@ -292,8 +340,17 @@ export default function Contacts() {
               onClick={() => openDetail(c)}
             >
               <div className="min-w-0">
-                <p className="truncate text-sm font-medium">
-                  {c.name}
+                <p className="flex items-center gap-2 truncate text-sm font-medium">
+                  <span className="truncate">{c.name}</span>
+                  {c.aiGenerated && (
+                    <Badge
+                      variant="outline"
+                      className="border-amber-500 text-amber-600"
+                      title={t("contact.aiPendingHint")}
+                    >
+                      {t("contact.aiPending")}
+                    </Badge>
+                  )}
                   {c.company && (
                     <span className="ml-2 text-xs text-muted-foreground">
                       {c.company}
@@ -308,11 +365,32 @@ export default function Contacts() {
                 <Badge variant={c.type === "user" ? "default" : "secondary"}>
                   {typeLabel(c.type)}
                 </Badge>
+                {c.archived && (
+                  <Badge
+                    variant="outline"
+                    className="border-slate-500 text-slate-500"
+                  >
+                    {t("common.archived")}
+                  </Badge>
+                )}
                 {c._count && (
                   <span className="text-xs text-muted-foreground">
                     {c._count.deals}
                   </span>
                 )}
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  className="text-muted-foreground hover:text-foreground"
+                  aria-label={c.archived ? t("common.unarchive") : t("common.archive")}
+                  title={c.archived ? t("common.unarchive") : t("common.archive")}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleArchive(c);
+                  }}
+                >
+                  {c.archived ? <ArchiveRestore /> : <Archive />}
+                </Button>
               </div>
             </div>
           ))}
@@ -372,6 +450,23 @@ export default function Contacts() {
                   <Badge variant={detail.type === "user" ? "default" : "secondary"}>
                     {typeLabel(detail.type)}
                   </Badge>
+                  {detail.archived && (
+                    <Badge
+                      variant="outline"
+                      className="border-slate-500 text-slate-500"
+                    >
+                      {t("common.archived")}
+                    </Badge>
+                  )}
+                  {detail.aiGenerated && (
+                    <Badge
+                      variant="outline"
+                      className="border-amber-500 text-amber-600"
+                      title={t("contact.aiPendingHint")}
+                    >
+                      {t("contact.aiPending")}
+                    </Badge>
+                  )}
                 </div>
                 <SheetTitle className="text-xl">{detail.name}</SheetTitle>
                 {detail.company && (
@@ -411,9 +506,22 @@ export default function Contacts() {
                   {t("contact.edit")}
                 </Button>
                 <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleArchive(detail)}
+                >
+                  {detail.archived ? t("common.unarchive") : t("common.archive")}
+                </Button>
+                <Button
                   variant="destructive"
                   size="sm"
-                  onClick={() => handleDelete(detail.id)}
+                  disabled={(detail._count?.deals ?? 0) > 0}
+                  title={
+                    (detail._count?.deals ?? 0) > 0
+                      ? t("common.deleteBlockedByDeal")
+                      : undefined
+                  }
+                  onClick={() => setDeleteOpen(true)}
                 >
                   {t("contact.delete")}
                 </Button>
@@ -424,6 +532,35 @@ export default function Contacts() {
           )}
         </SheetContent>
       </Sheet>
+
+      {/* 删除客户确认 */}
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("contact.delete")}</DialogTitle>
+            <DialogDescription>
+              {t("contact.deleteConfirm", { name: detail?.name ?? "" })}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setDeleteOpen(false)}
+            >
+              {t("common.cancel")}
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={deleting}
+              onClick={handleDelete}
+            >
+              {deleting ? t("common.loading") : t("common.confirm")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Stack>
   );
 }

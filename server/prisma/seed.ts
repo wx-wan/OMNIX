@@ -95,6 +95,22 @@ async function main() {
   });
   console.log("✓ ensured system bot (ominXBot)");
 
+  // 服务账号 accio@omnix.dev：供 Accio Work（MCP Client）经 /mcp 调用时作为操作主体，
+  // 其创建的商机 source="Accio"、Chatter 署名 "Accio AI"，与人工操作区分。无密码不可登录。
+  await prisma.contact.upsert({
+    where: { email: "accio@omnix.dev" },
+    update: { name: "Accio AI", type: ContactType.user, role: "user", isSystem: false, password: null },
+    create: {
+      email: "accio@omnix.dev",
+      name: "Accio AI",
+      type: ContactType.user,
+      role: "user",
+      isSystem: false,
+      password: null,
+    },
+  });
+  console.log("✓ ensured Accio service account (accio@omnix.dev)");
+
   // 演示用「客户」类型联系人：联系人页的客户标签、商机「所属公司」下拉共用
   const customers: Array<{
     email: string;

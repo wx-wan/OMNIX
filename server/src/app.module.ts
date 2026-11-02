@@ -10,6 +10,10 @@ import { CrmModule } from "./modules/crm/crm.module";
 import { ContactsModule } from "./modules/contacts/contacts.module";
 import { ProductsModule } from "./modules/products/products.module";
 import { UploadModule } from "./modules/upload/upload.module";
+import { McpModule } from "./modules/mcp/mcp.module";
+import { SettingsModule } from "./modules/settings/settings.module";
+import { OauthModule } from "./modules/oauth/oauth.module";
+import { QuotationsModule } from "./modules/quotations/quotations.module";
 
 @Module({
   imports: [
@@ -21,6 +25,10 @@ import { UploadModule } from "./modules/upload/upload.module";
     ContactsModule,
     ProductsModule,
     UploadModule,
+    McpModule,
+    SettingsModule,
+    OauthModule,
+    QuotationsModule,
   ],
   controllers: [HealthController],
   providers: [

@@ -4,10 +4,11 @@ import {
   BadRequestException,
   ForbiddenException,
 } from "@nestjs/common";
-import { Priority, Prisma } from "@prisma/client";
+import { Priority, Prisma, type ChatterMessage } from "@prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
 import { UpdateDealDto } from "./dto/update-deal.dto";
 import { CreateDealDto } from "./dto/create-deal.dto";
+import { DealLineDto } from "./dto/deal-line.dto";
 
 // 字段中文标签：把「字段级修改」翻译成可读的操作历史
 const FIELD_LABELS: Record<string, string> = {
@@ -34,33 +35,37 @@ export class CrmService {
   // 系统机器人（ominXBot）缓存：负责把操作历史写入各单据 Chatter
   private botId?: string;
   private botName = "ominXBot";
+  private botAvatar?: string | null;
 
-  private async getBot(): Promise<{ id?: string; name: string }> {
+  private async getBot(): Promise<{ id?: string; name: string; avatarUrl?: string | null }> {
     if (this.botId === undefined) {
-      const bot = await this.prisma.contact.findFirst({ where: { isSystem: true } });
+      // 锚定 bot 账号（bot@omnix.dev），避免与同为 isSystem 的 Accio work 等代理用户冲突
+      const bot = await this.prisma.contact.findUnique({ where: { email: "bot@omnix.dev" } });
       this.botId = bot?.id;
       this.botName = bot?.name ?? "ominXBot";
+      this.botAvatar = bot?.avatarUrl ?? null;
     }
-    return { id: this.botId, name: this.botName };
+    return { id: this.botId, name: this.botName, avatarUrl: this.botAvatar };
   }
 
-  /** 以系统机器人身份记录一条操作历史（写入 Chatter） */
-  private async recordEvent(resId: string, body: string): Promise<void> {
+  /** 以系统机器人身份记录一条操作历史（写入 Chatter）。resModel 缺省为 deal，供其他单据复用。 */
+  async recordEvent(resId: string, body: string, resModel = "deal"): Promise<void> {
     const bot = await this.getBot();
     await this.prisma.chatterMessage.create({
       data: {
-        resModel: "deal",
+        resModel,
         resId,
         authorId: bot.id ?? null,
         authorName: bot.name,
         authorIsBot: true,
+        authorAvatar: bot.avatarUrl ?? null,
         body,
       },
     });
   }
 
   /** 解析操作者名字（用于把创建者/修改人写进操作记录）。无操作者时回退「用户」。 */
-  private async getActorName(actorId?: string): Promise<string> {
+  async getActorName(actorId?: string): Promise<string> {
     if (!actorId) return "用户";
     const u = await this.prisma.contact.findUnique({ where: { id: actorId } });
     return u?.name ?? "用户";
@@ -77,6 +82,8 @@ export class CrmService {
       orderBy: { position: "asc" },
       include: {
         deals: {
+          // 看板卡片需展示往来单位 / 联系人，故携带精简的联系人信息
+          include: { contact: true },
           orderBy: { position: "asc" },
         },
       },
@@ -87,8 +94,105 @@ export class CrmService {
       deals: stage.deals.map((deal) => ({
         ...deal,
         amount: deal.amount != null ? deal.amount.toNumber() : null,
+        contact: deal.contact
+          ? {
+              name: deal.contact.name,
+              company: deal.contact.company,
+              type: deal.contact.type,
+            }
+          : null,
       })),
     }));
+  }
+
+  /** 统计同一客户（往来单位/联系人，按 contactId）下的商机数量，可排除指定商机。用于商机详情「类似商机」展示。 */
+  async countDealsByContact(
+    contactId: string,
+    excludeDealId?: string,
+  ): Promise<number> {
+    return this.prisma.deal.count({
+      where: {
+        contactId,
+        ...(excludeDealId ? { id: { not: excludeDealId } } : {}),
+      },
+    });
+  }
+
+  /**
+   * 同步订单明细：整张 lines 存为商机明细 JSON（行级数量/折扣/单价随行，不进产品表），
+   * 并对「空 productId 的产品行」在产品库新建一条（图片/描述/单位/税项/成本价落产品库，便于复用）。
+   * 注意：单价(售价)只留在商机明细行，不写产品库；成本价归属产品库。
+   * 返回明细 JSON 与首个产品 id（用于回退兼容单产品关联）。
+   */
+  private async syncOrderLines(
+    tx: Prisma.TransactionClient,
+    lines: DealLineDto[] | undefined,
+  ): Promise<{ linesJson: string | null; firstProductId: string | undefined }> {
+    if (!lines || lines.length === 0) {
+      return { linesJson: null, firstProductId: undefined };
+    }
+    const productLines = lines.filter(
+      (l) => l.type !== "combo" && l.type !== "note",
+    );
+    let firstProductId: string | undefined;
+    for (const l of productLines) {
+      let resolvedId: string | undefined;
+      if (l.productId) {
+        const base = await tx.product.findUnique({ where: { id: l.productId } });
+        const desc = l.description?.trim() ?? "";
+        // 已选产品但描述被改 → 以原产品为模板生成一条变体(SKU)入库，便于复用。
+        // 例外：需求产品(isRequirement)本身即「需求阶段描述」载体——有 productId 时改描述
+        // 只在商机明细行生效，不触发新建变体（避免需求产品间无限裂变）。
+        if (
+          base &&
+          desc &&
+          desc !== (base.description ?? "") &&
+          !base.isRequirement
+        ) {
+          const variant = await tx.product.create({
+            data: {
+              description: desc,
+              mode: base.mode,
+              process: base.process,
+              audience: base.audience,
+              category: base.category,
+              price: base.price,
+              // 成本价取本行录入（需求阶段成本），否则继承来源产品成本
+              costPrice:
+                l.costPrice != null
+                  ? new Prisma.Decimal(l.costPrice)
+                  : base.costPrice,
+              tax: base.tax,
+              image: base.image,
+              unit: base.unit,
+              parentId: base.id,
+              isRequirement: true, // 需求阶段改描述生成的变体同样打标
+            },
+          });
+          l.productId = variant.id; // 回填 → 幂等，后续保存不再重复建
+          resolvedId = variant.id;
+        } else {
+          resolvedId = l.productId; // 描述未改：维持原产品关联，不碰产品库
+        }
+      } else {
+        // 新产品：在产品库新建（图片/描述/单位/税项/成本价落产品库；单价只留商机行）
+        const created = await tx.product.create({
+          data: {
+            description: l.description?.trim() || "未命名产品",
+            unit: l.unit?.trim() || undefined,
+            // 单价(售价)只留在商机明细行，不写产品库；成本价归属产品库
+            costPrice: l.costPrice != null ? new Prisma.Decimal(l.costPrice) : null,
+            tax: l.taxRate != null ? new Prisma.Decimal(l.taxRate) : null,
+            image: l.image || undefined,
+            isRequirement: true, // 需求阶段新建的产品打标
+          },
+        });
+        l.productId = created.id; // 回填并写回 JSON，避免后续保存重复新建
+        resolvedId = created.id;
+      }
+      if (!firstProductId) firstProductId = resolvedId;
+    }
+    return { linesJson: JSON.stringify(lines), firstProductId };
   }
 
   /** 新建商机：可内联客户画像 + 产品需求（各自落库），关联后进入第一个阶段（线索到达）。 */
@@ -115,15 +219,20 @@ export class CrmService {
     const deal = await this.prisma.$transaction(async (tx) => {
       // 内联往来单位 / 联系人（默认 type=customer）落库 contacts 表。
       // 同邮箱视为同一联系人：复用已有记录（CRM 去重），避免 email 唯一约束冲突（P2002）。
-      const existingContact = dto.contact
-        ? await tx.contact.findUnique({ where: { email: dto.contact.email } })
-        : null;
+      // 邮箱为空（MCP 允许无邮箱）时跳过去重，直接新建客户。
+      const existingContact =
+        dto.contact && dto.contact.email
+          ? await tx.contact.findUnique({ where: { email: dto.contact.email } })
+          : null;
       const contact = existingContact ?? (dto.contact
         ? await tx.contact.create({ data: dto.contact })
         : null);
-      const product = dto.product
+      const hasLines = !!(dto.lines && dto.lines.length);
+      // 有明细时不再单独建遗留单产品，避免重复；明细里的新产品行会在下方 syncOrderLines 建库
+      const product = !hasLines && dto.product
         ? await tx.product.create({ data: dto.product })
         : null;
+      const { linesJson, firstProductId } = await this.syncOrderLines(tx, dto.lines);
       const agg = await tx.deal.aggregate({
         where: { stageId },
         _max: { position: true },
@@ -142,7 +251,8 @@ export class CrmService {
           stageId,
           position: (agg._max.position ?? -1) + 1,
           contactId: dto.contactId ?? contact?.id ?? undefined,
-          productId: dto.productId ?? product?.id ?? undefined,
+          productId: dto.productId ?? firstProductId ?? product?.id ?? undefined,
+          linesJson,
         },
       });
       // 记录进入初始阶段的停留日志
@@ -187,13 +297,38 @@ export class CrmService {
     };
   }
 
-  /** Chatter 操作/讨论记录：按业务记录取消息流（机器人操作历史 + 人工评论），升序。 */
-  async listChatter(resId: string) {
-    const msgs = await this.prisma.chatterMessage.findMany({
-      where: { resModel: "deal", resId },
-      orderBy: { createdAt: "asc" },
-    });
-    return msgs.map((m) => ({
+  /** Chatter 操作/讨论记录：分页取消息流（机器人操作历史 + 人工评论）。
+   * - 无 before：取最新 limit 条（asc 返回），hasMore 表示是否还有更早消息；
+   * - 有 before（最旧已加载消息的 createdAt）：取该时间之前的更早 limit 条（asc）。
+   * 前端瀑布流：初始拉最新一屏，滚动到顶时加载更早。 */
+  async listChatter(
+    resId: string,
+    opts?: { limit?: number; before?: string },
+    resModel = "deal",
+  ) {
+    const limit = Math.min(Math.max(opts?.limit ?? 30, 1), 100);
+    const where: Prisma.ChatterMessageWhereInput = { resModel, resId };
+    let rows: ChatterMessage[];
+    if (opts?.before) {
+      rows = await this.prisma.chatterMessage.findMany({
+        where: { ...where, createdAt: { lt: new Date(opts.before) } },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        take: limit + 1,
+      });
+    } else {
+      rows = await this.prisma.chatterMessage.findMany({
+        where,
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        take: limit + 1,
+      });
+    }
+    const hasMore = rows.length > limit;
+    const page = rows.slice(0, limit).reverse(); // asc：最旧在前、最新在后
+    return { messages: page.map((m) => this.toChatterDto(m)), hasMore };
+  }
+
+  private toChatterDto(m: ChatterMessage) {
+    return {
       id: m.id,
       author: m.authorName,
       initials: m.authorIsBot ? "🤖" : m.authorName.slice(0, 1).toUpperCase(),
@@ -202,23 +337,29 @@ export class CrmService {
       isBot: m.authorIsBot,
       isRecall: m.isRecall,
       authorId: m.authorId,
+      authorAvatar: m.authorAvatar ?? null,
       createdAt: m.createdAt.toISOString(),
-    }));
+    };
   }
 
   /** 人工发布一条 Chatter 评论（区别于机器人操作记录）。authorId 为空时按匿名处理。 */
-  async addComment(resId: string, body: string, authorId?: string) {
+  async addComment(resId: string, body: string, authorId?: string, resModel = "deal") {
     let authorName = "用户";
+    let authorAvatar: string | null = null;
     if (authorId) {
       const u = await this.prisma.contact.findUnique({ where: { id: authorId } });
-      if (u) authorName = u.name;
+      if (u) {
+        authorName = u.name;
+        authorAvatar = u.avatarUrl ?? null;
+      }
     }
     const msg = await this.prisma.chatterMessage.create({
       data: {
-        resModel: "deal",
+        resModel,
         resId,
         authorId: authorId ?? null,
         authorName,
+        authorAvatar,
         authorIsBot: false,
         body,
       },
@@ -237,9 +378,9 @@ export class CrmService {
   }
 
   /** 撤回一条 Chatter 消息：仅本人发送、且距发送不超过 3 分钟可撤回，删除后持久化。 */
-  async deleteChatter(resId: string, msgId: string, actorId?: string) {
+  async deleteChatter(resId: string, msgId: string, actorId?: string, resModel = "deal") {
     const msg = await this.prisma.chatterMessage.findFirst({
-      where: { id: msgId, resModel: "deal", resId },
+      where: { id: msgId, resModel, resId },
     });
     if (!msg) throw new NotFoundException("消息不存在");
     if (!actorId || msg.authorId !== actorId) {
@@ -267,6 +408,7 @@ export class CrmService {
     if (!exists) throw new NotFoundException(`Deal ${id} not found`);
 
     const actor = await this.getActorName(actorId);
+    const hasLines = !!(dto.lines && dto.lines.length);
 
     const stageChanged =
       dto.stageId !== undefined && dto.stageId !== exists.stageId;
@@ -328,9 +470,14 @@ export class CrmService {
       }
     }
     if (stageChanged && newStage && exists.stage) {
-      changeEvents.push(
-        `${actor} 将阶段由「${exists.stage.title}」推进到「${newStage.title}」`,
-      );
+      // 线索确认（线索到达 → 需求确认）时，写一条更友好的系统提示
+      if (exists.stage.key === "lead" && newStage.key === "qualify") {
+        changeEvents.push("当前线索已确认为有效商机，离成功更近一步了呢～");
+      } else {
+        changeEvents.push(
+          `${actor} 将阶段由「${exists.stage.title}」推进到「${newStage.title}」`,
+        );
+      }
     }
 
     await this.prisma.$transaction(async (tx) => {
@@ -339,7 +486,7 @@ export class CrmService {
         await tx.contact.update({ where: { id: exists.contactId }, data: dto.contact });
       }
       // 同步更新关联的产品需求
-      if (dto.product && exists.productId) {
+      if (dto.product && exists.productId && !hasLines) {
         const pd: Prisma.ProductUpdateInput = { ...dto.product };
         for (const key of ["price", "costPrice", "tax"] as const) {
           const v = (pd as Record<string, unknown>)[key];
@@ -348,6 +495,12 @@ export class CrmService {
           }
         }
         await tx.product.update({ where: { id: exists.productId }, data: pd });
+      }
+      // 订单明细：随商机保存；空 productId 的产品行在产品库新建
+      const { linesJson, firstProductId } = await this.syncOrderLines(tx, dto.lines);
+      if (linesJson !== null) {
+        data.linesJson = linesJson;
+        if (firstProductId) data.product = { connect: { id: firstProductId } };
       }
       if (stageChanged && newStage) {
         // 关闭当前阶段日志，记录进入新阶段的日志
@@ -374,5 +527,16 @@ export class CrmService {
     }
 
     return this.getDeal(id);
+  }
+
+  /** 删除商机：报价单/阶段日志按 onDelete:Cascade 级联删除；Chatter 无外键，按引用清理。 */
+  async deleteDeal(id: string) {
+    const exists = await this.prisma.deal.findUnique({ where: { id } });
+    if (!exists) throw new NotFoundException(`Deal ${id} not found`);
+    await this.prisma.chatterMessage.deleteMany({
+      where: { resModel: "deal", resId: id },
+    });
+    await this.prisma.deal.delete({ where: { id } });
+    return { ok: true };
   }
 }

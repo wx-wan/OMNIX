@@ -57,8 +57,20 @@ export default function Register() {
       toast.success(t("auth.registerSuccess"));
       navigate("/", { replace: true });
     } catch (err: unknown) {
-      const code = (err as { response?: { status?: number } })?.response?.status;
-      toast.error(code === 409 ? t("auth.emailExists") : t("auth.invalidCredentials"));
+      const e = err as {
+        response?: { status?: number; data?: { message?: string | string[] } };
+      };
+      const status = e.response?.status;
+      if (status === 409) {
+        toast.error(t("auth.emailExists"));
+      } else if (!status || status === 404) {
+        toast.error(t("auth.serverUnreachable"));
+      } else {
+        const msg = Array.isArray(e.response?.data?.message)
+          ? e.response.data.message.join("；")
+          : e.response?.data?.message;
+        toast.error(msg ? `${t("auth.serverError")}：${msg}` : t("auth.serverError"));
+      }
     } finally {
       setLoading(false);
     }
