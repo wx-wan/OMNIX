@@ -114,6 +114,11 @@ export class UpdateDealDto {
   @IsString()
   source?: string;
 
+  /** 关联往来单位（公司/联系人）id；提交上来可切换所属公司或联系人。 */
+  @IsOptional()
+  @IsString()
+  contactId?: string;
+
   @IsOptional()
   @IsString()
   stageId?: string;

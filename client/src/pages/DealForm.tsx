@@ -172,18 +172,6 @@ const MOCK_SALESPEOPLE: SalesPerson[] = [
   { id: "s5", name: "陈晨" },
 ];
 
-// 演示用「客户」类型联系人（所属公司下拉用，type=customer）
-const DEAL_CUSTOMER_CONTACTS: SelectRecord[] = [
-  { id: "c1", label: "深圳恒星电子", sublabel: "林经理", usage: 42, details: [{ label: "电话", value: "138-0011-2233" }, { label: "邮箱", value: "lin@hengxing.com" }, { label: "国家", value: "中国" }] },
-  { id: "c2", label: "宁波远洋贸易", sublabel: "王经理", usage: 38, details: [{ label: "电话", value: "139-0022-3344" }, { label: "邮箱", value: "wang@yuan.cn" }, { label: "国家", value: "中国" }] },
-  { id: "c3", label: "东莞精工模具", sublabel: "陈工", usage: 31, details: [{ label: "电话", value: "137-0033-4455" }, { label: "邮箱", value: "chen@jinggong.com" }, { label: "国家", value: "中国" }] },
-  { id: "c4", label: "上海联拓科技", sublabel: "赵经理", usage: 27, details: [{ label: "电话", value: "136-0044-5566" }, { label: "邮箱", value: "zhao@liantuo.com" }, { label: "国家", value: "中国" }] },
-  { id: "c5", label: "广州海纳塑胶", sublabel: "孙主管", usage: 24, details: [{ label: "电话", value: "135-0055-6677" }, { label: "邮箱", value: "sun@haina.com" }, { label: "国家", value: "中国" }] },
-  { id: "c6", label: "苏州锐驰电机", sublabel: "李经理", usage: 19, details: [{ label: "电话", value: "134-0066-7788" }, { label: "邮箱", value: "li@ruichi.com" }, { label: "国家", value: "中国" }] },
-  { id: "c7", label: "Hangzhou Yihao", sublabel: "Amy", usage: 15, details: [{ label: "电话", value: "+86-571-8888" }, { label: "邮箱", value: "amy@yihao.com" }, { label: "国家", value: "中国" }] },
-  { id: "c8", label: "佛山德胜五金", sublabel: "周经理", usage: 12, details: [{ label: "电话", value: "133-0077-8899" }, { label: "邮箱", value: "zhou@desheng.com" }, { label: "国家", value: "中国" }] },
-];
-
 const nid = () => Math.random().toString(36).slice(2);
 
 function emptyLine(): OrderLine {
@@ -312,6 +300,12 @@ export default function DealForm() {
   const [description, setDescription] = useState("");
   const [contact, setContact] = useState<ContactValues>(EMPTY_CONTACT);
   const [companyId, setCompanyId] = useState<string | null>(null);
+  // 真实往来单位（顶层公司）+ 当前公司下的联系人；联系人仅选本公司人员，可下拉创建
+  const [companies, setCompanies] = useState<SelectRecord[]>([]);
+  const [contacts, setContacts] = useState<SelectRecord[]>([]);
+  const [personId, setPersonId] = useState<string | null>(null);
+  const [primaryId, setPrimaryId] = useState<string | null>(null);
+  const [companyLabel, setCompanyLabel] = useState("");
   const [lines, setLines] = useState<OrderLine[]>(() => [emptyLine()]);
   // Chatter 操作/讨论记录（由系统机器人 ominXBot 写入操作历史 + 人工评论）
   const [initialChatter, setInitialChatter] = useState<ChatterMessage[] | null>(null);
@@ -438,10 +432,115 @@ export default function DealForm() {
         setStages(r.data.map(({ id, title, accent, key }) => ({ id, title, accent, key }))),
       )
       .catch(() => setStages([]));
+    // 加载往来单位（顶层公司）下拉数据
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    void loadCompanies();
   }, []);
 
   // 当前商机的报价单数量（产物栏「报价」计数）；推进/保存后随 refreshToken 刷新
   const [quoteCount, setQuoteCount] = useState(0);
+  // 往来单位（顶层公司）/ 联系人（公司下人员）实时拉取与创建
+  const mapContact = (c: {
+    id: string;
+    name?: string | null;
+    email?: string | null;
+    phone?: string | null;
+    company?: string | null;
+    country?: string | null;
+  }): SelectRecord => ({
+    id: c.id,
+    label: c.name ?? "",
+    sublabel: c.email || c.phone || c.company || "",
+    details: [
+      { label: t("contact.email"), value: c.email || "" },
+      { label: t("contact.phone"), value: c.phone || "" },
+      { label: t("contact.country"), value: c.country || "" },
+    ].filter((d) => d.value),
+  });
+
+  const loadCompanies = async () => {
+    const r = await api.get<any[]>("/contacts?companyId=null&limit=300");
+    setCompanies(r.data.map(mapContact));
+  };
+
+  const loadCompanyData = async (cid: string | null) => {
+    setPersonId(null);
+    setPrimaryId(null);
+    setContacts([]);
+    if (!cid) return;
+    const [personsR, primaryR] = await Promise.all([
+      api.get<any[]>(`/contacts?companyId=${encodeURIComponent(cid)}&limit=300`),
+      api
+        .get<any>(`/contacts/primary?companyId=${encodeURIComponent(cid)}`)
+        .catch(() => null),
+    ]);
+    setContacts(personsR.data.map(mapContact));
+    const primary = primaryR?.data ?? null;
+    setPrimaryId(primary?.id ?? null);
+    // 默认选中公司主联系人（若有），并把其字段回填；无则留空（保存时回退到公司本身）
+    if (primary?.id) {
+      setPersonId(primary.id);
+      await loadContactFields(primary.id);
+    }
+  };
+
+  const loadContactFields = async (rid: string | null) => {
+    if (!rid) {
+      setContact((c) => ({
+        ...c,
+        name: "",
+        email: "",
+        phone: "",
+        customerType: "",
+        country: "",
+        website: "",
+        company: "",
+      }));
+      return;
+    }
+    const r = await api.get<any>(`/contacts/${rid}`);
+    const c = r.data;
+    setContact((prev) => ({
+      ...prev,
+      name: c.name ?? "",
+      type: c.type ?? "customer",
+      customerType: c.customerType ?? "",
+      company: c.company ?? "",
+      email: c.email ?? "",
+      phone: c.phone ?? "",
+      country: c.country ?? "",
+      website: c.website ?? "",
+      aiGenerated: c.aiGenerated ?? false,
+    }));
+  };
+
+  const createCompany = async (name: string) => {
+    const r = await api.post<any>("/contacts", {
+      name,
+      type: "customer",
+      companyId: null,
+    });
+    await loadCompanies();
+    setCompanyId(r.data.id);
+    setCompanyLabel(name);
+    await loadCompanyData(r.data.id);
+  };
+
+  const createPerson = async (name: string) => {
+    if (!companyId) {
+      toast.error(t("crm.needCompanyFirst"));
+      return;
+    }
+    const r = await api.post<any>("/contacts", {
+      name,
+      type: "customer",
+      companyId,
+    });
+    await loadCompanyData(companyId); // 刷新人员列表 + 主联系人（首个子联系人自动设主）
+    setPersonId(r.data.id);
+    await loadContactFields(r.data.id);
+  };
+
   // 同一客户（往来单位/联系人）下的其他商机数量（产物栏「类似商机」展示）
   const [similarCount, setSimilarCount] = useState(0);
   const [customerContactId, setCustomerContactId] = useState<string | null>(null);
@@ -592,11 +691,16 @@ export default function DealForm() {
           website: d.contact?.website ?? "",
           aiGenerated: d.contact?.aiGenerated ?? false,
         });
-        // 编辑回填：按公司名称匹配所属公司的客户联系人 id
-        const matchedCompany = DEAL_CUSTOMER_CONTACTS.find(
-          (c) => c.label === d.contact?.company,
+        // 编辑回填：公司 = 往来单位的归属公司（顶层本身即公司）；联系人为其下人员
+        const cid = d.contact?.companyId ?? d.contact?.id ?? null;
+        setCompanyId(cid);
+        setCompanyLabel(
+          d.contact?.companyId ? d.contact?.company ?? "" : d.contact?.name ?? "",
         );
-        setCompanyId(matchedCompany?.id ?? null);
+        setPersonId(d.contact?.companyId ? d.contact?.id ?? null : null);
+        await loadCompanyData(cid); // 拉取本公司人员 + 主联系人
+        setPersonId(d.contact?.companyId ? d.contact?.id ?? null : null);
+        await loadContactFields(d.contact?.id ?? null);
         // 优先从订单明细 JSON 恢复整张表（含组合/备注/排序，行级数量与折扣随行）；
         // 旧数据无 lines 时回退到遗留单产品
         const restored = d.linesJson
@@ -640,10 +744,7 @@ export default function DealForm() {
   const hasProduct = lines.some(
     (l) => l.type === "product" && (l.description.trim() || l.productId),
   );
-  const canSave =
-    !saving &&
-    (!isEdit ||
-      (!!contact.name.trim() || !!contact.company.trim()) && hasProduct);
+  const canSave = !saving && !!companyId && hasProduct;
 
   const productLines = lines.filter((l) => l.type === "product");
   const primaryLine = productLines[0];
@@ -671,16 +772,21 @@ export default function DealForm() {
     ownerId: salespersonId || undefined,
     creatorId: salespersonId || undefined,
     source: source.trim() || undefined,
-    contact: {
-      name: contact.name.trim() || contact.company.trim() || undefined,
-      type: contact.type || "customer",
-      customerType: contact.customerType.trim() || undefined,
-      company: contact.company.trim() || undefined,
-      email: contact.email.trim() || undefined,
-      phone: contact.phone.trim() || undefined,
-      country: contact.country.trim() || undefined,
-      website: contact.website.trim() || undefined,
-    },
+    // 最终关联往来单位：优先选中的联系人 → 公司主联系人 → 公司本身
+    contactId: personId ?? primaryId ?? companyId ?? undefined,
+    contact: (personId ?? primaryId ?? companyId)
+      ? {
+          name: contact.name.trim() || contact.company.trim() || undefined,
+          type: contact.type || "customer",
+          customerType: contact.customerType.trim() || undefined,
+          // 个人联系人回填其所属公司名（顶层公司本身留空）
+          company: personId ? companyLabel.trim() || undefined : undefined,
+          email: contact.email.trim() || undefined,
+          phone: contact.phone.trim() || undefined,
+          country: contact.country.trim() || undefined,
+          website: contact.website.trim() || undefined,
+        }
+      : undefined,
     // 兼容历史单产品字段（取首个产品行），其余明细以 lines 全量保存
     product: {
       description: primaryLine?.description?.trim() || undefined,
@@ -894,40 +1000,68 @@ export default function DealForm() {
                     </Label>
                     <Picker
                       id="deal-cust-company"
-                      records={DEAL_CUSTOMER_CONTACTS}
+                      records={companies}
                       value={companyId}
                       topN={5}
                       searchMoreTitle={t("contact.company")}
                       placeholder={t("contact.companyPlaceholder")}
-                      fallbackText={companyId ? undefined : contact.company}
+                      fallbackText={companyId ? undefined : companyLabel}
                       onChange={(rec) => {
-                        setCompanyId(rec?.id ?? null);
-                        setContact((c) => ({
-                          ...c,
-                          company: rec?.label ?? "",
-                          // 选中客户联系人时自动带出姓名/邮箱/电话
-                          name: rec?.sublabel ?? c.name,
-                          email:
-                            rec?.details?.find((d) => d.label === "邮箱")?.value ??
-                            c.email,
-                          phone:
-                            rec?.details?.find((d) => d.label === "电话")?.value ??
-                            c.phone,
-                        }));
+                        const cid = rec?.id ?? null;
+                        setCompanyId(cid);
+                        setCompanyLabel(rec?.label ?? "");
+                        setContact((c) => ({ ...c, company: "" }));
+                        void loadCompanyData(cid);
                       }}
                       onInputChange={(text) => {
                         setCompanyId(null);
+                        setCompanyLabel(text);
                         setContact((c) => ({ ...c, company: text }));
+                        void loadCompanyData(null);
                       }}
+                      onCreate={(name) => void createCompany(name)}
                     />
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <Label htmlFor="deal-contact-name">{t("contact.name")}</Label>
-                    <Input
+                    <Picker
                       id="deal-contact-name"
-                      value={contact.name}
-                      onChange={(e) => setContact({ ...contact, name: e.target.value })}
+                      records={contacts}
+                      value={personId}
+                      topN={5}
+                      disabled={!companyId}
+                      searchMoreTitle={t("contact.name")}
+                      placeholder={t("contact.namePlaceholder")}
+                      onChange={(rec) => {
+                        setPersonId(rec?.id ?? null);
+                        void loadContactFields(rec?.id ?? null);
+                      }}
+                      onCreate={(name) => void createPerson(name)}
                     />
+                    {companyId &&
+                      (personId ? (
+                        personId === primaryId ? (
+                          <p className="text-xs text-muted-foreground">
+                            {t("contact.primaryContactMark")}
+                          </p>
+                        ) : (
+                          <button
+                            type="button"
+                            className="w-fit text-xs text-primary hover:underline"
+                            onClick={async () => {
+                              await api.patch(`/contacts/${personId}/primary`);
+                              setPrimaryId(personId);
+                              toast.success(t("contact.setPrimaryDone"));
+                            }}
+                          >
+                            {t("contact.setPrimary")}
+                          </button>
+                        )
+                      ) : (
+                        <p className="text-xs text-muted-foreground">
+                          {t("contact.noPersonFallback")}
+                        </p>
+                      ))}
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <Label htmlFor="deal-contact-email">{t("contact.email")}</Label>

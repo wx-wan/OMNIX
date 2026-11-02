@@ -219,14 +219,25 @@ export class CrmService {
     const deal = await this.prisma.$transaction(async (tx) => {
       // 内联往来单位 / 联系人（默认 type=customer）落库 contacts 表。
       // 同邮箱视为同一联系人：复用已有记录（CRM 去重），避免 email 唯一约束冲突（P2002）。
-      // 邮箱为空（MCP 允许无邮箱）时跳过去重，直接新建客户。
-      const existingContact =
-        dto.contact && dto.contact.email
-          ? await tx.contact.findUnique({ where: { email: dto.contact.email } })
-          : null;
-      const contact = existingContact ?? (dto.contact
-        ? await tx.contact.create({ data: dto.contact })
-        : null);
+      // 已传 contactId（手动建单选中的公司/联系人）→ 直接更新该往来单位；
+      // 否则按邮箱去重复用或新建（MCP 无邮箱时直接新建）。
+      let contactId = dto.contactId ?? null;
+      let contact: { id: string } | null = null;
+      if (contactId) {
+        contact = await tx.contact.update({
+          where: { id: contactId },
+          data: { ...(dto.contact ?? {}) },
+        });
+      } else if (dto.contact) {
+        const existingContact =
+          dto.contact.email
+            ? await tx.contact.findUnique({ where: { email: dto.contact.email } })
+            : null;
+        contact =
+          existingContact ??
+          (await tx.contact.create({ data: dto.contact }));
+        contactId = contact.id;
+      }
       const hasLines = !!(dto.lines && dto.lines.length);
       // 有明细时不再单独建遗留单产品，避免重复；明细里的新产品行会在下方 syncOrderLines 建库
       const product = !hasLines && dto.product
@@ -250,7 +261,7 @@ export class CrmService {
           source: dto.source,
           stageId,
           position: (agg._max.position ?? -1) + 1,
-          contactId: dto.contactId ?? contact?.id ?? undefined,
+          contactId: contactId ?? undefined,
           productId: dto.productId ?? firstProductId ?? product?.id ?? undefined,
           linesJson,
         },
@@ -481,8 +492,13 @@ export class CrmService {
     }
 
     await this.prisma.$transaction(async (tx) => {
-      // 同步更新关联的往来单位 / 联系人
-      if (dto.contact && exists.contactId) {
+      // 同步更新关联的往来单位 / 联系人：优先用提交上来的 contactId（可换公司/联系人）
+      if (dto.contactId) {
+        await tx.deal.update({ where: { id }, data: { contactId: dto.contactId } });
+        if (dto.contact) {
+          await tx.contact.update({ where: { id: dto.contactId }, data: dto.contact });
+        }
+      } else if (dto.contact && exists.contactId) {
         await tx.contact.update({ where: { id: exists.contactId }, data: dto.contact });
       }
       // 同步更新关联的产品需求

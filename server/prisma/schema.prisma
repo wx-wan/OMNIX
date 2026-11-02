@@ -61,12 +61,18 @@ model Contact {
   avatarUrl String? @map("avatar_url") // 头像 URL（如 MCP 代理用户 Accio work 用 web 头像）
   aiGenerated Boolean @default(false) @map("ai_generated") // 是否由 Accio AI 抓取生成（信息不保真，待核实）
   archived  Boolean @default(false) @map("archived") // 归档：关联了商机的往来单位不允许删除，只能归档隐藏
+  // 公司关系：个人联系人归属的「公司」往来单位（顶层公司 companyId 为 null）；isPrimary 标记该公司主联系人。
+  companyId String? @map("company_id")
+  isPrimary Boolean @default(false) @map("is_primary")
+  companyContact Contact? @relation("CompanyContacts", fields: [companyId], references: [id])
+  companyContacts Contact[] @relation("CompanyContacts")
   deals     Deal[]
   quotations Quotation[]
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
 
   @@index([type])
+  @@index([companyId])
   @@map("contacts")
 }
 

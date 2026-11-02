@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
-import { X, ChevronsUpDown, ArrowRight, Search } from "lucide-react";
+import { X, ChevronsUpDown, ArrowRight, Search, Plus } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "cn";
 import { Image } from "@/components/ui/image";
@@ -32,6 +32,8 @@ export interface PickerProps {
   id?: string;
   className?: string;
   disabled?: boolean;
+  /** Odoo 式「创建 xxx」：输入无精确匹配时下拉底部出现创建项，点击回调当前输入文本由外部建记录。 */
+  onCreate?: (query: string) => void;
 }
 
 /**
@@ -57,6 +59,7 @@ export function Picker({
   id,
   className,
   disabled,
+  onCreate,
 }: PickerProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
@@ -273,6 +276,20 @@ export function Picker({
                     ))
                   )}
                 </div>
+                {onCreate && query.trim() && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onCreate(query.trim());
+                      setQuery("");
+                      setOpen(false);
+                    }}
+                    className="flex w-full items-center gap-2 border-t border-border px-3 py-2 text-sm font-medium text-primary hover:bg-accent"
+                  >
+                    <Plus className="size-4" />
+                    {t("picker.create", { name: query.trim() })}
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => {

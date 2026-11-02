@@ -59,4 +59,11 @@ export class CreateContactDto {
   @IsString()
   @MaxLength(20)
   role?: string; // 仅 type=user：admin | user
+
+  @IsOptional()
+  @IsString()
+  companyId?: string; // 归属公司（顶层公司联系人为 null）；用于「公司 → 其下联系人」层级
+
+  @IsOptional()
+  isPrimary?: boolean; // 是否该公司主联系人（默认首个创建者自动设主）
 }

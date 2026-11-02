@@ -9,19 +9,55 @@ import { UpdateContactDto } from "./dto/update-contact.dto";
 export class ContactsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  /** 往来单位 / 联系人列表：可按 type 过滤、限制条数。含关联商机数。
+  /** 往来单位 / 联系人列表：可按 type、companyId 过滤、限制条数。含关联商机数。
+   *  companyId="null" → 仅顶层公司（无归属公司）；companyId=<id> → 该公司下联系人；缺省 → 不过滤。
    *  系统机器人（isSystem）不出现在管理列表，避免被编辑/删除。
    *  archived 默认过滤已归档项；includeArchived=true 时一并返回。 */
-  list(type?: ContactType, limit?: number, includeArchived = false) {
+  list(
+    type?: ContactType,
+    limit?: number,
+    includeArchived = false,
+    companyId?: string | null,
+  ) {
+    const where: Prisma.ContactWhereInput = {
+      ...(type ? { type } : {}),
+      isSystem: false,
+      ...(includeArchived ? {} : { archived: false }),
+      ...(companyId === "null"
+        ? { companyId: null }
+        : companyId
+          ? { companyId }
+          : {}),
+    };
     return this.prisma.contact.findMany({
-      where: {
-        ...(type ? { type } : {}),
-        isSystem: false,
-        ...(includeArchived ? {} : { archived: false }),
-      },
+      where,
       orderBy: { createdAt: "desc" },
       take: limit,
       include: { _count: { select: { deals: true } } },
+    });
+  }
+
+  /** 取某公司主联系人（isPrimary）。 */
+  getPrimary(companyId: string) {
+    return this.prisma.contact.findFirst({
+      where: { companyId, isPrimary: true, archived: false },
+    });
+  }
+
+  /** 将某联系人设为其公司的主联系人（先清掉同公司其它主标记）。 */
+  async setPrimary(id: string) {
+    const c = await this.prisma.contact.findUnique({ where: { id } });
+    if (!c) throw new NotFoundException(`Contact ${id} not found`);
+    if (c.isSystem) throw new ForbiddenException("系统机器人不可编辑");
+    if (!c.companyId) {
+      throw new BadRequestException("仅公司下的联系人可设为主联系人");
+    }
+    return this.prisma.$transaction(async (tx) => {
+      await tx.contact.updateMany({
+        where: { companyId: c.companyId!, isPrimary: true },
+        data: { isPrimary: false },
+      });
+      return tx.contact.update({ where: { id }, data: { isPrimary: true } });
     });
   }
 
@@ -42,6 +78,13 @@ export class ContactsService {
   async create(dto: CreateContactDto) {
     const data: Prisma.ContactCreateInput = { ...dto };
     if (dto.password) data.password = await bcrypt.hash(dto.password, 10);
+    // 首个归属该公司的联系人自动成为主联系人（之后可由 setPrimary 替换）
+    if (dto.companyId) {
+      const existingPrimary = await this.prisma.contact.findFirst({
+        where: { companyId: dto.companyId, isPrimary: true },
+      });
+      if (!existingPrimary) data.isPrimary = true;
+    }
     return this.prisma.contact.create({ data });
   }
 
