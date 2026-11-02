@@ -130,6 +130,13 @@ export default function Settings() {
     toast.success(t("settings.mcp.skillDownloaded"));
   };
 
+  /** 打开标准 OAuth 授权页（新标签页），走浏览器授权流程免手动复制令牌。 */
+  const openBrowserAuth = () => {
+    const redirectUri = encodeURIComponent(window.location.origin);
+    const url = `${window.location.origin}/oauth/authorize?response_type=code&client_id=omnix-mcp&redirect_uri=${redirectUri}&scope=mcp&state=${encodeURIComponent("omnix-settings")}`;
+    window.open(url, "_blank", "noopener");
+  };
+
   const guide = [
     t("settings.mcp.guide1"),
     t("settings.mcp.guide2"),
@@ -265,6 +272,13 @@ export default function Settings() {
                   {t("settings.mcp.headersNoToken")}
                 </p>
               )}
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Button variant="outline" className="w-fit" onClick={openBrowserAuth}>
+                {t("settings.mcp.browserAuth")}
+              </Button>
+              <p className="text-xs text-muted-foreground">{t("settings.mcp.browserAuthHint")}</p>
             </div>
 
             <div className="flex flex-col gap-1.5">

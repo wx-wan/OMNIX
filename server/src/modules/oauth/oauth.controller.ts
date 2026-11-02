@@ -30,10 +30,11 @@ function authParams(q: Record<string, any>) {
     .join("&");
 }
 
-function page(title: string, body: string): string {
+function page(title: string, body: string, head = ""): string {
   return `<!doctype html><html lang="zh"><head><meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>${title} · ${APP_NAME}</title>
+${head}
 <style>
   :root{color-scheme:dark}
   body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;
@@ -49,6 +50,9 @@ function page(title: string, body: string): string {
   button{margin-top:18px;width:100%;padding:11px 14px;border:0;border-radius:10px;cursor:pointer;
          background:#FFD54F;color:#1a1a1a;font-weight:600;font-size:14px}
   button:hover{filter:brightness(1.05)}
+  a.btn{display:inline-block;margin-top:18px;padding:11px 14px;border:0;border-radius:10px;text-decoration:none;
+        background:#FFD54F;color:#1a1a1a;font-weight:600;font-size:14px}
+  a.btn:hover{filter:brightness(1.05)}
   .err{color:#ff8080;font-size:13px;margin-top:12px}
   .scope{background:#121212;border:1px solid #333;border-radius:10px;padding:10px 12px;font-size:13px;color:#cfcfcf;margin:14px 0}
   code{color:#FFD54F}
@@ -192,7 +196,7 @@ export class OauthController {
     }
   }
 
-  /** 授权端点：确认授权 → 发放 code 并跳回 redirect_uri。 */
+  /** 授权端点：确认授权 → 发放 code 并渲染「授权成功」页（1.5s 后自动回跳 redirect_uri）。 */
   @Post("oauth/authorize/consent")
   authorizeConsent(@Req() req: Request, @Res() res: Response) {
     const userId = (req.session as { userId?: string })?.userId;
@@ -207,8 +211,32 @@ export class OauthController {
       scope: params.get("scope") ?? "mcp",
       codeChallenge: params.get("code_challenge") ?? undefined,
     });
+    // GitHub 式落地：先显示「授权成功」，再自动携带 code 跳回 redirect_uri。
+    // 直接 302 到客户端 loopback 会让浏览器停在空白/「无法访问」页，故改为成功页中转。
+    if (!redirectUri) {
+      return res.type("html").send(this.successPage(""));
+    }
     const sep = redirectUri.includes("?") ? "&" : "?";
-    return res.redirect(`${redirectUri}${sep}code=${code}&state=${encodeURIComponent(state)}`);
+    const target = `${redirectUri}${sep}code=${code}&state=${encodeURIComponent(state)}`;
+    return res.type("html").send(this.successPage(target));
+  }
+
+  /** 授权成功确认页：无回跳地址时仅提示手动返回；否则 1.5s 自动回跳（meta refresh + 按钮兜底）。 */
+  private successPage(target: string): string {
+    if (!target) {
+      return page(
+        "授权成功",
+        `<h1>授权成功 🎉</h1>
+         <p class="sub">已成功将 ${APP_NAME} 授权给 MCP 客户端。本次未携带回跳地址，请手动返回 Accio Work 继续。</p>`,
+      );
+    }
+    const display = target.split("?")[0];
+    const head = `<meta http-equiv="refresh" content="1.5; url='${target}'"/>`;
+    const body = `<h1>授权成功 🎉</h1>
+       <p class="sub">已成功将 ${APP_NAME} 授权给 MCP 客户端（如 Accio Work）。本窗口将自动跳转回授权发起方；若未自动跳转，请点击下方按钮返回。</p>
+       <div class="scope">即将跳回：<code>${display}</code></div>
+       <a class="btn" href="${target}">返回 Accio Work</a>`;
+    return page("授权成功", body, head);
   }
 
   /** 令牌端点：授权码兑换 access_token(+refresh_token)，或 refresh_token 静默续期。 */
