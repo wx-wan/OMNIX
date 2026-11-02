@@ -875,24 +875,22 @@ export default function DealForm() {
 
             {/* 往来单位 / 联系人 */}
             <section className="flex flex-col gap-3">
-              <div className="flex items-center gap-2">
-                {contact.aiGenerated && (
-                  <Badge
-                    variant="outline"
-                    className="border-amber-500 text-amber-600"
-                    title={t("contact.aiPendingHint")}
-                  >
-                    {t("contact.aiPending")}
-                  </Badge>
-                )}
-              </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-x-4">
                 {/* 左列 */}
                 <div className="flex flex-col gap-3">
                   <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="deal-cust-company">
+                    <Label htmlFor="deal-cust-company" className="flex items-center gap-1.5">
                       {t("contact.company")}
                       {!isEdit && <span className="text-red-500"> *</span>}
+                      {contact.aiGenerated && (
+                        <Badge
+                          variant="outline"
+                          className="border-amber-500 text-amber-600"
+                          title={t("contact.aiPendingHint")}
+                        >
+                          {t("contact.aiPending")}
+                        </Badge>
+                      )}
                     </Label>
                     <Picker
                       id="deal-cust-company"
