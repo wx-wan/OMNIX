@@ -14,7 +14,9 @@
 @property --sb-w {
   syntax: "<length>";
   inherits: true;
-  initial-value: 15rem;
+  /* initial-value 必须是计算无关值：Chrome 拒绝字体相对单位（rem 依赖根 font-size），
+     整条 @property 会被静默忽略导致折叠动画退化。.app-shell 始终显式覆盖该值，0px 仅作占位。 */
+  initial-value: 0px;
 }
 .app-shell {
   --sb-w: 15rem;
