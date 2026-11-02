@@ -254,6 +254,12 @@ const resources = {
           guide2: "启用「自定义 MCP 服务器」",
           guide3: "添加服务器，URL 填上方「MCP 端点 URL」",
           guide4: "认证方式选择 Bearer，令牌填上方「访问令牌」",
+          skillTitle: "Accio Work Skill：资深贸易业务员",
+          skillHint:
+            "复制全文粘贴到 Accio Work（技能/Skill → 新建），或下载 .md 文件一键导入。Skill 会让 Agent 按 OMNIX 字段拆解客户画像与产品需求表，并对已有客户做简单背调；产出强制字段化、简短，杜绝把整段询盘塞进标题/描述。",
+          skillCopy: "复制 Skill",
+          skillDownload: "下载 Skill 文件",
+          skillDownloaded: "Skill 文件已下载",
         },
       },
       kanban: {
@@ -635,6 +641,12 @@ const resources = {
           guide2: 'Enable "Custom MCP Server"',
           guide3: "Add a server with the MCP endpoint URL above",
           guide4: "Set auth to Bearer and use the access token above",
+          skillTitle: "Accio Work Skill: Senior Trade Salesperson",
+          skillHint:
+            "Copy the text below into Accio Work (Skills → New), or download the .md file for one-click import. The skill makes the agent map customer profiles and product requirements to OMNIX fields and run a light background check on existing customers — output stays fielded and concise, never a wall of text.",
+          skillCopy: "Copy skill",
+          skillDownload: "Download skill file",
+          skillDownloaded: "Skill file downloaded",
         },
       },
       kanban: {

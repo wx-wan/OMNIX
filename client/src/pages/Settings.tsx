@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Copy, RefreshCw, ShieldAlert, Webhook } from "lucide-react";
+import { Copy, Download, RefreshCw, ShieldAlert, Webhook } from "lucide-react";
 import { toast } from "sonner";
 
 import { api } from "@/lib/api";
+import { ACCIO_SKILL_FILENAME, ACCIO_SKILL_MD } from "@/lib/accioSkill";
 import { Stack } from "@/components/layout/Stack";
 import { PageMeta } from "@/components/layout/PageMeta";
 import { Section } from "@/components/layout/Section";
@@ -115,6 +116,18 @@ export default function Settings() {
 
   const copy = (text: string) => {
     navigator.clipboard.writeText(text).then(() => toast.success(t("settings.mcp.copied")));
+  };
+
+  /** 把 Accio Work Skill 下载为 .md 文件，供一键导入。 */
+  const downloadSkill = () => {
+    const blob = new Blob([ACCIO_SKILL_MD], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = ACCIO_SKILL_FILENAME;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success(t("settings.mcp.skillDownloaded"));
   };
 
   const guide = [
@@ -272,6 +285,31 @@ export default function Settings() {
                 <Copy />
                 {t("settings.mcp.testCopy")}
               </Button>
+            </div>
+
+            <Separator />
+
+            <div className="flex flex-col gap-1.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <Label className="text-sm font-medium">{t("settings.mcp.skillTitle")}</Label>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={() => copy(ACCIO_SKILL_MD)}>
+                    <Copy />
+                    {t("settings.mcp.skillCopy")}
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={downloadSkill}>
+                    <Download />
+                    {t("settings.mcp.skillDownload")}
+                  </Button>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">{t("settings.mcp.skillHint")}</p>
+              <Textarea
+                readOnly
+                value={ACCIO_SKILL_MD}
+                className="max-h-72 min-h-[160px] font-mono text-xs"
+                onClick={(e) => e.currentTarget.select()}
+              />
             </div>
 
             <Separator />
