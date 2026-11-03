@@ -9,6 +9,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Picker } from "@/components/common/Picker";
+import type { SelectRecord } from "@/components/common/SearchableSelect";
 
 export type ContactTypeValue = "customer" | "supplier" | "user";
 
@@ -16,7 +18,9 @@ export interface ContactValues {
   type: ContactTypeValue;
   customerType: string;
   name: string;
-  company: string;
+  company: string; // 旧版个人所属公司文本（迁移后由 parentId 取代，仅作兼容）
+  parentId: string; // 所属公司 id（个人指向公司，自关联）
+  isCompany: boolean; // 是否为公司（区别于个人联系人）
   email: string;
   aiGenerated?: boolean;
   phone: string;
@@ -31,6 +35,8 @@ export const EMPTY_CONTACT: ContactValues = {
   customerType: "",
   name: "",
   company: "",
+  parentId: "",
+  isCompany: false,
   email: "",
   phone: "",
   country: "",
@@ -40,23 +46,41 @@ export const EMPTY_CONTACT: ContactValues = {
 };
 
 /**
- * 客户信息是否已完善：除官网外，核心字段（姓名/公司/邮箱/电话/客户类型/国家地区）
- * 全部有值即视为完善——「待完善」徽标仅在这些字段有缺失时展示（见各处 aiPending 条件）。
- * 实时计算、不动服务端 aiGenerated 数据，字段补齐后徽标自动消失。
+ * 客户信息是否已完善（贴近 Odoo 范式，公司/个人口径不同）：
+ * - 个人(isCompany=false)：姓名 / 所属公司(parentId，兼容旧文本 company) / 邮箱 / 电话 /
+ *   客户类型 / 国家地区 全有值 → 完善；
+ * - 公司(isCompany=true)：自身无需 parent，姓名 / 邮箱 / 电话 / 客户类型 / 国家地区 全有值 → 完善。
+ * 除官网(website)外，核心字段齐全即视为「已核实」，徽标消失。
  */
 export function isContactComplete(
   c:
     | Partial<
         Pick<
           ContactValues,
-          "name" | "company" | "email" | "phone" | "customerType" | "country"
+          | "isCompany"
+          | "name"
+          | "company"
+          | "parentId"
+          | "email"
+          | "phone"
+          | "customerType"
+          | "country"
         >
       >
     | null
     | undefined,
 ): boolean {
   const filled = (v?: string | null) => typeof v === "string" && v.trim().length > 0;
-  return [c?.name, c?.company, c?.email, c?.phone, c?.customerType, c?.country].every(filled);
+  const name = filled(c?.name);
+  const email = filled(c?.email);
+  const phone = filled(c?.phone);
+  const customerType = filled(c?.customerType);
+  const country = filled(c?.country);
+  if (c?.isCompany) {
+    return name && email && phone && customerType && country;
+  }
+  const linkedCompany = filled(c?.parentId) || filled(c?.company);
+  return name && linkedCompany && email && phone && customerType && country;
 }
 
 export const CONTACT_TYPE_OPTIONS: ContactTypeValue[] = [
@@ -89,10 +113,20 @@ interface Props {
   values: ContactValues;
   onChange: (v: ContactValues) => void;
   idPrefix?: string;
+  /** 公司记录（isCompany=true 的往来单位），供「所属公司」Picker 选用。 */
+  companyRecords?: SelectRecord[];
+  /** 在「所属公司」选择器中即时创建公司后回调（由父级建库并回填 parentId）。 */
+  onCompanyCreate?: (name: string) => void;
 }
 
 /** 统一往来单位 / 联系人 表单。type=user 时额外展示登录密码与角色。 */
-export function ContactForm({ values, onChange, idPrefix = "c" }: Props) {
+export function ContactForm({
+  values,
+  onChange,
+  idPrefix = "c",
+  companyRecords,
+  onCompanyCreate,
+}: Props) {
   const { t } = useTranslation();
   const set =
     (k: keyof ContactValues) =>
@@ -123,11 +157,14 @@ export function ContactForm({ values, onChange, idPrefix = "c" }: Props) {
         <Input id={id("name")} value={values.name} onChange={set("name")} />
       </Field>
       <Field label={t("contact.company")}>
-        <Input
+        <Picker
           id={id("company")}
-          value={values.company}
+          records={companyRecords ?? []}
+          value={values.parentId || null}
+          onChange={(rec) => onChange({ ...values, parentId: rec?.id ?? "" })}
+          onCreate={onCompanyCreate}
           placeholder={t("contact.companyPlaceholder")}
-          onChange={set("company")}
+          searchMoreTitle={t("contact.company")}
         />
       </Field>
       <Field label={t("contact.email")}>

@@ -36,6 +36,7 @@ interface QuotationDetailData {
     email: string | null;
     phone: string | null;
     country: string | null;
+    parent?: { id: string; name: string } | null;
   } | null;
 }
 
@@ -79,40 +80,44 @@ export default function QuotationDetail() {
   const [initialChatter, setInitialChatter] = useState<ChatterMessage[] | null>(null);
   const [chatterHasMore, setChatterHasMore] = useState(false);
 
+  // 报价单共用所属商机的讨论线程（dealId 必填，统一走商机线程）
+  const chatterBase = `/crm/deals/${detail?.dealId}/chatter`;
+
   useEffect(() => {
     if (!id) return;
     let alive = true;
     setLoading(true);
     setError(null);
-    Promise.all([
-      api.get<QuotationDetailData>(`/quotations/${id}`),
-      api.get<{ messages: ChatterMessage[]; hasMore: boolean }>(
-        `/quotations/${id}/chatter?limit=30`,
-      ),
-    ])
-      .then(([q, c]) => {
+    (async () => {
+      try {
+        const qRes = await api.get<QuotationDetailData>(`/quotations/${id}`);
         if (!alive) return;
-        setDetail(q.data);
-        setShippingAddress(q.data.shippingAddress ?? "");
-        setValidUntil(toDateInput(q.data.validUntil));
-        setPaymentTerms(q.data.paymentTerms ?? "");
-        setDeliveryDate(toDateInput(q.data.deliveryDate));
-        setNotes(q.data.notes ?? "");
+        const q = qRes.data;
+        // 初始讨论读取所属商机线程
+        const cRes = await api.get<{ messages: ChatterMessage[]; hasMore: boolean }>(
+          `/crm/deals/${q.dealId}/chatter?limit=30`,
+        );
+        if (!alive) return;
+        setDetail(q);
+        setShippingAddress(q.shippingAddress ?? "");
+        setValidUntil(toDateInput(q.validUntil));
+        setPaymentTerms(q.paymentTerms ?? "");
+        setDeliveryDate(toDateInput(q.deliveryDate));
+        setNotes(q.notes ?? "");
         try {
-          const parsed = JSON.parse(q.data.linesJson ?? "[]") as OrderLine[];
+          const parsed = JSON.parse(q.linesJson ?? "[]") as OrderLine[];
           setLines(Array.isArray(parsed) ? parsed : []);
         } catch {
           setLines([]);
         }
-        setInitialChatter(c.data.messages);
-        setChatterHasMore(c.data.hasMore);
-      })
-      .catch(() => {
+        setInitialChatter(cRes.data.messages);
+        setChatterHasMore(cRes.data.hasMore);
+      } catch {
         if (alive) setError(t("quotation.notFound"));
-      })
-      .finally(() => {
+      } finally {
         if (alive) setLoading(false);
-      });
+      }
+    })();
     return () => {
       alive = false;
     };
@@ -121,7 +126,7 @@ export default function QuotationDetail() {
 
   const loadOlderChatter = async (oldest: ChatterMessage) => {
     const r = await api.get<{ messages: ChatterMessage[]; hasMore: boolean }>(
-      `/quotations/${id}/chatter?limit=30&before=${encodeURIComponent(oldest.createdAt ?? "")}`,
+      `${chatterBase}?limit=30&before=${encodeURIComponent(oldest.createdAt ?? "")}`,
     );
     setChatterHasMore(r.data.hasMore);
     return { messages: r.data.messages, hasMore: r.data.hasMore };
@@ -129,7 +134,7 @@ export default function QuotationDetail() {
 
   const loadLatestChatter = async () => {
     const r = await api.get<{ messages: ChatterMessage[]; hasMore: boolean }>(
-      `/quotations/${id}/chatter?limit=30`,
+      `${chatterBase}?limit=30`,
     );
     setChatterHasMore(r.data.hasMore);
     return { messages: r.data.messages, hasMore: r.data.hasMore };
@@ -137,14 +142,14 @@ export default function QuotationDetail() {
 
   const handleChatterSend = async (text: string): Promise<ChatterMessage | void> => {
     if (!id) return;
-    const r = await api.post<ChatterMessage>(`/quotations/${id}/chatter`, { text });
+    const r = await api.post<ChatterMessage>(`${chatterBase}`, { text });
     return r.data;
   };
 
   const handleChatterRecall = async (msgId: string) => {
     if (!id) return;
     try {
-      await api.delete(`/quotations/${id}/chatter/${msgId}`);
+      await api.delete(`${chatterBase}/${msgId}`);
       setRefreshToken((k) => k + 1);
     } catch (e) {
       console.error("[QuotationDetail] recall chatter failed:", e);
@@ -198,7 +203,8 @@ export default function QuotationDetail() {
     <div className="flex h-full min-h-0 flex-col gap-4">
       <PageMeta
         title={headerTitle}
-        back={() => navigate("/quotations")}
+        // 返回：若报价单关联了商机，回到该商机详情；否则回报价列表
+        back={() => navigate(detail?.dealId ? `/crm/deals/${detail.dealId}` : "/quotations")}
       />
 
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-10">
@@ -211,62 +217,65 @@ export default function QuotationDetail() {
             </h1>
 
             {/* 客户 / 收货地址 ｜ 有效期 / 付款条款 / 交付日期 */}
-            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+            {/* 网格：客户↔有效期至(顶部对齐)；收货地址跨两行(标签↔付款条款顶部、底部↔交付日期底部) */}
+            <div className="grid grid-cols-1 gap-x-5 gap-y-4 sm:grid-cols-2">
+              {/* 行1左：客户（联系人/公司同行，只读态不展示国家） */}
               <div className="flex flex-col gap-1.5">
-                <span className="text-xs text-muted-foreground">{t("quotation.customer")}</span>
-                <p className="text-sm font-medium text-foreground">
-                  {contact?.name ?? "—"}
-                </p>
-                {contact?.company && (
-                  <p className="text-xs text-muted-foreground">{contact.company}</p>
-                )}
-                {contact?.country && (
-                  <p className="text-xs text-muted-foreground">{contact.country}</p>
-                )}
-                <Label className="mt-2 text-xs text-muted-foreground">
-                  {t("quotation.shippingAddress")}
-                </Label>
-                <Textarea
-                  rows={3}
-                  value={shippingAddress}
-                  onChange={(e) => setShippingAddress(e.target.value)}
-                  placeholder={contact?.country ?? ""}
+                <Label>{t("quotation.customer")}</Label>
+                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                  <span className="text-sm text-foreground">
+                    {contact?.name ?? "—"}
+                  </span>
+                  {(contact?.parent?.name ?? contact?.company) && (
+                    <span className="text-xs text-muted-foreground">
+                      {contact?.parent?.name ?? contact?.company}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* 行1右：有效期至 */}
+              <div className="flex flex-col gap-1.5">
+                <Label>{t("quotation.validUntil")}</Label>
+                <DatePicker
+                  value={validUntil ? new Date(`${validUntil}T00:00:00`) : null}
+                  onChange={(d) =>
+                    setValidUntil(d ? d.toISOString().slice(0, 10) : "")
+                  }
                 />
               </div>
 
-              <div className="flex flex-col gap-3">
-                <div className="flex flex-col gap-1.5">
-                  <Label className="text-xs text-muted-foreground">
-                    {t("quotation.validUntil")}
-                  </Label>
-                  <DatePicker
-                    value={validUntil ? new Date(`${validUntil}T00:00:00`) : null}
-                    onChange={(d) =>
-                      setValidUntil(d ? d.toISOString().slice(0, 10) : "")
-                    }
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label className="text-xs text-muted-foreground">
-                    {t("quotation.paymentTerms")}
-                  </Label>
-                  <Input
-                    value={paymentTerms}
-                    onChange={(e) => setPaymentTerms(e.target.value)}
-                    placeholder={t("quotation.paymentTerms")}
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label className="text-xs text-muted-foreground">
-                    {t("quotation.deliveryDate")}
-                  </Label>
-                  <DatePicker
-                    value={deliveryDate ? new Date(`${deliveryDate}T00:00:00`) : null}
-                    onChange={(d) =>
-                      setDeliveryDate(d ? d.toISOString().slice(0, 10) : "")
-                    }
-                  />
-                </div>
+              {/* 行2-3左：收货地址（跨两行，标签↔付款条款顶部、底部↔交付日期底部） */}
+              <div className="flex flex-col gap-1.5 sm:row-span-2">
+                <Label>{t("quotation.shippingAddress")}</Label>
+                <Textarea
+                  rows={2}
+                  value={shippingAddress}
+                  onChange={(e) => setShippingAddress(e.target.value)}
+                  placeholder={contact?.country ?? ""}
+                  className="flex-1 resize-none"
+                />
+              </div>
+
+              {/* 行2右：付款条款（控件已 w-full 撑满） */}
+              <div className="flex flex-col gap-1.5">
+                <Label>{t("quotation.paymentTerms")}</Label>
+                <Input
+                  value={paymentTerms}
+                  onChange={(e) => setPaymentTerms(e.target.value)}
+                  placeholder={t("quotation.paymentTerms")}
+                />
+              </div>
+
+              {/* 行3右：交付日期（底部对齐收货地址底部） */}
+              <div className="flex flex-col gap-1.5 self-end">
+                <Label>{t("quotation.deliveryDate")}</Label>
+                <DatePicker
+                  value={deliveryDate ? new Date(`${deliveryDate}T00:00:00`) : null}
+                  onChange={(d) =>
+                    setDeliveryDate(d ? d.toISOString().slice(0, 10) : "")
+                  }
+                />
               </div>
             </div>
 
@@ -297,6 +306,8 @@ export default function QuotationDetail() {
                   onLinesChange={setLines}
                   currency="¥"
                   priceIncludeTax={priceIncludeTax}
+                  showCostPrice={false}
+                  showProfit={false}
                 />
               </TabsContent>
 
@@ -334,6 +345,7 @@ export default function QuotationDetail() {
               onLoadOlder={loadOlderChatter}
               onLoadLatest={loadLatestChatter}
               refreshToken={refreshToken}
+              pollMs={15000}
             />
           )}
         </div>

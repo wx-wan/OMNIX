@@ -28,7 +28,14 @@ export class CreateContactDto {
   @IsOptional()
   @IsString()
   @MaxLength(80)
-  company?: string; // 个人所属公司
+  company?: string; // 个人所属公司（旧版文本，迁移后由 parentId 取代）
+
+  @IsOptional()
+  @IsString()
+  parentId?: string; // 所属公司 id（个人指向公司，自关联；新建公司时为空）
+
+  @IsOptional()
+  isCompany?: boolean; // 是否为公司（区别于个人联系人）
 
   @IsOptional()
   @IsEmail()

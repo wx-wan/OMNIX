@@ -241,6 +241,8 @@ export function OrderLinesTable({
   currency = "¥",
   className,
   priceIncludeTax = false,
+  showCostPrice = true,
+  showProfit = true,
 }: OrderLinesTableProps) {
   const { t } = useTranslation();
   const [internalLines, setInternalLines] = useState<OrderLine[]>(() => [
@@ -524,7 +526,8 @@ export function OrderLinesTable({
               </th>
               {headerCell(t("orderLines.quantity"), "right", "w-[8%]")}
               {headerCell(t("orderLines.unitPrice"), "right", "w-[12%]")}
-              {headerCell(t("orderLines.costPrice"), "right", "w-[12%]")}
+              {showCostPrice &&
+                headerCell(t("orderLines.costPrice"), "right", "w-[12%]")}
               {headerCell(t("orderLines.taxes"), "left", "w-[16%]")}
               {headerCell(t("orderLines.subtotal"), "right", "w-[15%]")}
               <th className="w-[5%] px-2 py-2" />
@@ -589,7 +592,7 @@ export function OrderLinesTable({
                         bare
                       />
                     </td>
-                    <td colSpan={4} className="p-1" />
+                    <td colSpan={showCostPrice ? 4 : 3} className="p-1" />
                     <td className="w-[15%] truncate px-2 py-1.5 text-right align-middle text-sm font-semibold tabular-nums">
                       {money(comboTotal(l, lines))}
                     </td>
@@ -618,7 +621,7 @@ export function OrderLinesTable({
                       dragging && "opacity-40",
                     )}
                   >
-                    <td colSpan={8} className="p-1">
+                    <td colSpan={showCostPrice ? 8 : 7} className="p-1">
                       <div className="flex items-center gap-1.5">
                         {grip(l.id)}
                         <Input
@@ -723,6 +726,7 @@ export function OrderLinesTable({
                       bare
                     />
                   </td>
+                  {showCostPrice && (
                   <td className="w-[12%] p-1 align-middle">
                     <InputNumber
                       value={l.costPrice ?? 0}
@@ -731,6 +735,7 @@ export function OrderLinesTable({
                       bare
                     />
                   </td>
+                  )}
                   <td className="w-[16%] p-1 align-middle">
                     <Picker
                       records={TAXES}
@@ -770,7 +775,7 @@ export function OrderLinesTable({
               );
             })}
             <tr>
-              <td colSpan={8} className="p-0">
+              <td colSpan={showCostPrice ? 8 : 7} className="p-0">
                 <div className="flex flex-wrap items-center gap-1 border-t border-dashed border-border px-2 py-1.5">
                   <ButtonVariantGhost
                     onClick={() => addRow("product")}
@@ -830,6 +835,7 @@ export function OrderLinesTable({
             <span>{t("orderLines.total")}</span>
             <span className="tabular-nums">{money(total)}</span>
           </div>
+          {showProfit && (
           <div
             className={cn(
               "flex justify-between border-t border-border py-1 font-semibold",
@@ -844,6 +850,7 @@ export function OrderLinesTable({
             </span>
             <span className="tabular-nums">{money(profit)}</span>
           </div>
+          )}
         </div>
       </div>
 
@@ -1065,4 +1072,8 @@ interface OrderLinesTableProps {
   className?: string;
   /** 价格是否含税：true=单价含税（倒算税额），false=单价不含税（税额另计），默认 false */
   priceIncludeTax?: boolean;
+  /** 是否显示「成本价」列（产品行）。报价单为客户视图时传 false 隐藏，默认 true */
+  showCostPrice?: boolean;
+  /** 是否显示「利润 / 毛利率」汇总。报价单为客户视图时传 false 隐藏，默认 true */
+  showProfit?: boolean;
 }

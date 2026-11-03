@@ -83,8 +83,19 @@ export class CrmService {
       orderBy: { position: "asc" },
       include: {
         deals: {
-          // 看板卡片需展示往来单位 / 联系人，故携带精简的联系人信息
-          include: { contact: true },
+          // 看板卡片需展示往来单位 / 联系人，故携带精简的联系人信息（含所属公司名）
+          include: {
+            contact: {
+              select: {
+                id: true,
+                name: true,
+                company: true,
+                type: true,
+                parentId: true,
+                parent: { select: { id: true, name: true } },
+              },
+            },
+          },
           orderBy: { position: "asc" },
         },
       },
@@ -97,9 +108,11 @@ export class CrmService {
         amount: deal.amount != null ? deal.amount.toNumber() : null,
         contact: deal.contact
           ? {
+              id: deal.contact.id,
               name: deal.contact.name,
               company: deal.contact.company,
               type: deal.contact.type,
+              parentName: deal.contact.parent?.name ?? null,
             }
           : null,
       })),
@@ -251,14 +264,17 @@ export class CrmService {
         });
       } else if (dto.contact) {
         // 去重复用：① 同邮箱精确匹配；② 无邮箱时按客户名（忽略大小写）匹配，
+        // 并按 isCompany 区分（公司/个人同名不互相复用，贴近 Odoo），
         // 避免 MCP/手动建单对同一客户反复新建（同一 "Alex Mohamed" 出现多条）。
         // 复用时仅补全空字段，不覆盖已有信息；若补全后信息完善则标记「已核实」。
+        const wantCompany = dto.contact.isCompany ?? false;
         const existingContact = dto.contact.email
           ? await tx.contact.findUnique({ where: { email: dto.contact.email } })
           : await tx.contact.findFirst({
               where: {
                 name: { equals: dto.contact.name.trim(), mode: "insensitive" },
                 isSystem: false,
+                isCompany: wantCompany,
               },
               orderBy: { createdAt: "asc" },
             });
@@ -272,6 +288,8 @@ export class CrmService {
             "country",
             "website",
             "customerType",
+            "parentId",
+            "isCompany",
           ] as const) {
             const v = incoming[key];
             if (
@@ -286,8 +304,12 @@ export class CrmService {
           const p = patch as Record<string, unknown>;
           if (
             isContactComplete({
+              isCompany:
+                (p.isCompany as boolean | undefined) ?? existingContact.isCompany,
               name: (p.name as string | undefined) ?? existingContact.name,
               company: (p.company as string | undefined) ?? existingContact.company,
+              parentId:
+                (p.parentId as string | undefined) ?? existingContact.parentId,
               email: (p.email as string | undefined) ?? existingContact.email,
               phone: (p.phone as string | undefined) ?? existingContact.phone,
               customerType:
@@ -305,11 +327,11 @@ export class CrmService {
                 })
               : existingContact;
         } else {
-          // 新建联系人：完善则直接标记已核实（否则沿用传入的 aiGenerated，MCP 导入默认 true）
+          // 新建联系人：默认带「待完善」标签；若必填字段已全部满足，则走完善逻辑立即清除
           const createData: Prisma.ContactCreateInput = {
             ...(dto.contact as unknown as Prisma.ContactCreateInput),
           };
-          if (isContactComplete(dto.contact)) createData.aiGenerated = false;
+          createData.aiGenerated = isContactComplete(dto.contact) ? false : true;
           contact = await tx.contact.create({ data: createData });
         }
         contactId = contact.id;

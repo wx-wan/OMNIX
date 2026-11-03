@@ -89,22 +89,17 @@ export class QuotationsService {
       });
     });
 
-    // 单据自身 Chatter：创建记录
-    await this.crm.recordEvent(
-      created.id,
-      `${actor} 创建了报价单「${created.number}」`,
-      "quotation",
-    );
-    // 商机 Chatter：留下产物轨迹
-    await this.crm.recordEvent(deal.id, `${actor} 创建了报价单「${created.number}」`);
-
-    // 商机未到「报价」阶段时推进（避免回退已过阶段）
+    // 商机未到「报价」阶段时先推进（避免回退已过阶段），且须排在「创建报价单」记录之前，
+    // 使 chatter 时间线为「推进到报价阶段」在前、「创建了报价单」在后。
     if (
       deal.stageId !== quoteStage.id &&
       deal.stage.position < quoteStage.position
     ) {
       await this.crm.updateDeal(deal.id, { stageId: quoteStage.id }, actorId);
     }
+
+    // 共用商机讨论线程：在所属商机 Chatter 留下产物轨迹（不再写报价单自身线程，避免重复/孤儿数据）
+    await this.crm.recordEvent(deal.id, `${actor} 创建了报价单「${created.number}」`);
 
     return this.getOne(created.id);
   }
@@ -128,7 +123,9 @@ export class QuotationsService {
       where: { id },
       include: {
         deal: { select: { id: true, title: true, amount: true } },
-        contact: true,
+        contact: {
+          include: { parent: { select: { id: true, name: true } } },
+        },
       },
     });
     if (!q) throw new NotFoundException(`Quotation ${id} not found`);
@@ -143,6 +140,9 @@ export class QuotationsService {
             email: q.contact.email,
             phone: q.contact.phone,
             country: q.contact.country,
+            parent: q.contact.parent
+              ? { id: q.contact.parent.id, name: q.contact.parent.name }
+              : null,
           }
         : null,
       shippingAddress: q.shippingAddress,
@@ -176,26 +176,14 @@ export class QuotationsService {
 
     if (linesJson !== undefined) {
       const actor = await this.crm.getActorName(actorId);
+      // 写入所属商机线程，保证统一讨论下的审计轨迹完整可见
       await this.crm.recordEvent(
-        id,
+        exists.dealId,
         `${actor} 更新了报价单「${exists.number}」的订单明细`,
-        "quotation",
+        "deal",
       );
     }
     return this.getOne(id);
-  }
-
-  /** Chatter：复用商机实现，挂载到 resModel=quotation。 */
-  listChatter(resId: string, opts?: { limit?: number; before?: string }) {
-    return this.crm.listChatter(resId, opts, "quotation");
-  }
-
-  addComment(resId: string, text: string, authorId?: string) {
-    return this.crm.addComment(resId, text, authorId, "quotation");
-  }
-
-  deleteChatter(resId: string, msgId: string, actorId?: string) {
-    return this.crm.deleteChatter(resId, msgId, actorId, "quotation");
   }
 
   private toListDto(q: Quotation & {

@@ -308,6 +308,8 @@ export default function DealForm() {
   const [contactId, setContactId] = useState<string | null>(null);
   // 真实联系人库（往来单位/联系人，扁平模型）下拉数据
   const [contacts, setContacts] = useState<SelectRecord[]>([]);
+  // 公司列表（isCompany=true 的往来单位），供「所属公司」Picker 选用
+  const [companyRecords, setCompanyRecords] = useState<SelectRecord[]>([]);
   const [lines, setLines] = useState<OrderLine[]>(() => [emptyLine()]);
   // Chatter 操作/讨论记录（由系统机器人 ominXBot 写入操作历史 + 人工评论）
   const [initialChatter, setInitialChatter] = useState<ChatterMessage[] | null>(null);
@@ -437,6 +439,7 @@ export default function DealForm() {
     // 加载往来单位（顶层公司）下拉数据
     // eslint-disable-next-line react-hooks/exhaustive-deps
     void loadContacts();
+    void loadCompanies();
   }, []);
 
   // 当前商机的报价单数量（产物栏「报价」计数）；推进/保存后随 refreshToken 刷新
@@ -449,10 +452,12 @@ export default function DealForm() {
     phone?: string | null;
     company?: string | null;
     country?: string | null;
+    isCompany?: boolean | null;
   }): SelectRecord => ({
     id: c.id,
     label: c.name ?? "",
     sublabel: c.email || c.phone || c.company || "",
+    isCompany: c.isCompany ?? false,
     details: [
       { label: t("contact.email"), value: c.email || "" },
       { label: t("contact.phone"), value: c.phone || "" },
@@ -466,11 +471,29 @@ export default function DealForm() {
     setContacts(r.data.map(mapContact));
   };
 
+  // 公司列表（isCompany=true）：供「所属公司」Picker 选用
+  const loadCompanies = async () => {
+    const r = await api.get<any[]>("/contacts?isCompany=true&limit=300");
+    setCompanyRecords(r.data.map(mapContact));
+  };
+
   const createContact = async (name: string) => {
     const r = await api.post<any>("/contacts", { name, type: "customer" });
     await loadContacts();
     setContactId(r.data.id);
     await loadContactFields(r.data.id);
+  };
+
+  // 在「所属公司」选择器中即时创建公司（isCompany=true），建好后回填 parentId
+  const createCompany = async (name: string) => {
+    const r = await api.post<any>("/contacts", {
+      name,
+      type: "customer",
+      isCompany: true,
+    });
+    await loadCompanies();
+    await loadContacts();
+    setContact((c) => ({ ...c, parentId: r.data.id }));
   };
 
   const loadContactFields = async (rid: string | null) => {
@@ -484,6 +507,8 @@ export default function DealForm() {
         country: "",
         website: "",
         company: "",
+        parentId: "",
+        isCompany: false,
       }));
       return;
     }
@@ -495,6 +520,8 @@ export default function DealForm() {
       type: c.type ?? "customer",
       customerType: c.customerType ?? "",
       company: c.company ?? "",
+      parentId: c.parentId ?? "",
+      isCompany: c.isCompany ?? false,
       email: c.email ?? "",
       phone: c.phone ?? "",
       country: c.country ?? "",
@@ -647,6 +674,8 @@ export default function DealForm() {
           type: d.contact?.type ?? "customer",
           customerType: d.contact?.customerType ?? "",
           company: d.contact?.company ?? "",
+          parentId: d.contact?.parentId ?? "",
+          isCompany: d.contact?.isCompany ?? false,
           email: d.contact?.email ?? "",
           phone: d.contact?.phone ?? "",
           country: d.contact?.country ?? "",
@@ -734,7 +763,7 @@ export default function DealForm() {
           name: contact.name.trim(),
           type: contact.type || "customer",
           customerType: contact.customerType.trim() || undefined,
-          company: contact.company.trim() || undefined,
+          parentId: contact.parentId || undefined,
           email: contact.email.trim() || undefined,
           phone: contact.phone.trim() || undefined,
           country: contact.country.trim() || undefined,
@@ -970,11 +999,17 @@ export default function DealForm() {
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <Label htmlFor="deal-cust-company">{t("contact.company")}</Label>
-                    <Input
+                    <Picker
                       id="deal-cust-company"
-                      value={contact.company}
+                      records={companyRecords}
+                      value={contact.parentId || null}
+                      topN={5}
+                      searchMoreTitle={t("contact.company")}
                       placeholder={t("contact.companyPlaceholder")}
-                      onChange={(e) => setContact((c) => ({ ...c, company: e.target.value }))}
+                      onChange={(rec) =>
+                        setContact((c) => ({ ...c, parentId: rec?.id ?? "" }))
+                      }
+                      onCreate={(name) => void createCompany(name)}
                     />
                   </div>
                   <div className="flex flex-col gap-1.5">
@@ -1207,6 +1242,7 @@ export default function DealForm() {
                   onLoadOlder={loadOlderChatter}
                   onLoadLatest={loadLatestChatter}
                   refreshToken={refreshToken}
+                  pollMs={15000}
                   followers={creatorName ? [creatorName] : undefined}
                 />
               )

@@ -42,7 +42,12 @@ export interface KanbanItem {
   /** 创建时间（ISO 字符串），CRM 交易卡展示用，可选。 */
   createdAt?: string;
   /** 往来单位 / 联系人（商机关联的 customer/contact），看板卡片展示用，可选。 */
-  contact?: { name?: string | null; company?: string | null; type?: string | null } | null;
+  contact?: {
+    name?: string | null;
+    company?: string | null; // 旧版个人所属公司文本（兼容）
+    parentName?: string | null; // 所属公司名（关联 parent，优先展示）
+    type?: string | null;
+  } | null;
   /** 按阶段定制的展示字段（控制顺序与显隐）。为空则使用默认完整布局。 */
   fields?: CardField[];
 }
@@ -96,15 +101,20 @@ function SourceLine({ source, meta }: { source?: string; meta?: string }) {
   );
 }
 
-/** 往来单位 / 联系人行：优先展示公司（往来单位），否则展示联系人姓名。 */
+/** 往来单位 / 联系人行：统一显示「联系人姓名 · 公司（所属公司名）」，任一缺失时仅显示存在的那个。
+ * 公司名优先取关联 parentName，缺失时回退旧文本 company。所有阶段卡片第二行均渲染此行，确保阶段间一致。 */
 function ContactLine({ contact }: { contact?: KanbanItem["contact"] }) {
-  const label = contact?.company || contact?.name;
-  if (!label) return null;
-  const Icon = contact?.company ? Building2 : User;
+  if (!contact) return null;
+  const name = contact.name?.trim();
+  const company = (contact.parentName ?? contact.company)?.trim();
+  if (!name && !company) return null;
+  const Icon = company ? Building2 : User;
   return (
     <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
       <Icon className="size-3 shrink-0" />
-      <span className="truncate">{label}</span>
+      <span className="truncate">
+        {name && company ? `${name} · ${company}` : name || company}
+      </span>
     </p>
   );
 }

@@ -39,17 +39,24 @@ model Stage {
   @@map("stages")
 }
 
-// 统一往来单位 / 联系人（扁平化单表）
+// 统一往来单位 / 联系人（扁平化单表，贴近 Odoo res.partner 范式）
 // - type 区分 客户 / 供应商 / 用户
 // - name 为组织名称（公司）或个人姓名
-// - company 为个人所属公司（当本条为「个人」时填写）
+// - isCompany 标记本条是否为「公司」（Odoo 的 is_company）
+// - parentId / parent / children 构成自关联：个人指向所属公司，公司下挂其联系人
+//   （双向关联，等价于 Odoo 的 parent_id / child_ids）
+// - company 为旧版个人所属公司文本，迁移脚本已将其转为 parentId 关联并清空；仅作历史兼容
 // - password / role 仅 type=user 用于登录
 model Contact {
   id        String      @id @default(cuid())
   type      ContactType @default(customer)
   customerType String? // 客户类型（业务类型：终端客户/贸易商/工厂 等；区别于 type 实体类型）
   name      String // 组织名称 或 个人姓名 *
-  company   String? // 个人所属公司
+  company   String? // 旧版个人所属公司文本（迁移后清空，展示改用 parent.name）
+  isCompany Boolean   @default(false) @map("is_company") // 是否为公司（区别于个人联系人）
+  parentId  String?   @map("parent_id") // 所属公司（个人指向公司，自关联）
+  parent    Contact?  @relation("CompanyChildren", fields: [parentId], references: [id])
+  children  Contact[] @relation("CompanyChildren")
   email     String? @unique // 邮箱唯一（登录按邮箱定位）
   phone     String?
   country   String? // 国家地区
@@ -67,6 +74,7 @@ model Contact {
   updatedAt DateTime    @updatedAt
 
   @@index([type])
+  @@index([parentId])
   @@map("contacts")
 }
 

@@ -1,8 +1,6 @@
 import {
-  BadRequestException,
   Body,
   Controller,
-  Delete,
   Get,
   Param,
   Patch,
@@ -22,7 +20,6 @@ import { UpdateQuotationDto } from "./dto/update-quotation.dto";
  * - POST   /api/quotations             从商机生成报价单（同时推进商机到「报价」阶段）
  * - GET    /api/quotations/:id         详情
  * - PATCH  /api/quotations/:id         更新条款/地址/备注/明细
- * - GET/POST/DELETE /api/quotations/:id/chatter  报价单 Chatter（复用商机实现，resModel=quotation）
  */
 @Controller("quotations")
 export class QuotationsController {
@@ -52,41 +49,5 @@ export class QuotationsController {
   ) {
     const actorId = (req.session as { userId?: string } | undefined)?.userId;
     return this.quotations.update(id, dto, actorId);
-  }
-
-  // ── Chatter（resModel=quotation，复用 CrmService 实现） ──────────────
-
-  @Get(":id/chatter")
-  getChatter(
-    @Param("id") id: string,
-    @Query("limit") limit?: string,
-    @Query("before") before?: string,
-  ) {
-    return this.quotations.listChatter(id, {
-      limit: limit ? Number(limit) : undefined,
-      before,
-    });
-  }
-
-  @Post(":id/chatter")
-  addChatter(
-    @Param("id") id: string,
-    @Body() body: { text?: string },
-    @Req() req: Request,
-  ) {
-    const text = (body.text ?? "").trim();
-    if (!text) throw new BadRequestException("text required");
-    const userId = (req.session as { userId?: string } | undefined)?.userId;
-    return this.quotations.addComment(id, text, userId);
-  }
-
-  @Delete(":id/chatter/:msgId")
-  deleteChatter(
-    @Param("id") id: string,
-    @Param("msgId") msgId: string,
-    @Req() req: Request,
-  ) {
-    const userId = (req.session as { userId?: string } | undefined)?.userId;
-    return this.quotations.deleteChatter(id, msgId, userId);
   }
 }

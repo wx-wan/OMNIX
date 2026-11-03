@@ -24,8 +24,19 @@ export class ContactsController {
   list(
     @Query("type") type?: ContactType,
     @Query("limit") limit?: string,
+    @Query("isCompany") isCompany?: string,
+    @Query("parentId") parentId?: string,
+    @Query("q") q?: string,
+    @Query("includeArchived") includeArchived?: string,
   ) {
-    return this.svc.list(type, limit ? Number(limit) : undefined);
+    return this.svc.list(
+      type,
+      limit ? Number(limit) : undefined,
+      includeArchived === "true",
+      isCompany === undefined ? undefined : isCompany === "true",
+      parentId,
+      q,
+    );
   }
 
   /** 系统机器人展示配置（按当前用户个性化）。静态路由必须声明在 :id 之前。 */

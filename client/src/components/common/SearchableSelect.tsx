@@ -25,6 +25,8 @@ export interface SelectRecord {
   isRequirement?: boolean;
   /** 成本价（元），选品时回填到商机明细行 */
   costPrice?: number;
+  /** 是否为公司（Odoo 范式：联系人自关联中标记 isCompany 的一方）。 */
+  isCompany?: boolean;
 }
 
 interface SearchableSelectProps {

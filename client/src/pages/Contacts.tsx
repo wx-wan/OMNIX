@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Search, Archive, ArchiveRestore } from "lucide-react";
 import { toast } from "sonner";
@@ -37,6 +37,7 @@ import {
   type ContactValues,
 } from "@/components/crm/ContactForm";
 import { ViewToggle, type ViewMode } from "@/components/common/ViewToggle";
+import type { SelectRecord } from "@/components/common/SearchableSelect";
 
 type ContactType = ContactTypeValue;
 
@@ -46,7 +47,11 @@ interface Contact {
   customerType?: string | null;
   aiGenerated?: boolean;
   name: string;
-  company?: string | null;
+  company?: string | null; // 旧版个人所属公司文本（迁移后由 parent 取代）
+  isCompany?: boolean; // 是否为公司
+  parentId?: string | null; // 所属公司 id
+  parent?: { id: string; name: string } | null; // 所属公司（列表/详情带回）
+  children?: { id: string; name: string; email?: string | null }[]; // 公司下的联系人（详情带回）
   email?: string | null;
   phone?: string | null;
   country?: string | null;
@@ -56,11 +61,14 @@ interface Contact {
   archived?: boolean;
 }
 
-const TABS: { value: "" | ContactType; labelKey: string }[] = [
+type ContactTab = "" | ContactType | "company";
+
+const TABS: { value: ContactTab; labelKey: string }[] = [
   { value: "", labelKey: "common.all" },
   { value: "customer", labelKey: "contact.typeCustomer" },
   { value: "supplier", labelKey: "contact.typeSupplier" },
   { value: "user", labelKey: "contact.typeUser" },
+  { value: "company", labelKey: "contact.companyTab" },
 ];
 
 function InfoItem({ label, children }: { label: string; children?: React.ReactNode }) {
@@ -77,7 +85,7 @@ export default function Contacts() {
   const { user } = useAuth();
   const [list, setList] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<"" | ContactType>("");
+  const [tab, setTab] = useState<ContactTab>("");
   const [q, setQ] = useState("");
 
   const [formOpen, setFormOpen] = useState(false);
@@ -91,6 +99,11 @@ export default function Contacts() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0); // 手动刷新（新建/编辑/删除/归档后）
+  const [qParam, setQParam] = useState(""); // 防抖后的搜索词，驱动后端 filter
+
+  // 公司列表（isCompany=true 的往来单位），供联系人的「所属公司」Picker 选用
+  const [companyRecords, setCompanyRecords] = useState<SelectRecord[]>([]);
 
   // 卡片 / 列表 视图偏好（localStorage 持久化）
   const [view, setView] = useState<ViewMode>(() => {
@@ -101,35 +114,46 @@ export default function Contacts() {
     localStorage.setItem("contacts-view", view);
   }, [view]);
 
-  const load = () => {
-    setLoading(true);
+  // 手动刷新：保存/删除/归档后触发主列表重新请求（不重新拉公司下拉）
+  const load = () => setRefreshKey((k) => k + 1);
+
+  // 公司列表（isCompany=true 的往来单位），供联系人的「所属公司」Picker 选用；仅挂载时拉一次
+  useEffect(() => {
     api
-      .get<Contact[]>("/contacts", { params: { includeArchived: true } })
+      .get<Contact[]>("/contacts", { params: { isCompany: true, includeArchived: true } })
+      .then((r) =>
+        setCompanyRecords(
+          r.data.map((c) => ({ id: c.id, label: c.name, isCompany: true })),
+        ),
+      )
+      .catch(() => {});
+  }, []);
+
+  // 搜索词防抖（300ms）后再驱动后端请求，避免每次按键都打接口
+  useEffect(() => {
+    const t = setTimeout(() => setQParam(q), 300);
+    return () => clearTimeout(t);
+  }, [q]);
+
+  // 主列表：按分类 / 搜索 / 归档开关走后端 filter，不再一次性拉全量在内存过滤
+  useEffect(() => {
+    setLoading(true);
+    const params: Record<string, unknown> = { includeArchived: showArchived };
+    if (tab === "company") params.isCompany = true;
+    else if (tab) params.type = tab;
+    if (qParam.trim()) params.q = qParam.trim();
+    api
+      .get<Contact[]>("/contacts", { params })
       .then((r) => setList(r.data))
       .catch(() => setList([]))
       .finally(() => setLoading(false));
-  };
+  }, [tab, qParam, showArchived, refreshKey]);
 
-  useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const filtered = useMemo(() => {
-    return list
-      .filter((c) => (tab ? c.type === tab : true))
-      .filter((c) => (showArchived ? true : !c.archived))
-      .filter(
-        (c) =>
-          c.name.toLowerCase().includes(q.toLowerCase()) ||
-          (c.company ?? "").toLowerCase().includes(q.toLowerCase()) ||
-          (c.email ?? "").toLowerCase().includes(q.toLowerCase()),
-      );
-  }, [list, tab, q, showArchived]);
-
+  // 主列表已交由后端按 tab / q / includeArchived 过滤，前端直接使用 list
   const openCreate = () => {
     setEditing(null);
-    setForm(EMPTY_CONTACT);
+    // 在「公司」tab 下新建 → 直接创建公司（isCompany=true）
+    setForm({ ...EMPTY_CONTACT, isCompany: tab === "company" });
     setError(false);
     setFormOpen(true);
   };
@@ -141,6 +165,8 @@ export default function Contacts() {
       customerType: c.customerType ?? "",
       name: c.name,
       company: c.company ?? "",
+      parentId: c.parentId ?? "",
+      isCompany: c.isCompany ?? false,
       email: c.email ?? "",
       phone: c.phone ?? "",
       country: c.country ?? "",
@@ -152,9 +178,33 @@ export default function Contacts() {
     setFormOpen(true);
   };
 
-  const openDetail = (c: Contact) => {
-    setDetail(c);
+  const openDetail = async (c: Contact) => {
+    // 拉取完整记录（含所属公司 parent 与下属联系人 children），展示双向关联
+    try {
+      const r = await api.get<Contact>(`/contacts/${c.id}`);
+      setDetail(r.data);
+    } catch {
+      setDetail(c);
+    }
     setDetailOpen(true);
+  };
+
+  // 在联系人表单的「所属公司」选择器中即时创建公司（isCompany=true），建好后回填 parentId
+  const createCompany = async (name: string) => {
+    try {
+      const r = await api.post<{ id: string }>("/contacts", {
+        name,
+        type: "customer",
+        isCompany: true,
+      });
+      setCompanyRecords((prev) => [
+        ...prev,
+        { id: r.data.id, label: name, isCompany: true },
+      ]);
+      setForm((f) => ({ ...f, parentId: r.data.id }));
+    } catch (e) {
+      toast.error(extractErrorDetail(e));
+    }
   };
 
   const handleSave = async () => {
@@ -261,7 +311,7 @@ export default function Contacts() {
       {view === "list" ? (
         <Section noPadding>
           <div className="flex flex-col gap-1">
-            {filtered.map((c) => (
+            {list.map((c) => (
               <div
                 key={c.id}
                 className="flex cursor-pointer items-center justify-between gap-3 px-5 py-3 hover:bg-muted/50"
@@ -279,9 +329,9 @@ export default function Contacts() {
                         {t("contact.aiPending")}
                       </Badge>
                     )}
-                    {c.company && (
+                    {(c.parent?.name ?? c.company) && (
                       <span className="ml-2 text-xs text-muted-foreground">
-                        {c.company}
+                        {c.parent?.name ?? c.company}
                       </span>
                     )}
                   </p>
@@ -290,15 +340,25 @@ export default function Contacts() {
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-3">
+                  {!c.isCompany && (
                   <Badge variant={c.type === "user" ? "default" : "secondary"}>
                     {typeLabel(c.type)}
                   </Badge>
+                  )}
                   {c.archived && (
                     <Badge
                       variant="outline"
                       className="border-slate-500 text-slate-500"
                     >
                       {t("common.archived")}
+                    </Badge>
+                  )}
+                  {c.isCompany && (
+                    <Badge
+                      variant="outline"
+                      className="border-sky-500 text-sky-600"
+                    >
+                      {t("contact.companyTab")}
                     </Badge>
                   )}
                   {c._count && (
@@ -322,14 +382,14 @@ export default function Contacts() {
                 </div>
               </div>
             ))}
-            {filtered.length === 0 && (
+            {list.length === 0 && (
               <p className="px-5 py-4 text-sm text-muted-foreground">
                 {loading ? t("common.loading") : t("contact.empty")}
               </p>
             )}
           </div>
         </Section>
-      ) : filtered.length === 0 ? (
+      ) : list.length === 0 ? (
         <Card>
           <CardContent className="py-10 text-center text-sm text-muted-foreground">
             {loading ? t("common.loading") : t("contact.empty")}
@@ -337,7 +397,7 @@ export default function Contacts() {
         </Card>
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((c) => (
+          {list.map((c) => (
             <Card
               key={c.id}
               className={"cursor-pointer" + (c.archived ? " opacity-60" : "")}
@@ -373,18 +433,30 @@ export default function Contacts() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="flex flex-col gap-1 text-sm text-muted-foreground">
-                {c.company && <span className="truncate">{c.company}</span>}
+                {(c.parent?.name ?? c.company) && (
+                  <span className="truncate">{c.parent?.name ?? c.company}</span>
+                )}
                 <span className="truncate">{c.email || c.phone || "—"}</span>
                 <div className="flex flex-wrap items-center gap-2 pt-1">
+                  {!c.isCompany && (
                   <Badge variant={c.type === "user" ? "default" : "secondary"}>
                     {typeLabel(c.type)}
                   </Badge>
+                  )}
                   {c.archived && (
                     <Badge
                       variant="outline"
                       className="border-slate-500 text-slate-500"
                     >
                       {t("common.archived")}
+                    </Badge>
+                  )}
+                  {c.isCompany && (
+                    <Badge
+                      variant="outline"
+                      className="border-sky-500 text-sky-600"
+                    >
+                      {t("contact.companyTab")}
                     </Badge>
                   )}
                   {c._count && (
@@ -421,7 +493,12 @@ export default function Contacts() {
               handleSave();
             }}
           >
-            <ContactForm values={form} onChange={setForm} />
+            <ContactForm
+              values={form}
+              onChange={setForm}
+              companyRecords={companyRecords}
+              onCompanyCreate={createCompany}
+            />
             {error && (
               <p className="text-sm text-red-500">{t("crm.createFailed")}</p>
             )}
@@ -444,9 +521,11 @@ export default function Contacts() {
             <>
               <SheetHeader>
                 <div className="flex items-center gap-2">
+                  {!detail.isCompany && (
                   <Badge variant={detail.type === "user" ? "default" : "secondary"}>
                     {typeLabel(detail.type)}
                   </Badge>
+                  )}
                   {detail.archived && (
                     <Badge
                       variant="outline"
@@ -466,8 +545,10 @@ export default function Contacts() {
                   )}
                 </div>
                 <SheetTitle className="text-xl">{detail.name}</SheetTitle>
-                {detail.company && (
-                  <SheetDescription>{detail.company}</SheetDescription>
+                {detail.parent?.name && (
+                  <SheetDescription>
+                    {t("contact.parent")}：{detail.parent.name}
+                  </SheetDescription>
                 )}
               </SheetHeader>
 
@@ -476,6 +557,9 @@ export default function Contacts() {
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <InfoItem label={t("crm.fieldCustomerType")}>
                     {detail.customerType || "—"}
+                  </InfoItem>
+                  <InfoItem label={t("contact.parent")}>
+                    {detail.parent?.name || "—"}
                   </InfoItem>
                   <InfoItem label={t("contact.email")}>{detail.email}</InfoItem>
                   <InfoItem label={t("contact.phone")}>{detail.phone}</InfoItem>
@@ -496,6 +580,30 @@ export default function Contacts() {
                     <InfoItem label={t("contact.role")}>{detail.role}</InfoItem>
                   )}
                 </div>
+
+                {/* 双向关联：公司展示其下属联系人（child_ids），个人展示其所属公司（已在上方 parent 显示） */}
+                {detail.children && detail.children.length > 0 && (
+                  <div className="flex flex-col gap-2">
+                    <h4 className="text-xs font-semibold text-muted-foreground">
+                      {t("contact.children")}（{detail.children.length}）
+                    </h4>
+                    <div className="flex flex-col gap-1">
+                      {detail.children.map((ch) => (
+                        <div
+                          key={ch.id}
+                          className="flex items-center justify-between gap-2 rounded-md border border-border px-3 py-1.5 text-sm"
+                        >
+                          <span className="truncate font-medium">{ch.name}</span>
+                          {ch.email && (
+                            <span className="truncate text-xs text-muted-foreground">
+                              {ch.email}
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </section>
 
               <div className="flex items-center justify-end gap-2">

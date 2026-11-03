@@ -10,20 +10,45 @@ import { isContactComplete } from "./contact-complete";
 export class ContactsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  /** 往来单位 / 联系人列表：可按 type 过滤、限制条数。含关联商机数。
+  /** 往来单位 / 联系人列表：可按 type / isCompany / parentId 过滤、q 关键字搜索、限制条数。含关联商机数。
    *  系统机器人（isSystem）不出现在管理列表，避免被编辑/删除。
-   *  archived 默认过滤已归档项；includeArchived=true 时一并返回。 */
-  list(type?: ContactType, limit?: number, includeArchived = false) {
+   *  archived 默认过滤已归档项；includeArchived=true 时一并返回。
+   *  - isCompany=true 即「公司维护表」视图；
+   *  - parentId 用于列某家公司下的联系人（child_ids）；
+   *  - q 关键字在姓名 / 邮箱 / 旧公司文本 / 所属公司名（parent.name）上做不区分大小写模糊匹配。 */
+  list(
+    type?: ContactType,
+    limit?: number,
+    includeArchived = false,
+    isCompany?: boolean,
+    parentId?: string,
+    q?: string,
+  ) {
     const where: Prisma.ContactWhereInput = {
       ...(type ? { type } : {}),
+      ...(isCompany !== undefined ? { isCompany } : {}),
+      ...(parentId !== undefined ? { parentId } : {}),
       isSystem: false,
       ...(includeArchived ? {} : { archived: false }),
+      ...(q && q.trim()
+        ? {
+            OR: [
+              { name: { contains: q.trim(), mode: "insensitive" } },
+              { email: { contains: q.trim(), mode: "insensitive" } },
+              { company: { contains: q.trim(), mode: "insensitive" } },
+              { parent: { name: { contains: q.trim(), mode: "insensitive" } } },
+            ],
+          }
+        : {}),
     };
     return this.prisma.contact.findMany({
       where,
       orderBy: { createdAt: "desc" },
       take: limit,
-      include: { _count: { select: { deals: true } } },
+      include: {
+        _count: { select: { deals: true } },
+        parent: { select: { id: true, name: true } },
+      },
     });
   }
 
@@ -31,6 +56,12 @@ export class ContactsService {
     const c = await this.prisma.contact.findUnique({
       where: { id },
       include: {
+        parent: { select: { id: true, name: true, type: true } },
+        children: {
+          where: { archived: false, isSystem: false },
+          select: { id: true, name: true, type: true, email: true },
+          orderBy: { createdAt: "asc" },
+        },
         deals: {
           select: { id: true, title: true, stageId: true, amount: true },
           orderBy: { createdAt: "desc" },
@@ -44,6 +75,9 @@ export class ContactsService {
   async create(dto: CreateContactDto) {
     const data: Prisma.ContactCreateInput = { ...dto };
     if (dto.password) data.password = await bcrypt.hash(dto.password, 10);
+    // 新建默认带「待完善」标签；若必填字段（姓名/邮箱/电话/客户类型/国家地区，
+    // 个人还需关联公司 parentId）已全部满足，则走完善逻辑立即清除 aiGenerated。
+    data.aiGenerated = isContactComplete(data) ? false : true;
     return this.prisma.contact.create({ data });
   }
 

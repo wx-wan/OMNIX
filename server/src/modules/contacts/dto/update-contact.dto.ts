@@ -31,6 +31,13 @@ export class UpdateContactDto {
   company?: string;
 
   @IsOptional()
+  @IsString()
+  parentId?: string; // 所属公司 id（个人指向公司，自关联）
+
+  @IsOptional()
+  isCompany?: boolean; // 是否为公司
+
+  @IsOptional()
   @IsEmail()
   @MaxLength(120)
   email?: string;

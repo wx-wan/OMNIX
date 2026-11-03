@@ -20,7 +20,12 @@ interface RawDeal {
   meta: string | null;
   source: string | null;
   createdAt: string;
-  contact: { name: string | null; company: string | null; type: string | null } | null;
+  contact: {
+    name: string | null;
+    company: string | null;
+    parentName: string | null;
+    type: string | null;
+  } | null;
 }
 
 interface RawStage {
@@ -38,15 +43,15 @@ const STAGE_CARD_FIELDS: Record<string, CardField[]> = {
   // 线索到达：商机金额 + 备注 + 来源 + 创建时间
   lead: ["amount", "description", "source", "createdAt"],
 };
-// 其它阶段默认字段（与线索同布局：金额/备注/来源/创建时间 + 标签/备注），
+// 其它阶段默认字段（与线索同布局：金额/备注/来源/创建时间 + 标签），
 // 负责人统一「仅头像、底部居右」，故不在列表中重复。
+// 不渲染 meta：meta 存的是 Accio 导入标记（accio:ref=...），仅供「AI」来源徽标判定，不对用户展示。
 const DEFAULT_CARD_FIELDS: CardField[] = [
   "amount",
   "description",
   "source",
   "createdAt",
   "tag",
-  "meta",
 ];
 
 // 兜底阶段：接口无数据 / 失败时也完整展示 11 个阶段（加载成功后替换为服务端数据）

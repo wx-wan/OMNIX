@@ -59,6 +59,8 @@ export interface ChatterProps {
   onLoadLatest?: () => Promise<{ messages: ChatterMessage[]; hasMore: boolean }>;
   /** 递增触发 onLoadLatest（父组件在保存/推进阶段后自增）。 */
   refreshToken?: number;
+  /** 轮询间隔(ms)：非 0 时定期增量拉取最新消息，实现多页/多用户讨论实时同步；默认 0(关闭)。 */
+  pollMs?: number;
 }
 
 function deriveInitials(name: string): string {
@@ -93,6 +95,7 @@ export function Chatter({
   onLoadOlder,
   onLoadLatest,
   refreshToken,
+  pollMs,
 }: ChatterProps) {
   const { t } = useTranslation();
   const [messages, setMessages] = useState<ChatterMessage[]>(initialMessages);
@@ -365,6 +368,19 @@ export function Chatter({
     if ((refreshToken ?? 0) > 0) void loadLatest();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshToken]);
+
+  // 跨页/多用户实时同步：定期增量拉取最新消息（标签页可见时），按 id 合并去重
+  const loadLatestRef = useRef(loadLatest);
+  loadLatestRef.current = loadLatest;
+  useEffect(() => {
+    if (!pollMs) return;
+    const iv = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      void loadLatestRef.current();
+    }, pollMs);
+    return () => clearInterval(iv);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pollMs]);
 
   return (
     <div className={cn("flex flex-col rounded-2xl bg-card shadow-card", fill && "h-full", className)}>
