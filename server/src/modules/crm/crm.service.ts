@@ -6,6 +6,7 @@ import {
 } from "@nestjs/common";
 import { Priority, Prisma, type ChatterMessage } from "@prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
+import { isContactComplete } from "../contacts/contact-complete";
 import { UpdateDealDto } from "./dto/update-deal.dto";
 import { CreateDealDto } from "./dto/create-deal.dto";
 import { DealLineDto } from "./dto/deal-line.dto";
@@ -238,14 +239,20 @@ export class CrmService {
       let contactId = dto.contactId ?? null;
       let contact: { id: string } | null = null;
       if (contactId) {
+        // 已选往来单位：更新其字段；完善则标记「已核实」清除 aiGenerated
+        const cur = await tx.contact.findUnique({ where: { id: contactId } });
+        const data: Prisma.ContactUpdateInput = { ...(dto.contact ?? {}) };
+        if (cur && isContactComplete({ ...cur, ...(dto.contact ?? {}) })) {
+          data.aiGenerated = false;
+        }
         contact = await tx.contact.update({
           where: { id: contactId },
-          data: { ...(dto.contact ?? {}) },
+          data,
         });
       } else if (dto.contact) {
         // 去重复用：① 同邮箱精确匹配；② 无邮箱时按客户名（忽略大小写）匹配，
         // 避免 MCP/手动建单对同一客户反复新建（同一 "Alex Mohamed" 出现多条）。
-        // 复用时仅补全空字段，不覆盖已有信息，也不改写 aiGenerated（保持原核实状态）。
+        // 复用时仅补全空字段，不覆盖已有信息；若补全后信息完善则标记「已核实」。
         const existingContact = dto.contact.email
           ? await tx.contact.findUnique({ where: { email: dto.contact.email } })
           : await tx.contact.findFirst({
@@ -275,6 +282,21 @@ export class CrmService {
               (patch as Record<string, unknown>)[key] = v;
             }
           }
+          // 信息完善（除官网外核心字段齐全）→ 标记「已核实」，清除 aiGenerated
+          const p = patch as Record<string, unknown>;
+          if (
+            isContactComplete({
+              name: (p.name as string | undefined) ?? existingContact.name,
+              company: (p.company as string | undefined) ?? existingContact.company,
+              email: (p.email as string | undefined) ?? existingContact.email,
+              phone: (p.phone as string | undefined) ?? existingContact.phone,
+              customerType:
+                (p.customerType as string | undefined) ?? existingContact.customerType,
+              country: (p.country as string | undefined) ?? existingContact.country,
+            })
+          ) {
+            patch.aiGenerated = false;
+          }
           contact =
             Object.keys(patch).length > 0
               ? await tx.contact.update({
@@ -283,7 +305,12 @@ export class CrmService {
                 })
               : existingContact;
         } else {
-          contact = await tx.contact.create({ data: dto.contact });
+          // 新建联系人：完善则直接标记已核实（否则沿用传入的 aiGenerated，MCP 导入默认 true）
+          const createData: Prisma.ContactCreateInput = {
+            ...(dto.contact as unknown as Prisma.ContactCreateInput),
+          };
+          if (isContactComplete(dto.contact)) createData.aiGenerated = false;
+          contact = await tx.contact.create({ data: createData });
         }
         contactId = contact.id;
       }
@@ -545,10 +572,20 @@ export class CrmService {
       if (dto.contactId) {
         await tx.deal.update({ where: { id }, data: { contactId: dto.contactId } });
         if (dto.contact) {
-          await tx.contact.update({ where: { id: dto.contactId }, data: dto.contact });
+          const cur = await tx.contact.findUnique({ where: { id: dto.contactId } });
+          const data: Prisma.ContactUpdateInput = { ...dto.contact };
+          if (cur && isContactComplete({ ...cur, ...dto.contact })) {
+            data.aiGenerated = false;
+          }
+          await tx.contact.update({ where: { id: dto.contactId }, data });
         }
       } else if (dto.contact && exists.contactId) {
-        await tx.contact.update({ where: { id: exists.contactId }, data: dto.contact });
+        const cur = await tx.contact.findUnique({ where: { id: exists.contactId } });
+        const data: Prisma.ContactUpdateInput = { ...dto.contact };
+        if (cur && isContactComplete({ ...cur, ...dto.contact })) {
+          data.aiGenerated = false;
+        }
+        await tx.contact.update({ where: { id: exists.contactId }, data });
       }
       // 同步更新关联的产品需求
       if (dto.product && exists.productId && !hasLines) {

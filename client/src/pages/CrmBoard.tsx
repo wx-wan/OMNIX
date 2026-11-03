@@ -32,12 +32,22 @@ interface RawStage {
 }
 
 // 各阶段卡片展示字段（按阶段 key 定制，控制顺序与显隐）。
-// 未配置的阶段沿用 KanbanCard 的默认完整布局。
+// 所有阶段统一走 KanbanCard 的「fields 有序列表」渲染路径，确保卡片样式与线索对齐；
+// 仅线索到达阶段用精简集，其余阶段在同样布局下保留标签/备注等更丰富信息。
 const STAGE_CARD_FIELDS: Record<string, CardField[]> = {
-  // 线索到达：商机标题(始终显示) + 商机金额 + 备注 + 来源 + 创建时间
-  // 负责人以「仅头像」形式放在卡片底部居右，名称悬停显示（见 KanbanCard）
+  // 线索到达：商机金额 + 备注 + 来源 + 创建时间
   lead: ["amount", "description", "source", "createdAt"],
 };
+// 其它阶段默认字段（与线索同布局：金额/备注/来源/创建时间 + 标签/备注），
+// 负责人统一「仅头像、底部居右」，故不在列表中重复。
+const DEFAULT_CARD_FIELDS: CardField[] = [
+  "amount",
+  "description",
+  "source",
+  "createdAt",
+  "tag",
+  "meta",
+];
 
 // 兜底阶段：接口无数据 / 失败时也完整展示 11 个阶段（加载成功后替换为服务端数据）
 const FALLBACK_STAGES: KanbanStage[] = [
@@ -74,9 +84,10 @@ function toItem(d: RawDeal, stageKey: string): KanbanItem {
     source: d.source ?? undefined,
     createdAt: d.createdAt,
     contact: d.contact ?? undefined,
-    fields: STAGE_CARD_FIELDS[stageKey],
-    // 线索到达阶段：负责人仅显示头像（卡片底部居右），名称悬停显示
-    assigneeCompact: stageKey === "lead",
+    // 所有阶段统一走 fields 渲染路径（与线索同布局）；未配置阶段用默认字段集
+    fields: STAGE_CARD_FIELDS[stageKey] ?? DEFAULT_CARD_FIELDS,
+    // 负责人统一「仅头像、底部居右」，名称悬停显示（与线索卡片对齐）
+    assigneeCompact: true,
   };
 }
 

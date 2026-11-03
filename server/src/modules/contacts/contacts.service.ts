@@ -4,6 +4,7 @@ import { ContactType, Prisma } from "@prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
 import { CreateContactDto } from "./dto/create-contact.dto";
 import { UpdateContactDto } from "./dto/update-contact.dto";
+import { isContactComplete } from "./contact-complete";
 
 @Injectable()
 export class ContactsService {
@@ -52,6 +53,8 @@ export class ContactsService {
     if (existing.isSystem) throw new ForbiddenException("系统机器人不可编辑");
     const data: Prisma.ContactUpdateInput = { ...dto };
     if (dto.password) data.password = await bcrypt.hash(dto.password, 10);
+    // 信息完善（除官网外核心字段齐全）→ 标记「已核实」，清除 aiGenerated 并持久化
+    if (isContactComplete({ ...existing, ...dto })) data.aiGenerated = false;
     return this.prisma.contact.update({ where: { id }, data });
   }
 

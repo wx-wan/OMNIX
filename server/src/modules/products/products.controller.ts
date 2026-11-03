@@ -7,8 +7,16 @@ export class ProductsController {
   constructor(private readonly svc: ProductsService) {}
 
   @Get()
-  list(@Query("includeArchived") includeArchived?: string) {
-    return this.svc.list(includeArchived === "true");
+  list(
+    @Query("includeArchived") includeArchived?: string,
+    @Query("page") page?: string,
+    @Query("pageSize") pageSize?: string,
+  ) {
+    return this.svc.list(
+      includeArchived === "true",
+      page != null ? Number(page) : undefined,
+      pageSize != null ? Number(pageSize) : undefined,
+    );
   }
 
   @Get(":id")

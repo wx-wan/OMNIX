@@ -24,6 +24,7 @@ import {
   type ProductValues,
 } from "@/components/crm/ProductForm";
 import { ViewToggle, type ViewMode } from "@/components/common/ViewToggle";
+import { Pagination } from "@/components/common/Pagination";
 
 interface Product {
   id: string;
@@ -68,15 +69,39 @@ export default function Products() {
     localStorage.setItem("products-view", view);
   }, [view]);
 
-  const load = () => {
+  // 后端分页状态
+  const PAGE_SIZE = 12;
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(PAGE_SIZE);
+  const [total, setTotal] = useState(0);
+
+  const load = (targetPage?: number) => {
+    const next = targetPage && targetPage > 0 ? targetPage : page;
+    setPage(next);
     api
-      .get<Product[]>("/products", { params: { includeArchived: true } })
-      .then((r) => setList(r.data))
-      .catch(() => setList([]));
+      .get<unknown>("/products", {
+        params: { includeArchived: true, page: next, pageSize },
+      })
+      .then((r) => {
+        const body = r.data;
+        if (Array.isArray(body)) {
+          // 向后兼容：未分页时返回数组
+          setList(body as Product[]);
+          setTotal(body.length);
+        } else {
+          const paged = body as { data: Product[]; total: number };
+          setList(paged.data);
+          setTotal(paged.total);
+        }
+      })
+      .catch(() => {
+        setList([]);
+        setTotal(0);
+      });
   };
 
   useEffect(() => {
-    load();
+    load(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -98,7 +123,7 @@ export default function Products() {
       setOpen(false);
       setValues(EMPTY_PRODUCT);
       setError(false);
-      load();
+      load(1);
     } catch {
       setError(true);
     } finally {
@@ -146,7 +171,10 @@ export default function Products() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setShowArchived((v) => !v)}
+              onClick={() => {
+                setShowArchived((v) => !v);
+                load(1);
+              }}
             >
               {showArchived ? t("common.hideArchived") : t("common.showArchived")}
             </Button>
@@ -346,6 +374,16 @@ export default function Products() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {total > 0 && (
+        <Pagination
+          page={page - 1}
+          pageCount={Math.max(1, Math.ceil(total / pageSize))}
+          onPageChange={(p) => load(p + 1)}
+          total={total}
+          pageSize={pageSize}
+        />
       )}
 
       <Dialog

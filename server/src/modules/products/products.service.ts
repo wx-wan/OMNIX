@@ -40,17 +40,34 @@ export class ProductsService {
     return ids;
   }
 
-  async list(includeArchived = false) {
-    const items = await this.prisma.product.findMany({
-      where: includeArchived ? {} : { archived: false },
-      orderBy: { createdAt: "desc" },
-    });
+  async list(includeArchived = false, page?: number, pageSize?: number) {
+    const where = includeArchived ? {} : { archived: false };
     const linked = await this.linkedProductIds();
-    return items.map((p) => ({
+    const decorate = (p: (typeof items)[number]) => ({
       ...p,
       price: p.price != null ? p.price.toNumber() : null,
       linked: linked.has(p.id),
-    }));
+    });
+    // 真正的后端分页：传了 page & pageSize 才分页，返回 { data, total, page, pageSize }
+    if (page != null && pageSize != null) {
+      const take = Math.max(1, Math.min(Math.floor(pageSize) || 1, 200));
+      const safePage = Math.max(1, Math.floor(page) || 1);
+      const skip = (safePage - 1) * take;
+      const items = await this.prisma.product.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        skip,
+        take,
+      });
+      const total = await this.prisma.product.count({ where });
+      return { data: items.map(decorate), total, page: safePage, pageSize: take };
+    }
+    // 未分页：返回完整数组（供产品选择器等需要全量的场景，向后兼容）
+    const items = await this.prisma.product.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+    });
+    return items.map(decorate);
   }
 
   async getOne(id: string) {
