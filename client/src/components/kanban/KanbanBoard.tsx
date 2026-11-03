@@ -173,7 +173,8 @@ function KanbanCard({
   return (
     <div
       className={cn(
-        "rounded-xl border border-border bg-card p-3 transition-colors hover:border-primary/40",
+        "rounded-xl border border-border/60 bg-card p-3 shadow-card",
+        "transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-lift",
         draggable && "cursor-grab active:cursor-grabbing",
         onClick && "cursor-pointer",
       )}
@@ -286,7 +287,7 @@ export function KanbanBoard({
               : undefined
           }
           className={cn(
-            "flex flex-col overflow-hidden rounded-2xl bg-card shadow-card",
+            "flex flex-col overflow-hidden rounded-2xl bg-muted/40 shadow-card",
             fill ? "min-w-0 flex-1" : "w-72 shrink-0",
             dragOverStage === stage.id && "ring-2 ring-primary",
           )}
@@ -314,7 +315,7 @@ export function KanbanBoard({
               </span>
             </div>
           </div>
-          <div className="flex flex-col gap-2 px-3 pb-3">
+          <div className="flex flex-col gap-2.5 px-3 pb-4">
             {stage.items.length === 0 ? (
               <p className="px-1 py-6 text-center text-xs text-muted-foreground">
                 {t("kanban.empty")}
