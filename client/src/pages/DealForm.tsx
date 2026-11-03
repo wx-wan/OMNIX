@@ -299,13 +299,9 @@ export default function DealForm() {
   const [source, setSource] = useState("");
   const [description, setDescription] = useState("");
   const [contact, setContact] = useState<ContactValues>(EMPTY_CONTACT);
-  const [companyId, setCompanyId] = useState<string | null>(null);
-  // 真实往来单位（顶层公司）+ 当前公司下的联系人；联系人仅选本公司人员，可下拉创建
-  const [companies, setCompanies] = useState<SelectRecord[]>([]);
+  const [contactId, setContactId] = useState<string | null>(null);
+  // 真实联系人库（往来单位/联系人，扁平模型）下拉数据
   const [contacts, setContacts] = useState<SelectRecord[]>([]);
-  const [personId, setPersonId] = useState<string | null>(null);
-  const [primaryId, setPrimaryId] = useState<string | null>(null);
-  const [companyLabel, setCompanyLabel] = useState("");
   const [lines, setLines] = useState<OrderLine[]>(() => [emptyLine()]);
   // Chatter 操作/讨论记录（由系统机器人 ominXBot 写入操作历史 + 人工评论）
   const [initialChatter, setInitialChatter] = useState<ChatterMessage[] | null>(null);
@@ -434,7 +430,7 @@ export default function DealForm() {
       .catch(() => setStages([]));
     // 加载往来单位（顶层公司）下拉数据
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    void loadCompanies();
+    void loadContacts();
   }, []);
 
   // 当前商机的报价单数量（产物栏「报价」计数）；推进/保存后随 refreshToken 刷新
@@ -458,30 +454,17 @@ export default function DealForm() {
     ].filter((d) => d.value),
   });
 
-  const loadCompanies = async () => {
-    const r = await api.get<any[]>("/contacts?companyId=null&limit=300");
-    setCompanies(r.data.map(mapContact));
+  // 往来单位 / 联系人（扁平联系人库）：全量拉取，下拉选 + 可创建
+  const loadContacts = async () => {
+    const r = await api.get<any[]>("/contacts?limit=300");
+    setContacts(r.data.map(mapContact));
   };
 
-  const loadCompanyData = async (cid: string | null) => {
-    setPersonId(null);
-    setPrimaryId(null);
-    setContacts([]);
-    if (!cid) return;
-    const [personsR, primaryR] = await Promise.all([
-      api.get<any[]>(`/contacts?companyId=${encodeURIComponent(cid)}&limit=300`),
-      api
-        .get<any>(`/contacts/primary?companyId=${encodeURIComponent(cid)}`)
-        .catch(() => null),
-    ]);
-    setContacts(personsR.data.map(mapContact));
-    const primary = primaryR?.data ?? null;
-    setPrimaryId(primary?.id ?? null);
-    // 默认选中公司主联系人（若有），并把其字段回填；无则留空（保存时回退到公司本身）
-    if (primary?.id) {
-      setPersonId(primary.id);
-      await loadContactFields(primary.id);
-    }
+  const createContact = async (name: string) => {
+    const r = await api.post<any>("/contacts", { name, type: "customer" });
+    await loadContacts();
+    setContactId(r.data.id);
+    await loadContactFields(r.data.id);
   };
 
   const loadContactFields = async (rid: string | null) => {
@@ -512,33 +495,6 @@ export default function DealForm() {
       website: c.website ?? "",
       aiGenerated: c.aiGenerated ?? false,
     }));
-  };
-
-  const createCompany = async (name: string) => {
-    const r = await api.post<any>("/contacts", {
-      name,
-      type: "customer",
-      companyId: null,
-    });
-    await loadCompanies();
-    setCompanyId(r.data.id);
-    setCompanyLabel(name);
-    await loadCompanyData(r.data.id);
-  };
-
-  const createPerson = async (name: string) => {
-    if (!companyId) {
-      toast.error(t("crm.needCompanyFirst"));
-      return;
-    }
-    const r = await api.post<any>("/contacts", {
-      name,
-      type: "customer",
-      companyId,
-    });
-    await loadCompanyData(companyId); // 刷新人员列表 + 主联系人（首个子联系人自动设主）
-    setPersonId(r.data.id);
-    await loadContactFields(r.data.id);
   };
 
   // 同一客户（往来单位/联系人）下的其他商机数量（产物栏「类似商机」展示）
@@ -691,15 +647,8 @@ export default function DealForm() {
           website: d.contact?.website ?? "",
           aiGenerated: d.contact?.aiGenerated ?? false,
         });
-        // 编辑回填：公司 = 往来单位的归属公司（顶层本身即公司）；联系人为其下人员
-        const cid = d.contact?.companyId ?? d.contact?.id ?? null;
-        setCompanyId(cid);
-        setCompanyLabel(
-          d.contact?.companyId ? d.contact?.company ?? "" : d.contact?.name ?? "",
-        );
-        setPersonId(d.contact?.companyId ? d.contact?.id ?? null : null);
-        await loadCompanyData(cid); // 拉取本公司人员 + 主联系人
-        setPersonId(d.contact?.companyId ? d.contact?.id ?? null : null);
+        // 编辑回填：往来单位/联系人直接回填该记录（扁平模型，无公司层级）
+        setContactId(d.contact?.id ?? null);
         await loadContactFields(d.contact?.id ?? null);
         // 优先从订单明细 JSON 恢复整张表（含组合/备注/排序，行级数量与折扣随行）；
         // 旧数据无 lines 时回退到遗留单产品
@@ -744,7 +693,7 @@ export default function DealForm() {
   const hasProduct = lines.some(
     (l) => l.type === "product" && (l.description.trim() || l.productId),
   );
-  const canSave = !saving && !!companyId && hasProduct;
+  const canSave = !saving && !!contact.name.trim() && hasProduct;
 
   const productLines = lines.filter((l) => l.type === "product");
   const primaryLine = productLines[0];
@@ -772,15 +721,14 @@ export default function DealForm() {
     ownerId: salespersonId || undefined,
     creatorId: salespersonId || undefined,
     source: source.trim() || undefined,
-    // 最终关联往来单位：优先选中的联系人 → 公司主联系人 → 公司本身
-    contactId: personId ?? primaryId ?? companyId ?? undefined,
-    contact: (personId ?? primaryId ?? companyId)
+    // 关联往来单位：优先选中的联系人；姓名必填（无姓名不建往来单位）
+    contactId: contact.name.trim() ? contactId ?? undefined : undefined,
+    contact: contact.name.trim()
       ? {
-          name: contact.name.trim() || contact.company.trim() || undefined,
+          name: contact.name.trim(),
           type: contact.type || "customer",
           customerType: contact.customerType.trim() || undefined,
-          // 个人联系人回填其所属公司名（顶层公司本身留空）
-          company: personId ? companyLabel.trim() || undefined : undefined,
+          company: contact.company.trim() || undefined,
           email: contact.email.trim() || undefined,
           phone: contact.phone.trim() || undefined,
           country: contact.country.trim() || undefined,
@@ -985,8 +933,8 @@ export default function DealForm() {
                 {/* 左列 */}
                 <div className="flex flex-col gap-3">
                   <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="deal-cust-company" className="flex items-center gap-1.5">
-                      {t("contact.company")}
+                    <Label htmlFor="deal-contact-name" className="flex items-center gap-1.5">
+                      {t("contact.name")}
                       {!isEdit && <span className="text-red-500"> *</span>}
                       {contact.aiGenerated && (
                         <Badge
@@ -999,69 +947,27 @@ export default function DealForm() {
                       )}
                     </Label>
                     <Picker
-                      id="deal-cust-company"
-                      records={companies}
-                      value={companyId}
-                      topN={5}
-                      searchMoreTitle={t("contact.company")}
-                      placeholder={t("contact.companyPlaceholder")}
-                      fallbackText={companyId ? undefined : companyLabel}
-                      onChange={(rec) => {
-                        const cid = rec?.id ?? null;
-                        setCompanyId(cid);
-                        setCompanyLabel(rec?.label ?? "");
-                        setContact((c) => ({ ...c, company: "" }));
-                        void loadCompanyData(cid);
-                      }}
-                      onInputChange={(text) => {
-                        setCompanyId(null);
-                        setCompanyLabel(text);
-                        setContact((c) => ({ ...c, company: text }));
-                        void loadCompanyData(null);
-                      }}
-                      onCreate={(name) => void createCompany(name)}
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="deal-contact-name">{t("contact.name")}</Label>
-                    <Picker
                       id="deal-contact-name"
                       records={contacts}
-                      value={personId}
+                      value={contactId}
                       topN={5}
-                      disabled={!companyId}
                       searchMoreTitle={t("contact.name")}
                       placeholder={t("contact.namePlaceholder")}
                       onChange={(rec) => {
-                        setPersonId(rec?.id ?? null);
+                        setContactId(rec?.id ?? null);
                         void loadContactFields(rec?.id ?? null);
                       }}
-                      onCreate={(name) => void createPerson(name)}
+                      onCreate={(name) => void createContact(name)}
                     />
-                    {companyId &&
-                      (personId ? (
-                        personId === primaryId ? (
-                          <p className="text-xs text-muted-foreground">
-                            {t("contact.primaryContactMark")}
-                          </p>
-                        ) : (
-                          <button
-                            type="button"
-                            className="w-fit text-xs text-primary hover:underline"
-                            onClick={async () => {
-                              await api.patch(`/contacts/${personId}/primary`);
-                              setPrimaryId(personId);
-                              toast.success(t("contact.setPrimaryDone"));
-                            }}
-                          >
-                            {t("contact.setPrimary")}
-                          </button>
-                        )
-                      ) : (
-                        <p className="text-xs text-muted-foreground">
-                          {t("contact.noPersonFallback")}
-                        </p>
-                      ))}
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="deal-cust-company">{t("contact.company")}</Label>
+                    <Input
+                      id="deal-cust-company"
+                      value={contact.company}
+                      placeholder={t("contact.companyPlaceholder")}
+                      onChange={(e) => setContact((c) => ({ ...c, company: e.target.value }))}
+                    />
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <Label htmlFor="deal-contact-email">{t("contact.email")}</Label>

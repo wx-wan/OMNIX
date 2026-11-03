@@ -8,7 +8,6 @@ import {
   Param,
   Query,
   HttpCode,
-  BadRequestException,
 } from "@nestjs/common";
 import { ContactType } from "@prisma/client";
 import { ContactsService } from "./contacts.service";
@@ -23,33 +22,14 @@ export class ContactsController {
   list(
     @Query("type") type?: ContactType,
     @Query("limit") limit?: string,
-    @Query("companyId") companyId?: string,
   ) {
-    return this.svc.list(
-      type,
-      limit ? Number(limit) : undefined,
-      false,
-      companyId,
-    );
+    return this.svc.list(type, limit ? Number(limit) : undefined);
   }
 
   /** 系统机器人配置（前端选择 3D 形象）。静态路由必须声明在 :id 之前。 */
   @Get("bot")
   getBot() {
     return this.svc.getBot();
-  }
-
-  /** 某公司主联系人（isPrimary）。 */
-  @Get("primary")
-  getPrimary(@Query("companyId") companyId?: string) {
-    if (!companyId) throw new BadRequestException("companyId 必填");
-    return this.svc.getPrimary(companyId);
-  }
-
-  /** 将某联系人设为其公司主联系人。 */
-  @Patch(":id/primary")
-  setPrimary(@Param("id") id: string) {
-    return this.svc.setPrimary(id);
   }
 
   @Get(":id")

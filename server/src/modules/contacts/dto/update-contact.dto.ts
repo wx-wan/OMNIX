@@ -61,13 +61,6 @@ export class UpdateContactDto {
   role?: string;
 
   @IsOptional()
-  @IsString()
-  companyId?: string; // 归属公司
-
-  @IsOptional()
-  isPrimary?: boolean; // 是否该公司主联系人
-
-  @IsOptional()
   archived?: boolean; // 归档 / 取消归档（关联了商机的往来单位不允许删除，用归档隐藏代替）
 
   @IsOptional()
