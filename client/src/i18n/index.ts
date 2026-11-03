@@ -259,8 +259,8 @@ const resources = {
           guide4: "认证方式选择 Bearer，令牌填上方「访问令牌」",
           skillTitle: "Accio Work Skill：资深贸易业务员",
           skillHint:
-            "复制全文粘贴到 Accio Work（技能/Skill → 新建），或下载 .md 文件一键导入。Skill 会让 Agent 按 OMNIX 字段拆解客户画像与产品需求表，并对已有客户做简单背调；产出强制字段化、简短，杜绝把整段询盘塞进标题/描述。",
-          skillCopy: "复制 Skill",
+            "点击「复制全文」即可获得最新 Skill，直接粘贴到 Accio Work（技能 / Skills → 新建 Skill）的输入框；或下载 .md 文件一键导入。下方文本框内容随 skill 源文件实时更新，无需手动同步。Skill 让 Agent 按 OMNIX 字段拆解客户画像与产品需求表，并对已有客户做简单背调；产出强制字段化、简短，杜绝把整段询盘塞进标题/描述。",
+          skillCopy: "复制全文",
           skillDownload: "下载 Skill 文件",
           skillDownloaded: "Skill 文件已下载",
         },
@@ -650,8 +650,8 @@ const resources = {
           guide4: "Set auth to Bearer and use the access token above",
           skillTitle: "Accio Work Skill: Senior Trade Salesperson",
           skillHint:
-            "Copy the text below into Accio Work (Skills → New), or download the .md file for one-click import. The skill makes the agent map customer profiles and product requirements to OMNIX fields and run a light background check on existing customers — output stays fielded and concise, never a wall of text.",
-          skillCopy: "Copy skill",
+            "Click \"Copy full text\" to grab the latest skill, then paste it directly into Accio Work (Skills → New Skill). Or download the .md file for one-click import. The text box below is always in sync with the skill source — no manual update needed. The skill makes the agent map customer profiles and product requirements to OMNIX fields and run a light background check on existing customers — output stays fielded and concise, never a wall of text.",
+          skillCopy: "Copy full text",
           skillDownload: "Download skill file",
           skillDownloaded: "Skill file downloaded",
         },
