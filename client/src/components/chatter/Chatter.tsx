@@ -98,9 +98,10 @@ export function Chatter({
   const [messages, setMessages] = useState<ChatterMessage[]>(initialMessages);
   const [draft, setDraft] = useState("");
   const [hasMore, setHasMore] = useState<boolean>(hasMoreProp ?? false);
+  const [hasPaged, setHasPaged] = useState(false); // 是否真正翻页加载过更早消息（用于控制“没有更多了”提示）
   const [loadingOlder, setLoadingOlder] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
-  // 系统机器人名称取自「联系人」中的设置（实时），回退到消息自带 author
+  // 系统机器人名称/形象取自当前用户的个人偏好（实时），回退到消息自带 author
   const bot = useBotConfig();
   // 仅「最新一条」机器人消息实时渲染 3D，其余用静态切片（省资源，避免大量 WebGL 并行）
   const lastBotId = useMemo(
@@ -310,6 +311,7 @@ export function Chatter({
       const prevTop = el?.scrollTop ?? 0;
       setMessages((prev) => [...res.messages, ...prev]);
       setHasMore(res.hasMore);
+      setHasPaged(true);
       requestAnimationFrame(() => {
         const el2 = scrollRef.current;
         if (!el2) return;
@@ -437,7 +439,10 @@ export function Chatter({
                 </button>
               )
             ) : (
+              // 仅在真正翻页加载过更早消息且已到底时才提示；
+              // 首屏消息未达一页上限（后端直接 hasMore=false）时不显示
               !hasMore &&
+              hasPaged &&
               messages.length > 0 && (
                 <div className="py-1 text-center text-xs text-muted-foreground">
                   {t("chatter.noMore")}

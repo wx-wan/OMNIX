@@ -26,6 +26,20 @@ export class DealLineDto {
   @IsString()
   productId?: string | null;
 
+  /**
+   * 询盘引流来源（外部标识，区别于上面的内部 productId）：
+   * - sourceProductUrl：客户是由该店铺商品链接引流进来的（用于来源归因/审计）
+   * - sourceProductId：外部平台的商品编号（如 ICBU 商品 ID），便于回溯询盘来源
+   * 二者均随商机明细 JSON 存储，与 OMNIX 内部产品 id 互不干扰。
+   */
+  @IsOptional()
+  @IsString()
+  sourceProductUrl?: string | null;
+
+  @IsOptional()
+  @IsString()
+  sourceProductId?: string | null;
+
   @IsOptional()
   @IsString()
   description?: string;

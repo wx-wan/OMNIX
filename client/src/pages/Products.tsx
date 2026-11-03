@@ -23,6 +23,7 @@ import {
   EMPTY_PRODUCT,
   type ProductValues,
 } from "@/components/crm/ProductForm";
+import { ViewToggle, type ViewMode } from "@/components/common/ViewToggle";
 
 interface Product {
   id: string;
@@ -57,6 +58,15 @@ export default function Products() {
   const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
+
+  // 卡片 / 列表 视图偏好（localStorage 持久化）
+  const [view, setView] = useState<ViewMode>(() => {
+    const v = typeof localStorage !== "undefined" ? localStorage.getItem("products-view") : null;
+    return v === "grid" || v === "list" ? v : "grid";
+  });
+  useEffect(() => {
+    localStorage.setItem("products-view", view);
+  }, [view]);
 
   const load = () => {
     api
@@ -132,6 +142,7 @@ export default function Products() {
         title={t("nav.products")}
         actions={
           <div className="flex items-center gap-2">
+            <ViewToggle value={view} onChange={setView} />
             <Button
               variant="outline"
               size="sm"
@@ -158,7 +169,7 @@ export default function Products() {
             {t("product.empty")}
           </CardContent>
         </Card>
-      ) : (
+      ) : view === "grid" ? (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {visible.map((p) => (
             <Card
@@ -227,6 +238,113 @@ export default function Products() {
               </CardContent>
             </Card>
           ))}
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded-lg border border-border">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border bg-muted/40 text-xs text-muted-foreground">
+                <th className="w-14 px-3 py-2 text-left font-medium">{t("product.image")}</th>
+                <th className="px-3 py-2 text-left font-medium">{t("product.description")}</th>
+                <th className="px-3 py-2 text-left font-medium">{t("product.category")}</th>
+                <th className="px-3 py-2 text-right font-medium">{t("product.price")}</th>
+                <th className="px-3 py-2 text-right font-medium">{t("product.costPrice")}</th>
+                <th className="px-3 py-2 text-right font-medium">{t("product.tax")}</th>
+                <th className="px-3 py-2 text-right font-medium">{t("product.quantity")}</th>
+                <th className="px-3 py-2 text-left font-medium">{t("common.status")}</th>
+                <th className="px-3 py-2 text-right font-medium">{t("common.actions")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visible.map((p) => (
+                <tr
+                  key={p.id}
+                  className={
+                    "border-b border-border/60 last:border-0 hover:bg-muted/40" +
+                    (p.archived ? " opacity-60" : "")
+                  }
+                >
+                  <td className="px-3 py-2 align-middle">
+                    {p.image ? (
+                      <Image
+                        src={p.image}
+                        alt={p.description ?? ""}
+                        ratio="1/1"
+                        className="size-10 rounded object-cover"
+                      />
+                    ) : (
+                      <span className="text-muted-foreground/40">—</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 align-middle">
+                    <div className="font-medium text-foreground">{p.description}</div>
+                  </td>
+                  <td className="px-3 py-2 align-middle text-muted-foreground">
+                    {p.category || "—"}
+                  </td>
+                  <td className="px-3 py-2 text-right align-middle">
+                    <div>{formatPrice(p.price) || "—"}</div>
+                    {p.quantity ? (
+                      <div className="text-xs text-muted-foreground">× {p.quantity}</div>
+                    ) : null}
+                  </td>
+                  <td className="px-3 py-2 text-right align-middle text-muted-foreground">
+                    {p.costPrice != null ? formatPrice(p.costPrice) : "—"}
+                  </td>
+                  <td className="px-3 py-2 text-right align-middle text-muted-foreground">
+                    {p.tax != null ? `${p.tax}%` : "—"}
+                  </td>
+                  <td className="px-3 py-2 text-right align-middle text-muted-foreground">
+                    {p.quantity || "—"}
+                  </td>
+                  <td className="px-3 py-2 align-middle">
+                    <div className="flex flex-wrap gap-1">
+                      {p.isRequirement && (
+                        <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-600">
+                          {t("common.requirement")}
+                        </span>
+                      )}
+                      {p.archived && (
+                        <span className="rounded bg-slate-500/10 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">
+                          {t("common.archived")}
+                        </span>
+                      )}
+                      {!p.isRequirement && !p.archived && (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-3 py-2 text-right align-middle">
+                    <div className="flex items-center justify-end gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        className="text-muted-foreground hover:text-foreground"
+                        aria-label={p.archived ? t("common.unarchive") : t("common.archive")}
+                        title={p.archived ? t("common.unarchive") : t("common.archive")}
+                        onClick={() => handleArchive(p)}
+                      >
+                        {p.archived ? <ArchiveRestore /> : <Archive />}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        className="text-muted-foreground hover:text-destructive"
+                        aria-label={t("product.delete")}
+                        title={
+                          p.linked ? t("common.deleteBlockedByDeal") : t("product.delete")
+                        }
+                        disabled={p.linked}
+                        onClick={() => setDeleteTarget(p)}
+                      >
+                        <Trash2 />
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 

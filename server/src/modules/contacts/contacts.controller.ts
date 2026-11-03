@@ -8,7 +8,9 @@ import {
   Param,
   Query,
   HttpCode,
+  Req,
 } from "@nestjs/common";
+import { Request } from "express";
 import { ContactType } from "@prisma/client";
 import { ContactsService } from "./contacts.service";
 import { CreateContactDto } from "./dto/create-contact.dto";
@@ -26,10 +28,10 @@ export class ContactsController {
     return this.svc.list(type, limit ? Number(limit) : undefined);
   }
 
-  /** 系统机器人配置（前端选择 3D 形象）。静态路由必须声明在 :id 之前。 */
+  /** 系统机器人展示配置（按当前用户个性化）。静态路由必须声明在 :id 之前。 */
   @Get("bot")
-  getBot() {
-    return this.svc.getBot();
+  getBot(@Req() req: Request) {
+    return this.svc.getBotForUser((req.session as { userId?: string }).userId!);
   }
 
   @Get(":id")
@@ -44,8 +46,8 @@ export class ContactsController {
   }
 
   @Patch("bot")
-  updateBot(@Body() dto: UpdateContactDto) {
-    return this.svc.updateBot(dto);
+  updateBot(@Req() req: Request, @Body() dto: UpdateContactDto) {
+    return this.svc.updateBotForUser((req.session as { userId?: string }).userId!, dto);
   }
 
   @Patch(":id")

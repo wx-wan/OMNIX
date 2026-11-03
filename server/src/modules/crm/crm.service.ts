@@ -175,20 +175,34 @@ export class CrmService {
           resolvedId = l.productId; // 描述未改：维持原产品关联，不碰产品库
         }
       } else {
-        // 新产品：在产品库新建（图片/描述/单位/税项/成本价落产品库；单价只留商机行）
-        const created = await tx.product.create({
-          data: {
-            description: l.description?.trim() || "未命名产品",
-            unit: l.unit?.trim() || undefined,
-            // 单价(售价)只留在商机明细行，不写产品库；成本价归属产品库
-            costPrice: l.costPrice != null ? new Prisma.Decimal(l.costPrice) : null,
-            tax: l.taxRate != null ? new Prisma.Decimal(l.taxRate) : null,
-            image: l.image || undefined,
-            isRequirement: true, // 需求阶段新建的产品打标
-          },
-        });
-        l.productId = created.id; // 回填并写回 JSON，避免后续保存重复新建
-        resolvedId = created.id;
+        // 新产品：先按描述去重（同一需求产品被多次询盘/多客户引用时复用，避免产品库膨胀）；
+        // 空描述（落为「未命名产品」）不去重。复用时行上的图片/单价保留在商机行，不覆盖产品库。
+        const desc = l.description?.trim();
+        const existingProduct = desc
+          ? await tx.product.findFirst({
+              where: { description: { equals: desc, mode: "insensitive" } },
+              orderBy: { id: "asc" },
+            })
+          : null;
+        if (existingProduct) {
+          l.productId = existingProduct.id; // 回填 → 幂等，后续保存不再重复建
+          resolvedId = existingProduct.id;
+        } else {
+          // 在产品库新建（图片/描述/单位/税项/成本价落产品库；单价只留商机行）
+          const created = await tx.product.create({
+            data: {
+              description: desc || "未命名产品",
+              unit: l.unit?.trim() || undefined,
+              // 单价(售价)只留在商机明细行，不写产品库；成本价归属产品库
+              costPrice: l.costPrice != null ? new Prisma.Decimal(l.costPrice) : null,
+              tax: l.taxRate != null ? new Prisma.Decimal(l.taxRate) : null,
+              image: l.image || undefined,
+              isRequirement: true, // 需求阶段新建的产品打标
+            },
+          });
+          l.productId = created.id; // 回填并写回 JSON，避免后续保存重复新建
+          resolvedId = created.id;
+        }
       }
       if (!firstProductId) firstProductId = resolvedId;
     }
@@ -229,13 +243,48 @@ export class CrmService {
           data: { ...(dto.contact ?? {}) },
         });
       } else if (dto.contact) {
-        const existingContact =
-          dto.contact.email
-            ? await tx.contact.findUnique({ where: { email: dto.contact.email } })
-            : null;
-        contact =
-          existingContact ??
-          (await tx.contact.create({ data: dto.contact }));
+        // 去重复用：① 同邮箱精确匹配；② 无邮箱时按客户名（忽略大小写）匹配，
+        // 避免 MCP/手动建单对同一客户反复新建（同一 "Alex Mohamed" 出现多条）。
+        // 复用时仅补全空字段，不覆盖已有信息，也不改写 aiGenerated（保持原核实状态）。
+        const existingContact = dto.contact.email
+          ? await tx.contact.findUnique({ where: { email: dto.contact.email } })
+          : await tx.contact.findFirst({
+              where: {
+                name: { equals: dto.contact.name.trim(), mode: "insensitive" },
+                isSystem: false,
+              },
+              orderBy: { createdAt: "asc" },
+            });
+        if (existingContact) {
+          const patch: Prisma.ContactUpdateInput = {};
+          const incoming = dto.contact as unknown as Record<string, unknown>;
+          for (const key of [
+            "email",
+            "phone",
+            "company",
+            "country",
+            "website",
+            "customerType",
+          ] as const) {
+            const v = incoming[key];
+            if (
+              v != null &&
+              String(v).trim() !== "" &&
+              !existingContact[key]
+            ) {
+              (patch as Record<string, unknown>)[key] = v;
+            }
+          }
+          contact =
+            Object.keys(patch).length > 0
+              ? await tx.contact.update({
+                  where: { id: existingContact.id },
+                  data: patch,
+                })
+              : existingContact;
+        } else {
+          contact = await tx.contact.create({ data: dto.contact });
+        }
         contactId = contact.id;
       }
       const hasLines = !!(dto.lines && dto.lines.length);

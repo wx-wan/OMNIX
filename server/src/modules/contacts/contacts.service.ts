@@ -80,39 +80,48 @@ export class ContactsService {
     return this.prisma.contact.delete({ where: { id } });
   }
 
-  /** 系统机器人配置（用于前端选择 3D 形象）。仅返回安全字段，避免泄露 password。 */
-  async getBot() {
-    const bot = await this.prisma.contact.findFirst({
-      where: { isSystem: true },
-      select: {
-        id: true,
-        name: true,
-        type: true,
-        email: true,
-        botCharacter: true,
-      },
+  /**
+   * 系统机器人「展示用」配置（按当前登录用户个性化）：
+   * 返回当前用户的偏好（名称 / 3D 形象），未设置时回退到全局机器人默认值。
+   * 仅用于前端展示，不写回全局机器人账号——改自己的偏好不会影响其他用户。
+   */
+  async getBotForUser(userId: string) {
+    const global = await this.prisma.contact.findUnique({
+      where: { email: "bot@omnix.dev" },
+      select: { id: true, name: true, type: true, email: true, botCharacter: true },
     });
-    if (!bot) throw new NotFoundException("系统机器人不存在");
-    return bot;
+    const [namePref, charPref] = await this.prisma.$transaction([
+      this.prisma.setting.findUnique({ where: { key: `bot.name.${userId}` } }),
+      this.prisma.setting.findUnique({ where: { key: `bot.character.${userId}` } }),
+    ]);
+    return {
+      id: global?.id ?? null,
+      name: namePref?.value ?? global?.name ?? "ominXBot",
+      type: global?.type ?? "user",
+      email: global?.email ?? "bot@omnix.dev",
+      botCharacter: charPref?.value ?? global?.botCharacter ?? "mochi",
+    };
   }
 
-  /** 更新系统机器人配置（名称 / 3D 形象）。绕过 isSystem 的编辑保护（仅限此专用接口）。 */
-  async updateBot(dto: UpdateContactDto) {
-    const bot = await this.prisma.contact.findFirst({ where: { isSystem: true } });
-    if (!bot) throw new NotFoundException("系统机器人不存在");
-    return this.prisma.contact.update({
-      where: { id: bot.id },
-      data: {
-        ...(dto.name !== undefined ? { name: dto.name } : {}),
-        ...(dto.botCharacter !== undefined ? { botCharacter: dto.botCharacter } : {}),
-      },
-      select: {
-        id: true,
-        name: true,
-        type: true,
-        email: true,
-        botCharacter: true,
-      },
-    });
+  /**
+   * 保存当前用户的机器人展示偏好（名称 / 3D 形象）到 Setting 键值表（按 userId 隔离）。
+   * 与全局机器人账号解耦：每个用户自定义自己的机器人外观，互不影响。
+   */
+  async updateBotForUser(userId: string, dto: UpdateContactDto) {
+    if (dto.name !== undefined) {
+      await this.prisma.setting.upsert({
+        where: { key: `bot.name.${userId}` },
+        create: { key: `bot.name.${userId}`, value: dto.name },
+        update: { value: dto.name },
+      });
+    }
+    if (dto.botCharacter !== undefined) {
+      await this.prisma.setting.upsert({
+        where: { key: `bot.character.${userId}` },
+        create: { key: `bot.character.${userId}`, value: dto.botCharacter },
+        update: { value: dto.botCharacter },
+      });
+    }
+    return this.getBotForUser(userId);
   }
 }

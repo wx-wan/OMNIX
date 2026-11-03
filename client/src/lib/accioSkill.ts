@@ -51,6 +51,13 @@ export const ACCIO_SKILL_MD = `# OMNIX Skill · 资深贸易业务员（客户�
 | quantity / unit | 询盘明确给出才填数字；单位用 pcs/个/套 |
 | price / costPrice | 询盘明确报价才填，禁止估算 |
 | image | 询盘消息本身不含图片 URL（卡片只渲染成 [Card] 或 Product id 文本）。需用产品货号反查商品详情取主图 CDN 地址（形如 https://s.alicdn.com/...），服务端自动转存到 /uploads。取不到就省略，禁止传 \`@image:\` 或占位串 |
+| productUrl 产品链接 | **引流来源链接（审计必填项）**：店铺商品详情页 URL，即客户是从哪条链接进来的。系统随该商机明细存储，用于来源归因审计；确实没有才省略 |
+| productId 店铺商品ID | 外部平台商品编号（区别于 OMNIX 内部产品 id）；与 productUrl 一并记录，便于回溯「这条询盘来自哪个商品」；没有才省略 |
+
+> ⚠️ 引流来源审计（硬性要求）：本次需求核心——要能审计「客户是由哪条链接引流进来的」。
+> 每条产品务必尽量带 \`productUrl\`（引流链接）+ \`productId\`（店铺商品 ID），系统会随该商机明细一起存储；
+> 后续可在商机页产品行直接查看「来源链接」与「店铺商品 ID」并点击回溯，缺失则审计链断裂。
+> 注意：这里的 \`productId\` 是**店铺外部商品编号**，不是 OMNIX 内部产品 id，两者不要混淆。
 
 禁止写进 description 的内容：询盘套话（"买家希望了解详情/索取邮箱/请报价"）、
 「定制」字样、总结性长句、多产品混在一条。这些内容一律放 aiSummary（进入 Chatter 备注）。
@@ -108,7 +115,9 @@ export const ACCIO_SKILL_MD = `# OMNIX Skill · 资深贸易业务员（客户�
     {
       "name": "PU 飞行员捏捏玩具",
       "description": "飞行员造型 PU 慢回弹减压捏捏玩具",
-      "image": "https://s.alicdn.com/..."
+      "image": "https://s.alicdn.com/...",
+      "productUrl": "https://www.alibaba.com/product-detail/1600xxxxxxxxxx.html",
+      "productId": "1600xxxxxxxxxx"
     }
   ],
   "aiSummary": "来源：国际站寿春店 / Haley Chen；时间：11-02；诉求：飞行员造型 PU 减压捏捏玩具，询样品；初判：新客，建议寄样跟进"

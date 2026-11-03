@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { cn } from "cn";
 
 export interface InputNumberProps {
@@ -30,7 +30,9 @@ const toNumber = (raw: string): number | "" => {
 /**
  * 数字输入框（仿 Odoo）：
  * - 纯数字输入，允许空值（""），便于「默认为空」的场景；
- * - 输入时实时剥离前导零（如 0900 → 900），失焦再次规整；
+ * - 输入过程中只在本地保留文本，**不即时格式化/上报**（避免中间态如 "12." 被父值回写成 "12" 而破坏小数输入）；
+ *   —— 失焦时才统一解析并在框内格式化；
+ * - 外部回填（如选产品带出成本价）在「非聚焦」时才同步到本地文本，避免覆盖用户正在输入的内容；
  * - 可选 suffix 后缀（如 "%"），渲染在框内右侧；
  * - bare 态去掉边框/背景，内嵌到表格单元格；聚焦时显示圆角焦点环。
  */
@@ -46,10 +48,12 @@ export function InputNumber({
   className,
 }: InputNumberProps) {
   const [text, setText] = useState<string>(value === "" ? "" : String(value));
+  const focusedRef = useRef(false);
 
-  // 外部 value 变化时同步到本地文本（如回填、步进等）
+  // 外部 value 变化时同步到本地文本（如回填、步进等）；
+  // 聚焦中（用户正在输入）不覆盖，防止把未失焦的中间文本冲掉
   useEffect(() => {
-    setText(value === "" ? "" : String(value));
+    if (!focusedRef.current) setText(value === "" ? "" : String(value));
   }, [value]);
 
   const emit = (n: number | "") => {
@@ -73,12 +77,17 @@ export function InputNumber({
         value={text}
         placeholder={placeholder}
         disabled={disabled}
+        onFocus={() => {
+          focusedRef.current = true;
+        }}
         onChange={(e) => {
-          const cleaned = sanitize(e.target.value);
-          setText(cleaned);
-          emit(toNumber(cleaned));
+          // 仅本地保留已清洗文本（剥离非数字/小数点），不即时格式化与上报，
+          // 让 "12.5" 这类小数能顺畅输入
+          setText(sanitize(e.target.value));
         }}
         onBlur={() => {
+          focusedRef.current = false;
+          // 失焦时才解析、规整并上报
           const n = toNumber(text);
           emit(n);
           setText(n === "" ? "" : String(n));

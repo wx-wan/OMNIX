@@ -295,7 +295,7 @@ export class McpService {
               description: "线索对应的客户画像 / 联系人",
               properties: {
                 name: { type: "string", description: "往来单位/联系人名称（必填，请用中文）" },
-                email: { type: "string", description: "电子邮箱（选填：有就填，用于同邮箱去重复用；没有就不传该字段，客户仍可正常建单）" },
+                email: { type: "string", description: "电子邮箱（选填：有就填。系统按邮箱或客户名自动去重复用已有客户，不会重复建档；没有就不传该字段，客户仍可正常建单）" },
                 phone: { type: "string", description: "电话号码" },
                 company: { type: "string", description: "所属公司（请用中文）" },
                 country: { type: "string", description: "国家地区（请翻译成中文，服务端转译为系统选项）" },
@@ -314,7 +314,7 @@ export class McpService {
             },
             products: {
               type: "array",
-              description: "产品需求列表，每条拆解为 OMNIX 订单明细行（type=product）",
+              description: "产品需求列表，每条拆解为 OMNIX 订单明细行（type=product）。每条可附 productUrl（引流来源链接）与 productId（店铺商品 ID），系统随商机明细存储，用于审计「客户由该链接引流进来」",
               items: {
                 type: "object",
                 properties: {
@@ -339,6 +339,16 @@ export class McpService {
                     type: "string",
                     description:
                       "产品图片 URL：仅当询盘带真实可访问的图床/CDN 链接时传入（服务端自动下载转存到本地 /uploads，规避防盗链 403）；没有图片就【省略该字段】，严禁传 \"@image:image.png\" 之类的附件引用、占位符或 \"undefined\"",
+                  },
+                  productUrl: {
+                    type: "string",
+                    description:
+                      "产品链接 / 引流来源链接（如店铺商品详情页 URL）。记录客户是由该链接引流进来的，用于来源归因与审计；没有就省略",
+                  },
+                  productId: {
+                    type: "string",
+                    description:
+                      "店铺商品 ID（外部平台商品编号，区别于 OMNIX 内部产品 id）。随产品链接一并记录，便于回溯询盘来源；没有就省略",
                   },
                 },
               },
@@ -625,6 +635,9 @@ export class McpService {
       // 缺省不传税率时由系统补齐，确保 MCP 创建的产品需求行也带默认税率。
       const taxRate = this.toNum(p.taxRate) ?? 13;
       const taxId = this.cleanStr(p.taxId) ?? "tax-13g-s";
+      // 询盘引流来源（外部标识，区别于内部 productId）：记录客户是由该链接引流进来的，用于来源归因/审计
+      const sourceProductUrl = this.cleanStr(p.productUrl) ?? undefined;
+      const sourceProductId = this.cleanStr(p.productId) ?? undefined;
       lines.push({
         type: "product",
         name: name || undefined,
@@ -636,6 +649,8 @@ export class McpService {
         taxRate,
         taxId,
         image,
+        sourceProductUrl,
+        sourceProductId,
       });
     }
     // 兼容旧调用：单产品 product 对象

@@ -10,13 +10,7 @@ import { Section } from "@/components/layout/Section";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Sheet,
   SheetContent,
@@ -26,8 +20,6 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Chatter } from "@/components/chatter/Chatter";
-import { RobotAvatar } from "@/components/common/RobotAvatar";
-import { useBotConfig, saveBotConfig } from "@/lib/botConfig";
 import { extractErrorDetail } from "@/lib/error";
 import {
   Dialog,
@@ -40,9 +32,11 @@ import {
 import {
   ContactForm,
   EMPTY_CONTACT,
+  isContactComplete,
   type ContactTypeValue,
   type ContactValues,
 } from "@/components/crm/ContactForm";
+import { ViewToggle, type ViewMode } from "@/components/common/ViewToggle";
 
 type ContactType = ContactTypeValue;
 
@@ -61,13 +55,6 @@ interface Contact {
   _count?: { deals: number };
   archived?: boolean;
 }
-
-// wobnimo 内置 3D 形象（角色 id），供系统机器人形象选择。
-const BOT_CHARACTERS = [
-  "mochi", "bao", "berry", "boo", "bumble", "cacti", "cap", "drift",
-  "ember", "hop", "inky", "latte", "microduck", "miso", "pebble", "pip",
-  "rex", "swirl", "tad", "volt",
-];
 
 const TABS: { value: "" | ContactType; labelKey: string }[] = [
   { value: "", labelKey: "common.all" },
@@ -105,29 +92,14 @@ export default function Contacts() {
   const [deleting, setDeleting] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
 
-  // 系统机器人形象设置
-  const bot = useBotConfig();
-  const [botName, setBotName] = useState("ominXBot");
-  const [botChar, setBotChar] = useState("mochi");
-  const [botSaving, setBotSaving] = useState(false);
+  // 卡片 / 列表 视图偏好（localStorage 持久化）
+  const [view, setView] = useState<ViewMode>(() => {
+    const v = typeof localStorage !== "undefined" ? localStorage.getItem("contacts-view") : null;
+    return v === "grid" || v === "list" ? v : "list";
+  });
   useEffect(() => {
-    if (bot) {
-      setBotName(bot.name);
-      setBotChar(bot.botCharacter);
-    }
-  }, [bot]);
-  const saveBot = async () => {
-    if (botSaving) return;
-    setBotSaving(true);
-    try {
-      await saveBotConfig({ name: botName.trim() || "ominXBot", botCharacter: botChar });
-      toast.success("机器人形象已更新");
-    } catch {
-      toast.error("保存失败，请重试");
-    } finally {
-      setBotSaving(false);
-    }
-  };
+    localStorage.setItem("contacts-view", view);
+  }, [view]);
 
   const load = () => {
     setLoading(true);
@@ -246,59 +218,14 @@ export default function Contacts() {
       <PageMeta
         title={t("nav.contacts")}
         actions={
-          <Button onClick={openCreate}>
-            {t("contact.add")}
-          </Button>
-        }
-      />
-
-      {/* 系统机器人形象设置：选择 3D 形象与名称，作用于全站机器人头像与提示 */}
-      <Section>
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-4">
-            <RobotAvatar size={64} state="idle" character={botChar} />
-            <div>
-              <h3 className="text-sm font-semibold">系统机器人形象</h3>
-              <p className="text-xs text-muted-foreground">
-                设置 ominXBot 的 3D 形象与名称，将作用于全站机器人头像与各类提示。
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-wrap items-end gap-3">
-            <label className="flex flex-col gap-1 text-xs text-muted-foreground">
-              名称
-              <Input
-                className="w-40"
-                value={botName}
-                onChange={(e) => setBotName(e.target.value)}
-                placeholder="ominXBot"
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-xs text-muted-foreground">
-              形象
-              <Select
-                items={Object.fromEntries(BOT_CHARACTERS.map((c) => [c, c]))}
-                value={botChar}
-                onValueChange={(v) => setBotChar(String(v))}
-              >
-                <SelectTrigger className="w-28">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {BOT_CHARACTERS.map((c) => (
-                    <SelectItem key={c} value={c}>
-                      {c}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </label>
-            <Button onClick={saveBot} disabled={botSaving || !bot}>
-              {botSaving ? "保存中…" : t("common.save")}
+          <div className="flex items-center gap-2">
+            <ViewToggle value={view} onChange={setView} />
+            <Button onClick={openCreate}>
+              {t("contact.add")}
             </Button>
           </div>
-        </div>
-      </Section>
+        }
+      />
 
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative max-w-xs">
@@ -331,18 +258,95 @@ export default function Contacts() {
         </Button>
       </div>
 
-      <Section noPadding>
-        <div className="flex flex-col gap-1">
+      {view === "list" ? (
+        <Section noPadding>
+          <div className="flex flex-col gap-1">
+            {filtered.map((c) => (
+              <div
+                key={c.id}
+                className="flex cursor-pointer items-center justify-between gap-3 px-5 py-3 hover:bg-muted/50"
+                onClick={() => openDetail(c)}
+              >
+                <div className="min-w-0">
+                  <p className="flex items-center gap-2 truncate text-sm font-medium">
+                    <span className="truncate">{c.name}</span>
+                    {c.aiGenerated && !isContactComplete(c) && (
+                      <Badge
+                        variant="outline"
+                        className="border-amber-500 text-amber-600"
+                        title={t("contact.aiPendingHint")}
+                      >
+                        {t("contact.aiPending")}
+                      </Badge>
+                    )}
+                    {c.company && (
+                      <span className="ml-2 text-xs text-muted-foreground">
+                        {c.company}
+                      </span>
+                    )}
+                  </p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {c.email || c.phone || "—"}
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-3">
+                  <Badge variant={c.type === "user" ? "default" : "secondary"}>
+                    {typeLabel(c.type)}
+                  </Badge>
+                  {c.archived && (
+                    <Badge
+                      variant="outline"
+                      className="border-slate-500 text-slate-500"
+                    >
+                      {t("common.archived")}
+                    </Badge>
+                  )}
+                  {c._count && (
+                    <span className="text-xs text-muted-foreground">
+                      {c._count.deals}
+                    </span>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    className="text-muted-foreground hover:text-foreground"
+                    aria-label={c.archived ? t("common.unarchive") : t("common.archive")}
+                    title={c.archived ? t("common.unarchive") : t("common.archive")}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleArchive(c);
+                    }}
+                  >
+                    {c.archived ? <ArchiveRestore /> : <Archive />}
+                  </Button>
+                </div>
+              </div>
+            ))}
+            {filtered.length === 0 && (
+              <p className="px-5 py-4 text-sm text-muted-foreground">
+                {loading ? t("common.loading") : t("contact.empty")}
+              </p>
+            )}
+          </div>
+        </Section>
+      ) : filtered.length === 0 ? (
+        <Card>
+          <CardContent className="py-10 text-center text-sm text-muted-foreground">
+            {loading ? t("common.loading") : t("contact.empty")}
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map((c) => (
-            <div
+            <Card
               key={c.id}
-              className="flex cursor-pointer items-center justify-between gap-3 px-5 py-3 hover:bg-muted/50"
+              className={"cursor-pointer" + (c.archived ? " opacity-60" : "")}
               onClick={() => openDetail(c)}
             >
-              <div className="min-w-0">
-                <p className="flex items-center gap-2 truncate text-sm font-medium">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
                   <span className="truncate">{c.name}</span>
-                  {c.aiGenerated && (
+                  {c.aiGenerated && !isContactComplete(c) && (
                     <Badge
                       variant="outline"
                       className="border-amber-500 text-amber-600"
@@ -351,56 +355,49 @@ export default function Contacts() {
                       {t("contact.aiPending")}
                     </Badge>
                   )}
-                  {c.company && (
-                    <span className="ml-2 text-xs text-muted-foreground">
-                      {c.company}
+                  <div
+                    className="ml-auto flex items-center gap-1"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      className="text-muted-foreground hover:text-foreground"
+                      aria-label={c.archived ? t("common.unarchive") : t("common.archive")}
+                      title={c.archived ? t("common.unarchive") : t("common.archive")}
+                      onClick={() => handleArchive(c)}
+                    >
+                      {c.archived ? <ArchiveRestore /> : <Archive />}
+                    </Button>
+                  </div>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-1 text-sm text-muted-foreground">
+                {c.company && <span className="truncate">{c.company}</span>}
+                <span className="truncate">{c.email || c.phone || "—"}</span>
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <Badge variant={c.type === "user" ? "default" : "secondary"}>
+                    {typeLabel(c.type)}
+                  </Badge>
+                  {c.archived && (
+                    <Badge
+                      variant="outline"
+                      className="border-slate-500 text-slate-500"
+                    >
+                      {t("common.archived")}
+                    </Badge>
+                  )}
+                  {c._count && (
+                    <span className="text-xs text-muted-foreground">
+                      {c._count.deals} 商机
                     </span>
                   )}
-                </p>
-                <p className="truncate text-xs text-muted-foreground">
-                  {c.email || c.phone || "—"}
-                </p>
-              </div>
-              <div className="flex shrink-0 items-center gap-3">
-                <Badge variant={c.type === "user" ? "default" : "secondary"}>
-                  {typeLabel(c.type)}
-                </Badge>
-                {c.archived && (
-                  <Badge
-                    variant="outline"
-                    className="border-slate-500 text-slate-500"
-                  >
-                    {t("common.archived")}
-                  </Badge>
-                )}
-                {c._count && (
-                  <span className="text-xs text-muted-foreground">
-                    {c._count.deals}
-                  </span>
-                )}
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  className="text-muted-foreground hover:text-foreground"
-                  aria-label={c.archived ? t("common.unarchive") : t("common.archive")}
-                  title={c.archived ? t("common.unarchive") : t("common.archive")}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleArchive(c);
-                  }}
-                >
-                  {c.archived ? <ArchiveRestore /> : <Archive />}
-                </Button>
-              </div>
-            </div>
+                </div>
+              </CardContent>
+            </Card>
           ))}
-          {filtered.length === 0 && (
-            <p className="px-5 py-4 text-sm text-muted-foreground">
-              {loading ? t("common.loading") : t("contact.empty")}
-            </p>
-          )}
         </div>
-      </Section>
+      )}
 
       {/* 新建 / 编辑 侧滑 */}
       <Sheet
@@ -458,7 +455,7 @@ export default function Contacts() {
                       {t("common.archived")}
                     </Badge>
                   )}
-                  {detail.aiGenerated && (
+                  {detail.aiGenerated && !isContactComplete(detail) && (
                     <Badge
                       variant="outline"
                       className="border-amber-500 text-amber-600"

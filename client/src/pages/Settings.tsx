@@ -1,9 +1,18 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Copy, Download, RefreshCw, ShieldAlert, Webhook } from "lucide-react";
+import { Copy, Download, RefreshCw, ShieldAlert, Webhook, Bot } from "lucide-react";
 import { toast } from "sonner";
 
 import { api } from "@/lib/api";
+import { useBotConfig, saveBotConfig } from "@/lib/botConfig";
+import { RobotAvatar } from "@/components/common/RobotAvatar";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ACCIO_SKILL_FILENAME, ACCIO_SKILL_MD } from "@/lib/accioSkill";
 import { Stack } from "@/components/layout/Stack";
 import { PageMeta } from "@/components/layout/PageMeta";
@@ -21,6 +30,13 @@ interface McpSettings {
   /** 后端检测到的本机局域网 IPv4（比浏览器 WebRTC 探测可靠）。 */
   lanIp?: string | null;
 }
+
+// wobnimo 内置 3D 形象（角色 id），供机器人个人偏好选择。
+const BOT_CHARACTERS = [
+  "mochi", "bao", "berry", "boo", "bumble", "cacti", "cap", "drift",
+  "ember", "hop", "inky", "latte", "microduck", "miso", "pebble", "pip",
+  "rex", "swirl", "tad", "volt",
+];
 
 export default function Settings() {
   const { t } = useTranslation();
@@ -135,6 +151,30 @@ export default function Settings() {
     const redirectUri = encodeURIComponent(window.location.origin);
     const url = `${window.location.origin}/oauth/authorize?response_type=code&client_id=omnix-mcp&redirect_uri=${redirectUri}&scope=mcp&state=${encodeURIComponent("omnix-settings")}`;
     window.open(url, "_blank", "noopener");
+  };
+
+  // 机器人外观（个人偏好）：按当前登录用户存储，互不影响；改自己的不影响他人。
+  const bot = useBotConfig();
+  const [botName, setBotName] = useState("ominXBot");
+  const [botChar, setBotChar] = useState("mochi");
+  const [botSaving, setBotSaving] = useState(false);
+  useEffect(() => {
+    if (bot) {
+      setBotName(bot.name);
+      setBotChar(bot.botCharacter);
+    }
+  }, [bot]);
+  const saveBot = async () => {
+    if (botSaving) return;
+    setBotSaving(true);
+    try {
+      await saveBotConfig({ name: botName.trim() || "ominXBot", botCharacter: botChar });
+      toast.success(t("settings.bot.saved"));
+    } catch {
+      toast.error(t("settings.bot.saveFailed"));
+    } finally {
+      setBotSaving(false);
+    }
   };
 
   const guide = [
@@ -338,6 +378,55 @@ export default function Settings() {
             </div>
           </div>
         )}
+      </Section>
+
+      <Section
+        title={t("settings.bot.title")}
+        description={t("settings.bot.desc")}
+        icon={Bot}
+      >
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-4">
+            <RobotAvatar size={64} state="idle" character={botChar} />
+            <div>
+              <h3 className="text-sm font-semibold">{t("settings.bot.heading")}</h3>
+              <p className="text-xs text-muted-foreground">{t("settings.bot.note")}</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-end gap-3">
+            <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+              {t("settings.bot.name")}
+              <Input
+                className="w-40"
+                value={botName}
+                onChange={(e) => setBotName(e.target.value)}
+                placeholder="ominXBot"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+              {t("settings.bot.character")}
+              <Select
+                items={Object.fromEntries(BOT_CHARACTERS.map((c) => [c, c]))}
+                value={botChar}
+                onValueChange={(v) => setBotChar(String(v))}
+              >
+                <SelectTrigger className="w-28">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {BOT_CHARACTERS.map((c) => (
+                    <SelectItem key={c} value={c}>
+                      {c}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </label>
+            <Button onClick={saveBot} disabled={botSaving || !bot}>
+              {botSaving ? t("common.loading") : t("common.save")}
+            </Button>
+          </div>
+        </div>
       </Section>
     </Stack>
   );

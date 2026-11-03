@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
-import { useTranslation } from "react-i18next";
+import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { useTranslation, type TFunction } from "react-i18next";
 import {
   Plus,
   Trash2,
@@ -12,6 +12,7 @@ import {
   GripVertical,
   ChevronDown,
   ChevronRight,
+  Link2,
 } from "lucide-react";
 import type { SelectRecord } from "@/components/common/SearchableSelect";
 import { Picker } from "@/components/common/Picker";
@@ -20,6 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Image } from "@/components/ui/image";
 import { ImageUpload } from "@/components/ui/image-upload";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { api } from "@/lib/api";
 import { cn } from "cn";
 
@@ -48,11 +50,15 @@ export interface OrderLine {
   discount: number;
   /** 产品需求图片（每行独立上传，存 URL） */
   image?: string;
+  /** 询盘引流来源链接（外部店铺商品详情页 URL）：记录客户由该链接引流进来，用于来源归因审计 */
+  sourceProductUrl?: string;
+  /** 外部平台商品编号（区别于内部 productId） */
+  sourceProductId?: string;
 }
 
 type DropPos = "before" | "after" | "inside";
 
-function uid() {
+export function uid() {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
     : String(Math.random());
@@ -76,6 +82,8 @@ function makeRow(type: OrderRowType): OrderLine {
     taxId: isProduct ? "tax-13g-s" : null,
     discount: 0,
     image: "",
+    sourceProductUrl: "",
+    sourceProductId: "",
   };
 }
 
@@ -308,43 +316,74 @@ export function OrderLinesTable({
       unit: parseUnit(p),
       price: parsePrice(p),
       costPrice: parseCostPrice(p),
+      image: p.image || "",
     });
 
   // 折叠
   const toggleCollapse = (id: string) =>
     setCollapsed((c) => ({ ...c, [id]: !c[id] }));
 
-  // 拖拽处理
+  // 拖拽处理（拖拽源仅限手柄，见 grip；行作为放置目标）。
+  // 关键：drop 时直接从「当前行对象 + 光标位置」计算落点，避免读取可能滞后的 React 状态闭包
+  //（原生 DnD 中 dragover→drop 间常未重渲染，旧闭包的 overId/overPos 会失真，导致排序失效）。
+  const dragIdRef = useRef<string | null>(null);
   const onDragStart = (e: React.DragEvent, id: string) => {
+    dragIdRef.current = id;
     setDragId(id);
     e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("text/plain", id);
   };
   const onDragOver = (e: React.DragEvent, row: OrderLine) => {
-    if (!dragId || dragId === row.id) return;
+    if (!dragIdRef.current) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
+    if (dragIdRef.current === row.id) {
+      // 悬停在源行本身：无有效落点，清除指示
+      if (overId !== null) setOverId(null);
+      if (overPos !== null) setOverPos(null);
+      return;
+    }
     const rect = e.currentTarget.getBoundingClientRect();
     const frac = (e.clientY - rect.top) / rect.height;
-    let pos: DropPos;
-    if (row.type === "combo") {
-      pos = frac < 0.34 ? "before" : frac > 0.66 ? "after" : "inside";
-    } else {
-      pos = frac < 0.5 ? "before" : "after";
-    }
+    const pos: DropPos =
+      row.type === "combo"
+        ? frac < 0.34
+          ? "before"
+          : frac > 0.66
+            ? "after"
+            : "inside"
+        : frac < 0.5
+          ? "before"
+          : "after";
     setOverId(row.id);
     setOverPos(pos);
   };
-  const onDrop = (e: React.DragEvent) => {
+  const onDrop = (e: React.DragEvent, row: OrderLine) => {
     e.preventDefault();
-    if (dragId && overId && dragId !== overId && overPos) {
-      setLines((ls) => moveLine(ls, dragId, overId, overPos));
+    const srcId = dragIdRef.current;
+    if (srcId && srcId !== row.id) {
+      // 落点位置在 drop 当下重新计算，保证与光标一致
+      const rect = e.currentTarget.getBoundingClientRect();
+      const frac = (e.clientY - rect.top) / rect.height;
+      const pos: DropPos =
+        row.type === "combo"
+          ? frac < 0.34
+            ? "before"
+            : frac > 0.66
+              ? "after"
+              : "inside"
+          : frac < 0.5
+            ? "before"
+            : "after";
+      setLines((ls) => moveLine(ls, srcId, row.id, pos));
     }
+    dragIdRef.current = null;
     setDragId(null);
     setOverId(null);
     setOverPos(null);
   };
   const onDragEnd = () => {
+    dragIdRef.current = null;
     setDragId(null);
     setOverId(null);
     setOverPos(null);
@@ -436,12 +475,19 @@ export function OrderLinesTable({
     </th>
   );
 
-  const grip = () => (
-    <GripVertical
-      className="size-4 shrink-0 cursor-grab text-muted-foreground/40 hover:text-muted-foreground"
-      aria-hidden
+  // 拖拽手柄：仅此图标可发起拖动（draggable 限定在手柄上），
+  // 避免整行可拖时吞掉输入框的文本选中/全选等操作。行仍作为放置目标（onDragOver/onDrop 在 <tr> 上）。
+  const grip = (id: string) => (
+    <span
+      draggable
+      onDragStart={(e) => onDragStart(e, id)}
+      onDragEnd={onDragEnd}
+      className="inline-flex cursor-grab items-center active:cursor-grabbing"
+      aria-label={t("orderLines.dragToReorder")}
       data-drag-handle
-    />
+    >
+      <GripVertical className="size-4 shrink-0 text-muted-foreground/40 hover:text-muted-foreground" />
+    </span>
   );
 
   // 上传产品需求图片：经后端 /upload 落盘，返回可访问 URL
@@ -456,6 +502,16 @@ export function OrderLinesTable({
 
   return (
     <div className={cn("rounded-lg border border-border bg-card", className)}>
+      {/* 渐变定义：来源链接图标自身描边使用（紫→橙，AI 标志同款） */}
+      <svg width="0" height="0" className="absolute" aria-hidden>
+        <defs>
+          <linearGradient id="omnixLinkGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#a855f7" />
+            <stop offset="50%" stopColor="#d946ef" />
+            <stop offset="100%" stopColor="#fb923c" />
+          </linearGradient>
+        </defs>
+      </svg>
       <div className="max-h-[460px] overflow-auto">
         <table className="w-full min-w-[640px] table-fixed text-sm">
           <thead>
@@ -485,11 +541,8 @@ export function OrderLinesTable({
                 return (
                   <tr
                     key={l.id}
-                    draggable
-                    onDragStart={(e) => onDragStart(e, l.id)}
                     onDragOver={(e) => onDragOver(e, l)}
-                    onDrop={onDrop}
-                    onDragEnd={onDragEnd}
+                    onDrop={(e) => onDrop(e, l)}
                     style={dropStyle(l.id)}
                     className={cn(
                       "group border-b border-border/60 bg-muted/30",
@@ -498,7 +551,7 @@ export function OrderLinesTable({
                   >
                     <td className="p-1 align-middle">
                       <div className="flex items-center gap-1.5">
-                        {grip()}
+                        {grip(l.id)}
                         <button
                           type="button"
                           aria-label={open ? "折叠" : "展开"}
@@ -557,11 +610,8 @@ export function OrderLinesTable({
                 return (
                   <tr
                     key={l.id}
-                    draggable
-                    onDragStart={(e) => onDragStart(e, l.id)}
                     onDragOver={(e) => onDragOver(e, l)}
-                    onDrop={onDrop}
-                    onDragEnd={onDragEnd}
+                    onDrop={(e) => onDrop(e, l)}
                     style={dropStyle(l.id)}
                     className={cn(
                       "group border-b border-border/60 hover:bg-muted/30",
@@ -570,7 +620,7 @@ export function OrderLinesTable({
                   >
                     <td colSpan={8} className="p-1">
                       <div className="flex items-center gap-1.5">
-                        {grip()}
+                        {grip(l.id)}
                         <Input
                           value={l.name}
                           placeholder={t("orderLines.notePlaceholder")}
@@ -596,11 +646,8 @@ export function OrderLinesTable({
               return (
                 <tr
                   key={l.id}
-                  draggable
-                  onDragStart={(e) => onDragStart(e, l.id)}
                   onDragOver={(e) => onDragOver(e, l)}
-                  onDrop={onDrop}
-                  onDragEnd={onDragEnd}
+                  onDrop={(e) => onDrop(e, l)}
                   style={dropStyle(l.id)}
                   className={cn(
                     "group border-b border-border/60 hover:bg-muted/30",
@@ -609,17 +656,17 @@ export function OrderLinesTable({
                 >
                   <td
                     className={cn(
-                      "p-1 align-middle",
+                      "p-1 align-top",
                       l.parentId && "border-l-2 border-border/50",
                     )}
                   >
                     <div
                       className={cn(
-                        "flex h-9 items-center gap-1",
+                        "flex items-center gap-1",
                         l.parentId && "ml-3",
                       )}
                     >
-                      {grip()}
+                      {grip(l.id)}
                       <div className="min-w-0 flex-1">
                         <Picker
                           records={products}
@@ -636,6 +683,7 @@ export function OrderLinesTable({
                               description: rec ? rec.label : "",
                               unit: rec ? parseUnit(rec) : "",
                               costPrice: rec ? parseCostPrice(rec) : 0,
+                              image: rec?.image ?? "",
                             })
                           }
                           onInputChange={(text) =>
@@ -705,14 +753,18 @@ export function OrderLinesTable({
                     {money(lineSubtotal(l))}
                   </td>
                   <td className="p-1 align-middle">
-                    <button
-                      type="button"
-                      aria-label={t("orderLines.remove")}
-                      onClick={() => removeRow(l.id)}
-                      className="flex size-7 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
-                    >
-                      <Trash2 className="size-4" />
-                    </button>
+                    <div className="flex items-center justify-end gap-1">
+                      <button
+                        type="button"
+                        aria-label={t("orderLines.remove")}
+                        onClick={() => removeRow(l.id)}
+                        className="flex size-7 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
+                      >
+                        <Trash2 className="size-4" />
+                      </button>
+                      {/* 引流来源：无值时灰色、点击弹窗绑定（链接+商品ID 必填）；有值时紫橙渐变亮起、点击跳转 */}
+                      <SourceLinkControl line={l} patch={patch} t={t} />
+                    </div>
                   </td>
                 </tr>
               );
@@ -862,6 +914,123 @@ export function OrderLinesTable({
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+/**
+ * 引流来源控件（每行最右）：
+ * - 未绑定（链接 / 商品ID 任一为空）→ 灰色链环图标，点击弹出输入框手动绑定，两者必填。
+ * - 已绑定 → 紫橙渐变亮起；点击在新标签页打开来源链接（链接合法时）。
+ * 图标无外圈，渐变直接描在 SVG 上（定义见表格顶部 #omnixLinkGrad）。
+ */
+function SourceLinkControl({
+  line,
+  patch,
+  t,
+}: {
+  line: OrderLine;
+  patch: (id: string, p: Partial<OrderLine>) => void;
+  t: TFunction;
+}) {
+  const [open, setOpen] = useState(false);
+  const [url, setUrl] = useState(line.sourceProductUrl ?? "");
+  const [sid, setSid] = useState(line.sourceProductId ?? "");
+
+  useEffect(() => {
+    setUrl(line.sourceProductUrl ?? "");
+    setSid(line.sourceProductId ?? "");
+  }, [line.sourceProductUrl, line.sourceProductId]);
+
+  const hasValue = !!(line.sourceProductUrl && line.sourceProductId);
+  const validJump =
+    !!line.sourceProductUrl && /^https?:\/\//i.test(line.sourceProductUrl);
+  const canSave = url.trim() !== "" && sid.trim() !== "";
+
+  const save = () => {
+    if (!canSave) return;
+    patch(line.id, {
+      sourceProductUrl: url.trim(),
+      sourceProductId: sid.trim(),
+    });
+    setOpen(false);
+  };
+
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(next) => {
+        if (next && validJump) {
+          window.open(line.sourceProductUrl!, "_blank", "noopener,noreferrer");
+          return;
+        }
+        setOpen(next);
+      }}
+    >
+      <PopoverTrigger
+        render={
+          <button
+            type="button"
+            aria-label={t("orderLines.openSourceLink")}
+            title={validJump ? line.sourceProductUrl : t("orderLines.bindSource")}
+            className={cn(
+              "flex size-7 items-center justify-center transition-transform hover:scale-110",
+              !hasValue && "opacity-50",
+            )}
+          >
+            <Link2
+              className="size-4"
+              strokeWidth={2.5}
+              stroke={hasValue ? "url(#omnixLinkGrad)" : "currentColor"}
+              style={hasValue ? undefined : { color: "rgb(148 163 184)" }}
+            />
+          </button>
+        }
+      />
+      <PopoverContent align="end" className="w-72">
+        <div className="text-sm font-medium">{t("orderLines.bindSource")}</div>
+        <p className="text-xs text-muted-foreground">
+          {t("orderLines.bindSourceDesc")}
+        </p>
+        <label className="mt-1 flex flex-col gap-1 text-xs text-muted-foreground">
+          {t("orderLines.sourceLink")}
+          <Input
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="https://..."
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+          {t("orderLines.sourceProductId")}
+          <Input
+            value={sid}
+            onChange={(e) => setSid(e.target.value)}
+            placeholder="1600xxxxxxxxxx"
+          />
+        </label>
+        <div className="mt-1 flex items-center justify-between">
+          <span className="text-[11px] text-destructive">
+            {!canSave ? t("orderLines.bothRequired") : ""}
+          </span>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className="h-8 rounded-md px-3 text-sm hover:bg-accent"
+              onClick={() => setOpen(false)}
+            >
+              {t("common.cancel")}
+            </button>
+            <button
+              type="button"
+              disabled={!canSave}
+              onClick={save}
+              className="h-8 rounded-md bg-primary px-3 text-sm text-primary-foreground disabled:opacity-50"
+            >
+              {t("common.save")}
+            </button>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 

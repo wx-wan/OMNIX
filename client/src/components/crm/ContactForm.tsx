@@ -39,6 +39,26 @@ export const EMPTY_CONTACT: ContactValues = {
   role: "",
 };
 
+/**
+ * 客户信息是否已完善：除官网外，核心字段（姓名/公司/邮箱/电话/客户类型/国家地区）
+ * 全部有值即视为完善——「待完善」徽标仅在这些字段有缺失时展示（见各处 aiPending 条件）。
+ * 实时计算、不动服务端 aiGenerated 数据，字段补齐后徽标自动消失。
+ */
+export function isContactComplete(
+  c:
+    | Partial<
+        Pick<
+          ContactValues,
+          "name" | "company" | "email" | "phone" | "customerType" | "country"
+        >
+      >
+    | null
+    | undefined,
+): boolean {
+  const filled = (v?: string | null) => typeof v === "string" && v.trim().length > 0;
+  return [c?.name, c?.company, c?.email, c?.phone, c?.customerType, c?.country].every(filled);
+}
+
 export const CONTACT_TYPE_OPTIONS: ContactTypeValue[] = [
   "customer",
   "supplier",
@@ -103,7 +123,12 @@ export function ContactForm({ values, onChange, idPrefix = "c" }: Props) {
         <Input id={id("name")} value={values.name} onChange={set("name")} />
       </Field>
       <Field label={t("contact.company")}>
-        <Input id={id("company")} value={values.company} onChange={set("company")} />
+        <Input
+          id={id("company")}
+          value={values.company}
+          placeholder={t("contact.companyPlaceholder")}
+          onChange={set("company")}
+        />
       </Field>
       <Field label={t("contact.email")}>
         <Input

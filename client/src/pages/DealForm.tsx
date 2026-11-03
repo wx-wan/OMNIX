@@ -36,9 +36,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Chatter, type ChatterMessage } from "@/components/chatter/Chatter";
 import type { ContactValues } from "@/components/crm/ContactForm";
-import { EMPTY_CONTACT } from "@/components/crm/ContactForm";
+import { EMPTY_CONTACT, isContactComplete } from "@/components/crm/ContactForm";
 import type { ProductValues } from "@/components/crm/ProductForm";
-import { OrderLinesTable, TAXES, type OrderLine } from "@/components/crm/OrderLinesTable";
+import { OrderLinesTable, TAXES, uid, type OrderLine } from "@/components/crm/OrderLinesTable";
 import { Picker } from "@/components/common/Picker";
 import type { SelectRecord } from "@/components/common/SearchableSelect";
 
@@ -190,6 +190,8 @@ function emptyLine(): OrderLine {
     taxId: "tax-13g-s",
     taxRate: 13,
     discount: 0,
+    sourceProductUrl: "",
+    sourceProductId: "",
   };
 }
 
@@ -216,9 +218,13 @@ function productToLine(p: ProductValues): OrderLine {
 
 // 恢复 linesJson 时规范化行数据：旧数据/MCP 建单可能缺 quantity/price 等键，
 // 直接透传会让 InputNumber 显示 "undefined"、合计算出 ¥NaN —— 统一补齐默认值。
+// 另一关键：MCP 建单的行不带 id（服务端 toDealLines 未生成），而拖拽/行内编辑都按 id 定位行；
+// 缺 id 时拖拽 onDragStart 收到 undefined，onDragOver 直接 return，行无法成为放置目标 → 拖不动。
+// 故此处为缺失 id 的行补一个稳定 id（保存到库后即持久，后续加载不再重复生成）。
 function normalizeRestoredLine(l: OrderLine): OrderLine {
   return {
     ...l,
+    id: typeof l.id === "string" && l.id ? l.id : uid(),
     quantity: typeof l.quantity === "number" && Number.isFinite(l.quantity) && l.quantity > 0 ? l.quantity : "",
     unit: typeof l.unit === "string" ? l.unit : "",
     price: typeof l.price === "number" && Number.isFinite(l.price) ? l.price : 0,
@@ -760,6 +766,8 @@ export default function DealForm() {
       taxId: l.taxId ?? null,
       discount: l.discount,
       image: l.image || null,
+      sourceProductUrl: l.sourceProductUrl ?? null,
+      sourceProductId: l.sourceProductId ?? null,
     })),
   });
 
@@ -936,7 +944,7 @@ export default function DealForm() {
                     <Label htmlFor="deal-contact-name" className="flex items-center gap-1.5">
                       {t("contact.name")}
                       {!isEdit && <span className="text-red-500"> *</span>}
-                      {contact.aiGenerated && (
+                      {contact.aiGenerated && !isContactComplete(contact) && (
                         <Badge
                           variant="outline"
                           className="border-amber-500 text-amber-600"
