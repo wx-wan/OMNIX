@@ -419,6 +419,8 @@ export default function DealForm() {
     }
     setMoving(true);
     try {
+      // 先保存商机当前状态（含税/明细等），再推进到下一阶段，确保阶段流转基于最新数据
+      await api.patch(`/crm/deals/${id}`, buildPayload());
       await api.patch(`/crm/deals/${id}`, { stageId: next.id });
       const r = await api.get<DealDetailData>(`/crm/deals/${id}`);
       setDetail(r.data);
