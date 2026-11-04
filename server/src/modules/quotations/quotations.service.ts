@@ -83,7 +83,7 @@ export class QuotationsService {
           contactId: deal.contactId,
           shippingAddress: deal.contact?.country ?? null,
           validUntil: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
-          priceIncludeTax: deal.priceIncludeTax,
+          priceIncludeTax: dto.priceIncludeTax ?? deal.priceIncludeTax,
           linesJson,
           amount: deriveAmount(linesJson),
         },

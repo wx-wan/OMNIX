@@ -402,6 +402,8 @@ export default function DealForm() {
     if (next.key === "quote") {
       setMoving(true);
       try {
+        // 先保存商机当前状态（含税/明细等），确保新建报价单继承的是最新值
+        await api.patch(`/crm/deals/${id}`, buildPayload());
         const r = await api.post<{ id: string; number: string }>("/quotations", {
           dealId: id,
         });
