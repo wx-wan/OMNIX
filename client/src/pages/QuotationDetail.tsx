@@ -16,6 +16,8 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { Textarea } from "@/components/ui/textarea";
 import { Chatter, type ChatterMessage } from "@/components/chatter/Chatter";
 import { OrderLinesTable, type OrderLine } from "@/components/crm/OrderLinesTable";
+import { Picker } from "@/components/common/Picker";
+import type { SelectRecord } from "@/components/common/SearchableSelect";
 
 interface QuotationDetailData {
   id: string;
@@ -83,6 +85,18 @@ export default function QuotationDetail() {
 
   // 报价单共用所属商机的讨论线程（dealId 必填，统一走商机线程）
   const chatterBase = `/crm/deals/${detail?.dealId}/chatter`;
+
+  // 付款条款固定选项；若库里是历史自由文本（不在选项中），也并入可选项避免丢失
+  const paymentTermRecords: SelectRecord[] = useMemo(() => {
+    const base: SelectRecord[] = [
+      { id: t("quotation.paymentTermsImmediate"), label: t("quotation.paymentTermsImmediate") },
+      { id: t("quotation.paymentTerms30Balance"), label: t("quotation.paymentTerms30Balance") },
+    ];
+    if (paymentTerms && !base.some((r) => r.id === paymentTerms)) {
+      base.push({ id: paymentTerms, label: paymentTerms });
+    }
+    return base;
+  }, [paymentTerms, t]);
 
   useEffect(() => {
     if (!id) return;
@@ -260,12 +274,13 @@ export default function QuotationDetail() {
                 />
               </div>
 
-              {/* 行2右：付款条款（控件已 w-full 撑满） */}
+              {/* 行2右：付款条款（Picker 固定选项；历史自由文本值也保留可选） */}
               <div className="flex flex-col gap-1.5">
                 <Label>{t("quotation.paymentTerms")}</Label>
-                <Input
-                  value={paymentTerms}
-                  onChange={(e) => setPaymentTerms(e.target.value)}
+                <Picker
+                  records={paymentTermRecords}
+                  value={paymentTerms || null}
+                  onChange={(rec) => setPaymentTerms(rec?.id ?? "")}
                   placeholder={t("quotation.paymentTerms")}
                 />
               </div>

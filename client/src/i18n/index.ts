@@ -36,6 +36,8 @@ const resources = {
         empty: "暂无报价单——在商机详情点击「报价」生成",
         dealFilterActive: "已按商机筛选",
         clearFilter: "查看全部",
+        paymentTermsImmediate: "立即付款",
+        paymentTerms30Balance: "立即支付30%，发货前结清尾款",
       },
       dashboard: {
         title: "仪表盘",
@@ -449,6 +451,8 @@ const resources = {
         empty: "No quotations yet — click «Quote» on a deal to create one",
         dealFilterActive: "Filtered by deal",
         clearFilter: "View all",
+        paymentTermsImmediate: "Pay immediately",
+        paymentTerms30Balance: "Pay 30% now, balance before shipment",
       },
       dashboard: {
         title: "Dashboard",

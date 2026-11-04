@@ -82,7 +82,12 @@ export class QuotationsService {
           dealId: deal.id,
           contactId: deal.contactId,
           shippingAddress: deal.contact?.country ?? null,
-          validUntil: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+          // 默认有效期：创建日期后延一个日历月
+          validUntil: (() => {
+            const d = new Date();
+            d.setMonth(d.getMonth() + 1);
+            return d;
+          })(),
           priceIncludeTax: dto.priceIncludeTax ?? deal.priceIncludeTax,
           linesJson,
           amount: deriveAmount(linesJson),
