@@ -62,6 +62,8 @@ interface DealDetailData {
   product: (ProductValues & { id: string }) | null;
   /** 订单明细（整张表 JSON，含组合/备注/排序；行级数量与折扣随行）。后端字段名为 linesJson。 */
   linesJson?: string | null;
+  /** 价格是否含税：true=单价含税（倒算税额），false=单价不含税（税额另计）。 */
+  priceIncludeTax?: boolean;
 }
 
 /** 产物栏：固定单据类型，按固定阶段解锁（minStage = 阶段有序下标，到达该阶段才出现），数量先占位 0。 */
@@ -668,6 +670,7 @@ export default function DealForm() {
         setSalespersonId(matched?.id ?? user?.id ?? "");
         setSource(d.source ?? "");
         setDescription(d.description ?? "");
+        setPriceIncludeTax(d.priceIncludeTax ?? true);
         setContact({
           ...EMPTY_CONTACT,
           name: d.contact?.name ?? "",

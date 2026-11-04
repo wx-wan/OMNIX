@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsNumber, IsEnum, ValidateNested } from "class-validator";
+import { IsBoolean, IsOptional, IsString, IsNumber, IsEnum, ValidateNested } from "class-validator";
 import { Type } from "class-transformer";
 import { Priority } from "@prisma/client";
 import { CreateContactDto } from "../../contacts/dto/create-contact.dto";
@@ -70,4 +70,9 @@ export class CreateDealDto {
   @ValidateNested({ each: true })
   @Type(() => DealLineDto)
   lines?: DealLineDto[];
+
+  /** 价格是否含税：true=单价含税（倒算税额），false=单价不含税（税额另计）。 */
+  @IsOptional()
+  @IsBoolean()
+  priceIncludeTax?: boolean;
 }

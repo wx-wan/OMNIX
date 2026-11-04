@@ -361,6 +361,7 @@ export class CrmService {
           position: (agg._max.position ?? -1) + 1,
           contactId: contactId ?? undefined,
           productId: dto.productId ?? firstProductId ?? product?.id ?? undefined,
+          priceIncludeTax: dto.priceIncludeTax ?? true,
           linesJson,
         },
       });
@@ -538,6 +539,7 @@ export class CrmService {
     if (dto.source !== undefined) data.source = dto.source;
     if (dto.stageId !== undefined) data.stage = { connect: { id: dto.stageId } };
     if (dto.position !== undefined) data.position = dto.position;
+    if (dto.priceIncludeTax !== undefined) data.priceIncludeTax = dto.priceIncludeTax;
 
     // 拖拽换列时若未显式给位置，则落到目标列末尾
     if (dto.stageId !== undefined && dto.position === undefined) {

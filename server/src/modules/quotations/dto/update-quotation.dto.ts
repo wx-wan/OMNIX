@@ -1,4 +1,4 @@
-import { IsDateString, IsOptional, IsString, ValidateNested } from "class-validator";
+import { IsBoolean, IsDateString, IsOptional, IsString, ValidateNested } from "class-validator";
 import { Type } from "class-transformer";
 import { DealLineDto } from "../../crm/dto/deal-line.dto";
 
@@ -27,6 +27,11 @@ export class UpdateQuotationDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  /** 价格是否含税：true=单价含税（倒算税额），false=单价不含税（税额另计）。 */
+  @IsOptional()
+  @IsBoolean()
+  priceIncludeTax?: boolean;
 
   /** 订单明细（整表覆盖，结构与商机产品需求一致）。 */
   @IsOptional()

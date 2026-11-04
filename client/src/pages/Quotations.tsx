@@ -55,6 +55,9 @@ export default function Quotations() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(load, [dealId]);
 
+  // 筛选态下展示商机名（各行 deal 相同，取首行即可；空列表时回退通用文案）
+  const dealTitle = rows.find((q) => q.deal)?.deal?.title;
+
   // 从商机产物栏进入（?dealId=）：可直接再生成一份报价单（同一商机可多单）
   const createForDeal = async () => {
     if (!dealId) return;
@@ -77,10 +80,13 @@ export default function Quotations() {
     <Stack gap={6}>
       <PageMeta
         title={t("quotation.listTitle")}
+        back={dealId ? () => navigate(`/crm/deals/${dealId}`) : undefined}
         actions={
           dealId ? (
             <div className="flex items-center gap-2">
-              <Badge variant="secondary">{t("quotation.dealFilterActive")}</Badge>
+              <Badge variant="secondary" className="max-w-48 truncate">
+                {dealTitle ?? t("quotation.dealFilterActive")}
+              </Badge>
               <Button variant="outline" size="sm" onClick={() => setSearchParams({})}>
                 {t("quotation.clearFilter")}
               </Button>

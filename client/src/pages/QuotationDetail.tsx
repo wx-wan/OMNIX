@@ -26,6 +26,7 @@ interface QuotationDetailData {
   shippingAddress: string | null;
   paymentTerms?: string | null;
   notes?: string | null;
+  priceIncludeTax?: boolean;
   validUntil: string | null;
   deliveryDate: string | null;
   deal: { id: string; title: string } | null;
@@ -104,6 +105,7 @@ export default function QuotationDetail() {
         setPaymentTerms(q.paymentTerms ?? "");
         setDeliveryDate(toDateInput(q.deliveryDate));
         setNotes(q.notes ?? "");
+        setPriceIncludeTax(q.priceIncludeTax ?? false);
         try {
           const parsed = JSON.parse(q.linesJson ?? "[]") as OrderLine[];
           setLines(Array.isArray(parsed) ? parsed : []);
@@ -165,6 +167,7 @@ export default function QuotationDetail() {
         shippingAddress,
         paymentTerms,
         notes,
+        priceIncludeTax,
         validUntil: fromDateInput(validUntil),
         deliveryDate: fromDateInput(deliveryDate),
         lines,
