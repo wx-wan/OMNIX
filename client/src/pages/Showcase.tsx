@@ -81,6 +81,9 @@ import { Image } from "@/components/ui/image";
 import { ImageUpload } from "@/components/ui/image-upload";
 import { SearchableSelect, type SelectRecord } from "@/components/common/SearchableSelect";
 import { OrderLinesTable } from "@/components/crm/OrderLinesTable";
+import QuotationExportDemo from "@/components/demo/QuotationExportDemo";
+import RichTextEditorDemo from "@/components/demo/RichTextEditorDemo";
+import QuotationTemplateDemo from "@/components/demo/QuotationTemplateDemo";
 
 // 演示用图片（内联 SVG，避免依赖网络）
 const SAMPLE_IMAGE = `data:image/svg+xml;utf8,${encodeURIComponent(
@@ -539,6 +542,30 @@ export default function Showcase() {
         icon={Puzzle}
       >
         <OrderLinesTable products={demoProducts} />
+      </Section>
+
+      <Section
+        title="报价单导出 / 打印 Demo"
+        description="react-to-print（浏览器排版打印，钉钉式）+ ExcelJS（带排版导出 .xlsx 并可回读导入）"
+        icon={Puzzle}
+      >
+        <QuotationExportDemo />
+      </Section>
+
+      <Section
+        title="报价单在线编辑器 Demo"
+        description="TipTap（headless 富文本，可内嵌到报价单上直接编辑条款/说明，输出 HTML 存库）"
+        icon={Puzzle}
+      >
+        <RichTextEditorDemo />
+      </Section>
+
+      <Section
+        title="报价单模板设计器 Demo（拖动系统字段 + 表格循环）"
+        description="拖拽/点击左侧系统字段插入占位符；点工具条「表格」插入表格，再把「明细行」字段拖入单元格，预览即按明细行循环输出"
+        icon={Puzzle}
+      >
+        <QuotationTemplateDemo />
       </Section>
     </div>
   );

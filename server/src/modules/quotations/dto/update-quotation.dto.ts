@@ -13,6 +13,11 @@ export class UpdateQuotationDto {
   @IsString()
   paymentTerms?: string;
 
+  /** 贸易条款（如 EXW / FOB / CIF）。 */
+  @IsOptional()
+  @IsString()
+  tradeTerms?: string;
+
   /** 交付日期（ISO 日期串）。 */
   @IsOptional()
   @IsDateString()
@@ -38,4 +43,14 @@ export class UpdateQuotationDto {
   @ValidateNested({ each: true })
   @Type(() => DealLineDto)
   lines?: DealLineDto[];
+
+  /** 选用的版式模板（QuotationTemplate.id）；传 null 表示回退默认模板。 */
+  @IsOptional()
+  @IsString()
+  templateId?: string | null;
+
+  /** 按单编辑后的「冻结副本」（TipTap 文档 JSON 字符串）；传 null 表示清除副本、恢复实时按模板渲染。 */
+  @IsOptional()
+  @IsString()
+  documentJson?: string | null;
 }

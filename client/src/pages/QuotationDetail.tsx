@@ -11,11 +11,13 @@ import { Card } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { PillToggle } from "@/components/common/PillToggle";
 import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Textarea } from "@/components/ui/textarea";
 import { Chatter, type ChatterMessage } from "@/components/chatter/Chatter";
 import { OrderLinesTable, type OrderLine } from "@/components/crm/OrderLinesTable";
+import QuotationPreviewModal from "@/components/crm/QuotationPreviewModal";
+import { computeTotals, type TemplateData } from "@/lib/quotationFields";
+import { listQuotationTemplates, createQuotationTemplate, type QuotationTemplate } from "@/api/quotationTemplates";
 import { Picker } from "@/components/common/Picker";
 import type { SelectRecord } from "@/components/common/SearchableSelect";
 
@@ -27,8 +29,11 @@ interface QuotationDetailData {
   linesJson: string | null;
   shippingAddress: string | null;
   paymentTerms?: string | null;
+  tradeTerms?: string | null;
   notes?: string | null;
   priceIncludeTax?: boolean;
+  templateId?: string | null;
+  documentJson?: string | null;
   validUntil: string | null;
   deliveryDate: string | null;
   deal: { id: string; title: string } | null;
@@ -71,6 +76,7 @@ export default function QuotationDetail() {
   const [shippingAddress, setShippingAddress] = useState("");
   const [validUntil, setValidUntil] = useState("");
   const [paymentTerms, setPaymentTerms] = useState("");
+  const [tradeTerms, setTradeTerms] = useState("");
   const [deliveryDate, setDeliveryDate] = useState("");
   const [notes, setNotes] = useState("");
   const [lines, setLines] = useState<OrderLine[]>([]);
@@ -78,6 +84,12 @@ export default function QuotationDetail() {
 
   const [saving, setSaving] = useState(false);
   const [refreshToken, setRefreshToken] = useState(0);
+
+  // 模板化预览相关
+  const [templates, setTemplates] = useState<QuotationTemplate[]>([]);
+  const [templateId, setTemplateId] = useState<string | null>(null);
+  const [documentJson, setDocumentJson] = useState<string | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   // Chatter 状态（与 DealForm 同款瀑布流）
   const [initialChatter, setInitialChatter] = useState<ChatterMessage[] | null>(null);
@@ -98,6 +110,15 @@ export default function QuotationDetail() {
     return base;
   }, [paymentTerms, t]);
 
+  // 贸易条款固定选项（国际贸易术语）；若库里是历史自由文本，也并入可选项避免丢失
+  const tradeTermRecords: SelectRecord[] = useMemo(() => {
+    const base: SelectRecord[] = ["EXW", "FOB", "CIF", "DAP", "DDP"].map((s) => ({ id: s, label: s }));
+    if (tradeTerms && !base.some((r) => r.id === tradeTerms)) {
+      base.push({ id: tradeTerms, label: tradeTerms });
+    }
+    return base;
+  }, [tradeTerms]);
+
   useEffect(() => {
     if (!id) return;
     let alive = true;
@@ -117,9 +138,12 @@ export default function QuotationDetail() {
         setShippingAddress(q.shippingAddress ?? "");
         setValidUntil(toDateInput(q.validUntil));
         setPaymentTerms(q.paymentTerms ?? "");
+        setTradeTerms(q.tradeTerms ?? "");
         setDeliveryDate(toDateInput(q.deliveryDate));
         setNotes(q.notes ?? "");
         setPriceIncludeTax(q.priceIncludeTax ?? false);
+        setTemplateId(q.templateId ?? null);
+        setDocumentJson(q.documentJson ?? null);
         try {
           const parsed = JSON.parse(q.linesJson ?? "[]") as OrderLine[];
           setLines(Array.isArray(parsed) ? parsed : []);
@@ -139,6 +163,19 @@ export default function QuotationDetail() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  // 拉取版式模板列表（供预览弹窗选择）；失败静默（无模板时弹窗提示）
+  useEffect(() => {
+    let alive = true;
+    listQuotationTemplates()
+      .then((list) => {
+        if (alive) setTemplates(list);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const loadOlderChatter = async (oldest: ChatterMessage) => {
     const r = await api.get<{ messages: ChatterMessage[]; hasMore: boolean }>(
@@ -180,6 +217,7 @@ export default function QuotationDetail() {
       await api.patch(`/quotations/${id}`, {
         shippingAddress,
         paymentTerms,
+        tradeTerms,
         notes,
         priceIncludeTax,
         validUntil: fromDateInput(validUntil),
@@ -197,7 +235,59 @@ export default function QuotationDetail() {
     }
   };
 
+  /** 预览弹窗保存：写入报价单的 templateId 与 documentJson（null=清除副本、恢复实时渲染）。 */
+  const handlePreviewSave = async (tid: string | null, docJson: string | null) => {
+    if (!id) return;
+    await api.patch(`/quotations/${id}`, { templateId: tid, documentJson: docJson });
+    setTemplateId(tid);
+    setDocumentJson(docJson);
+    setRefreshToken((k) => k + 1);
+  };
+
   const contact = detail?.contact ?? null;
+
+  // 报价单数据 → 模板渲染数据（派生，不落库；未保存的表单值也实时反映）
+  const templateData: TemplateData = useMemo(() => {
+    const raw = lines
+      .filter((l) => l.type === "product")
+      .map((l) => ({
+        name: l.name,
+        description: l.description,
+        quantity: typeof l.quantity === "number" ? l.quantity : 0,
+        unit: l.unit,
+        price: l.price,
+        discount: l.discount,
+        taxRate: l.taxRate,
+      }));
+    const { lines: tplLines, totals } = computeTotals(raw, priceIncludeTax);
+    return {
+      customer: contact
+        ? {
+            name: contact.name ?? "",
+            company: contact.parent?.name ?? contact.company ?? "",
+            country: contact.country ?? "",
+            email: contact.email ?? "",
+            phone: contact.phone ?? "",
+            website: "",
+            customerType: "",
+          }
+        : null,
+      quotation: {
+        number: detail?.number ?? "",
+        date: new Date().toISOString().slice(0, 10),
+        validUntil,
+        deliveryDate,
+        paymentTerms,
+        tradeTerms,
+        shippingAddress,
+        notes,
+        priceIncludeTax,
+      },
+      totals,
+      lines: tplLines,
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detail, contact, lines, priceIncludeTax, validUntil, deliveryDate, paymentTerms, tradeTerms, shippingAddress, notes]);
 
   const headerTitle = useMemo(() => detail?.number ?? "", [detail]);
 
@@ -219,19 +309,31 @@ export default function QuotationDetail() {
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">
       <PageMeta
-        title={headerTitle}
+        // 顶栏标题显示商机名称（报价单号已在下方卡片标题展示）
+        title={detail?.deal?.title ?? headerTitle}
         // 返回：若报价单关联了商机，回到该商机详情；否则回报价列表
         back={() => navigate(detail?.dealId ? `/crm/deals/${detail.dealId}` : "/quotations")}
       />
 
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-10">
-        {/* 报价单主体（6） */}
-        <Card className="flex min-h-0 flex-col lg:col-span-6">
+        {/* 左列：报价单主体（上）+ 模板化在线编辑（下） */}
+        <div className="flex min-h-0 flex-col gap-4 lg:col-span-6">
+        <Card className="flex min-h-0 flex-1 flex-col">
           <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto p-5">
-            {/* 单号 */}
-            <h1 className="font-heading text-2xl font-semibold tracking-tight text-foreground">
-              {detail.number}
-            </h1>
+            {/* 单号 + 预览报价单（无边框文字按钮） */}
+            <div className="flex items-center gap-3">
+              <h1 className="font-heading text-2xl font-semibold tracking-tight text-foreground">
+                {detail.number}
+              </h1>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground hover:text-foreground"
+                onClick={() => setPreviewOpen(true)}
+              >
+                {t("quotation.previewButton")}
+              </Button>
+            </div>
 
             {/* 客户 / 收货地址 ｜ 有效期 / 付款条款 / 交付日期 */}
             {/* 网格：客户↔有效期至(顶部对齐)；收货地址跨两行(标签↔付款条款顶部、底部↔交付日期底部) */}
@@ -274,15 +376,25 @@ export default function QuotationDetail() {
                 />
               </div>
 
-              {/* 行2右：付款条款（Picker 固定选项；历史自由文本值也保留可选） */}
+              {/* 行2右：贸易条款 + 付款条款（同一行并排；历史自由文本值也保留可选） */}
               <div className="flex flex-col gap-1.5">
-                <Label>{t("quotation.paymentTerms")}</Label>
-                <Picker
-                  records={paymentTermRecords}
-                  value={paymentTerms || null}
-                  onChange={(rec) => setPaymentTerms(rec?.id ?? "")}
-                  placeholder={t("quotation.paymentTerms")}
-                />
+                <Label>
+                  {t("quotation.tradeTerms")} / {t("quotation.paymentTerms")}
+                </Label>
+                <div className="grid grid-cols-2 gap-3">
+                  <Picker
+                    records={tradeTermRecords}
+                    value={tradeTerms || null}
+                    onChange={(rec) => setTradeTerms(rec?.id ?? "")}
+                    placeholder={t("quotation.tradeTerms")}
+                  />
+                  <Picker
+                    records={paymentTermRecords}
+                    value={paymentTerms || null}
+                    onChange={(rec) => setPaymentTerms(rec?.id ?? "")}
+                    placeholder={t("quotation.paymentTerms")}
+                  />
+                </div>
               </div>
 
               {/* 行3右：交付日期（底部对齐收货地址底部） */}
@@ -340,13 +452,14 @@ export default function QuotationDetail() {
             </Tabs>
           </div>
 
-          {/* 底部操作栏：与商机详情一致，置于左侧卡片下方、靠右 */}
-          <div className="flex shrink-0 items-center justify-end gap-3 border-t p-4">
+          {/* 底部操作栏：保存（预览按钮已移至标题旁，去除边框线） */}
+          <div className="flex shrink-0 items-center justify-end gap-3 p-4">
             <Button onClick={() => void handleSave()} disabled={saving}>
               {t("common.save")}
             </Button>
           </div>
         </Card>
+        </div>
 
         {/* Chatter（4） */}
         <div className="min-h-0 lg:col-span-4">
@@ -368,6 +481,23 @@ export default function QuotationDetail() {
           )}
         </div>
       </div>
+
+      <QuotationPreviewModal
+        open={previewOpen}
+        onOpenChange={setPreviewOpen}
+        data={templateData}
+        templates={templates}
+        templateId={templateId}
+        documentJson={documentJson}
+        onSave={handlePreviewSave}
+        onCreateTemplate={async (name, layout) => {
+          const created = await createQuotationTemplate(name, layout);
+          // 刷新模板列表，使新模板进入选择列表并高亮
+          const list = await listQuotationTemplates();
+          setTemplates(list);
+          return created;
+        }}
+      />
     </div>
   );
 }

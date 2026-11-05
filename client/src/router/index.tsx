@@ -8,6 +8,7 @@ import DealForm from "@/pages/DealForm";
 import Products from "@/pages/Products";
 import Quotations from "@/pages/Quotations";
 import QuotationDetail from "@/pages/QuotationDetail";
+import QuotationTemplates from "@/pages/QuotationTemplates";
 import Settings from "@/pages/Settings";
 import Showcase from "@/pages/Showcase";
 import Login from "@/pages/Login";
@@ -22,6 +23,7 @@ const protectedRoutes = [
   { path: "products", element: <Products /> },
   { path: "quotations", element: <Quotations /> },
   { path: "quotations/:id", element: <QuotationDetail /> },
+  { path: "quotation-templates", element: <QuotationTemplates /> },
   { path: "showcase", element: <Showcase /> },
   { path: "settings", element: <Settings /> },
 ];

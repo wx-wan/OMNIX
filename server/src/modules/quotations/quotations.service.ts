@@ -153,7 +153,10 @@ export class QuotationsService {
         : null,
       shippingAddress: q.shippingAddress,
       paymentTerms: q.paymentTerms,
+      tradeTerms: q.tradeTerms,
       notes: q.notes,
+      templateId: q.templateId,
+      documentJson: q.documentJson,
     };
   }
 
@@ -173,11 +176,14 @@ export class QuotationsService {
         validUntil: dto.validUntil ? new Date(dto.validUntil) : undefined,
         deliveryDate: dto.deliveryDate ? new Date(dto.deliveryDate) : undefined,
         paymentTerms: dto.paymentTerms,
+        tradeTerms: dto.tradeTerms,
         shippingAddress: dto.shippingAddress,
         notes: dto.notes,
         priceIncludeTax: dto.priceIncludeTax,
         linesJson,
         amount,
+        templateId: dto.templateId,
+        documentJson: dto.documentJson,
       },
     });
 

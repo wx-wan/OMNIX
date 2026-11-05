@@ -52,24 +52,19 @@ export const EMPTY_CONTACT: ContactValues = {
  * - 公司(isCompany=true)：自身无需 parent，姓名 / 邮箱 / 电话 / 客户类型 / 国家地区 全有值 → 完善。
  * 除官网(website)外，核心字段齐全即视为「已核实」，徽标消失。
  */
-export function isContactComplete(
-  c:
-    | Partial<
-        Pick<
-          ContactValues,
-          | "isCompany"
-          | "name"
-          | "company"
-          | "parentId"
-          | "email"
-          | "phone"
-          | "customerType"
-          | "country"
-        >
-      >
-    | null
-    | undefined,
-): boolean {
+/** 兼容 API 的 Contact（字段可含 null）与表单 ContactValues 的宽类型。 */
+type ContactLike = {
+  isCompany?: boolean | null;
+  name?: string | null;
+  company?: string | null;
+  parentId?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  customerType?: string | null;
+  country?: string | null;
+};
+
+export function isContactComplete(c: ContactLike | null | undefined): boolean {
   const filled = (v?: string | null) => typeof v === "string" && v.trim().length > 0;
   const name = filled(c?.name);
   const email = filled(c?.email);

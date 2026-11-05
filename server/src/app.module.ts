@@ -14,6 +14,7 @@ import { McpModule } from "./modules/mcp/mcp.module";
 import { SettingsModule } from "./modules/settings/settings.module";
 import { OauthModule } from "./modules/oauth/oauth.module";
 import { QuotationsModule } from "./modules/quotations/quotations.module";
+import { QuotationTemplatesModule } from "./modules/quotation-templates/quotation-templates.module";
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { QuotationsModule } from "./modules/quotations/quotations.module";
     SettingsModule,
     OauthModule,
     QuotationsModule,
+    QuotationTemplatesModule,
   ],
   controllers: [HealthController],
   providers: [
