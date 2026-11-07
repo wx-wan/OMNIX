@@ -344,6 +344,18 @@
 }
 [data-sonner-toaster] [data-sonner-toast][data-styled='true'] [data-icon] {
   @apply text-muted-foreground;
+  /* sonner 默认把图标槽钉死为 16×16，而槽里现在是「状态图标 + 机器人」组合（约 52px 宽），
+     不放开会被裁切/与文本叠在一起（-3px/-4px 是 sonner 给 16px 槽配的边距，一并归零）。 */
+  width: auto;
+  height: auto;
+  margin-left: 0;
+  margin-right: 0;
+  /* 把整个图标组（状态图标 + 机器人）移到 toast 末尾，机器人因此排在最右、最后。 */
+  order: 2;
+}
+[data-sonner-toaster] [data-sonner-toast][data-styled='true'] [data-icon] svg {
+  /* sonner 会给槽内所有 svg 加负外边距，状态图标自身带圆托定位，清掉 */
+  margin: 0;
 }
 [data-sonner-toaster] [data-sonner-toast][data-type='success'] [data-icon] {
   @apply text-emerald-600;

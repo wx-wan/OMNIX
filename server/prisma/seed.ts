@@ -1,5 +1,7 @@
 import { PrismaClient, Priority, ContactType } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 const prisma = new PrismaClient();
 
@@ -235,47 +237,16 @@ async function main() {
   const existingTpl = await prisma.quotationTemplate.findFirst({ where: { name: "默认模板" } });
   if (!existingTpl) {
     await prisma.quotationTemplate.create({
-      data: { name: "默认模板", layout: DEFAULT_QUOTATION_LAYOUT },
+      data: { name: "默认模板", sheetSnapshot: DEFAULT_QUOTATION_SNAPSHOT as never },
     });
     console.log("✓ seeded default quotation template");
   }
 }
 
-/** 默认报价单版式（与前端 QuotationTemplateEditor 的 DEFAULT_QUOTATION_TEMPLATE 一致） */
-const DEFAULT_QUOTATION_LAYOUT = {
-  type: "doc",
-  content: [
-    { type: "heading", attrs: { level: 2 }, content: [{ type: "text", text: "报 价 单" }] },
-    {
-      type: "paragraph",
-      content: [
-        { type: "text", text: "致：" },
-        { type: "mergeField", attrs: { key: "customer.name", label: "客户名称" } },
-        { type: "text", text: "（" },
-        { type: "mergeField", attrs: { key: "customer.country", label: "客户国家/地区" } },
-        { type: "text", text: "）" },
-      ],
-    },
-    {
-      type: "paragraph",
-      content: [
-        { type: "text", text: "报价单号 " },
-        { type: "mergeField", attrs: { key: "quotation.number", label: "报价单号" } },
-        { type: "text", text: "　报价日期 " },
-        { type: "mergeField", attrs: { key: "quotation.date", label: "报价日期" } },
-      ],
-    },
-    {
-      type: "paragraph",
-      content: [
-        {
-          type: "text",
-          text: "点工具条「表格」插入表格，再把左侧「明细行」字段拖入单元格，预览即按明细行循环输出。",
-        },
-      ],
-    },
-  ],
-};
+/** 默认报价单模板（Univer 工作簿快照；版式文件由 scripts/gen-default-template.mjs 生成维护） */
+const DEFAULT_QUOTATION_SNAPSHOT = JSON.parse(
+  readFileSync(join(__dirname, "default-quotation-snapshot.json"), "utf-8"),
+);
 
 main()
   .catch((e) => {

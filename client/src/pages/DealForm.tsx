@@ -10,6 +10,7 @@ import {
   PackageCheck,
   Truck,
   Repeat,
+  Wallet,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -69,13 +70,17 @@ interface DealDetailData {
 /** 产物栏：固定单据类型，按固定阶段解锁（minStage = 阶段有序下标，到达该阶段才出现），数量先占位 0。 */
 const DELIVERABLES = [
   { key: "quote", icon: PenLine, minStage: 2 },
-  { key: "design", icon: PenTool, minStage: 2 },
+  { key: "fee", icon: Wallet, minStage: 2 },
+  { key: "design", icon: PenTool, minStage: 3 },
   { key: "sampleOrder", icon: FlaskConical, minStage: 3 },
   { key: "contract", icon: FileSignature, minStage: 4 },
   { key: "remittance", icon: Receipt, minStage: 4 },
   { key: "production", icon: PackageCheck, minStage: 5 },
   { key: "logistics", icon: Truck, minStage: 6 },
 ];
+
+/** 推进到「样品」阶段时，费用单必须存在的费用类型（缺则弹确认框警告）。 */
+const SAMPLE_FEE_TYPE = "样品费";
 
 /** 将停留毫秒数格式化为紧凑中文：12天 / 5小时 / 30分钟 / 45秒 / 刚刚。 */
 function formatDwell(ms: number): string {
@@ -389,6 +394,29 @@ export default function DealForm() {
   const [saveError, setSaveError] = useState<string | null>(null);
   // 阶段流转（确认需求）进行中
   const [moving, setMoving] = useState(false);
+  // 推进到「样品」阶段但费用单缺「样品费」时的待确认阶段与确认框
+  const [pendingStage, setPendingStage] = useState<StageOption | null>(null);
+  const [sampleFeeWarnOpen, setSampleFeeWarnOpen] = useState(false);
+
+  /** 保存商机当前态并推进到下一阶段（不含报价单生成分支）。 */
+  const doAdvance = async (next: StageOption) => {
+    if (!id) return;
+    setMoving(true);
+    try {
+      // 先保存商机当前状态（含税/明细等），再推进到下一阶段，确保阶段流转基于最新数据
+      await api.patch(`/crm/deals/${id}`, buildPayload());
+      await api.patch(`/crm/deals/${id}`, { stageId: next.id });
+      const r = await api.get<DealDetailData>(`/crm/deals/${id}`);
+      setDetail(r.data);
+      setRefreshToken((k) => k + 1); // 增量刷新讨论区，显示推进相关的系统记录
+      toast.success(t("crm.stageAdvanced"));
+    } catch (e) {
+      console.error("[DealForm] advance stage failed:", e);
+      toast.error(extractErrorDetail(e));
+    } finally {
+      setMoving(false);
+    }
+  };
 
   // 推进到下一阶段：取当前阶段在有序阶段列表中的下一项
   const handleAdvanceStage = async () => {
@@ -417,21 +445,21 @@ export default function DealForm() {
       }
       return;
     }
-    setMoving(true);
-    try {
-      // 先保存商机当前状态（含税/明细等），再推进到下一阶段，确保阶段流转基于最新数据
-      await api.patch(`/crm/deals/${id}`, buildPayload());
-      await api.patch(`/crm/deals/${id}`, { stageId: next.id });
-      const r = await api.get<DealDetailData>(`/crm/deals/${id}`);
-      setDetail(r.data);
-      setRefreshToken((k) => k + 1); // 增量刷新讨论区，显示推进相关的系统记录
-      toast.success(t("crm.stageAdvanced"));
-    } catch (e) {
-      console.error("[DealForm] advance stage failed:", e);
-      toast.error(extractErrorDetail(e));
-    } finally {
-      setMoving(false);
+    // 推进到「样品」阶段：检查费用单是否已有「样品费」类型费用；缺则弹确认框警告，确认后仍可推进。
+    if (next.key === "sample") {
+      try {
+        const fees = await api.get<any[]>("/fees", { params: { dealId: id } });
+        const hasSampleFee = fees.data.some((f) => f.type === SAMPLE_FEE_TYPE);
+        if (!hasSampleFee) {
+          setPendingStage(next);
+          setSampleFeeWarnOpen(true);
+          return;
+        }
+      } catch {
+        // 查询失败则放行，不阻断推进
+      }
     }
+    await doAdvance(next);
   };
 
   // 拉取阶段列表（按 position 有序）
@@ -450,6 +478,8 @@ export default function DealForm() {
 
   // 当前商机的报价单数量（产物栏「报价」计数）；推进/保存后随 refreshToken 刷新
   const [quoteCount, setQuoteCount] = useState(0);
+  // 当前商机的费用项数量（产物栏「费用单」计数）
+  const [feeCount, setFeeCount] = useState(0);
   // 往来单位（顶层公司）/ 联系人（公司下人员）实时拉取与创建
   const mapContact = (c: {
     id: string;
@@ -548,6 +578,12 @@ export default function DealForm() {
         if (alive) setQuoteCount(r.data.length);
       })
       .catch(() => {});
+    api
+      .get<any[]>("/fees", { params: { dealId: id } })
+      .then((r) => {
+        if (alive) setFeeCount(r.data.length);
+      })
+      .catch(() => {});
     return () => {
       alive = false;
     };
@@ -592,14 +628,17 @@ export default function DealForm() {
   // 下一阶段（用于「确认 / 报价」等推进按钮）：取当前阶段在有序列表中的下一项
   const nextStage =
     isEdit && currentStageIndex >= 0 ? stages[currentStageIndex + 1] : undefined;
-  // 推进按钮文案：线索到达→需求确认 显示「确认」，需求确认→报价阶段 显示「报价」，其余阶段用通用文案
+  // 推进按钮文案：线索到达→需求确认 显示「确认」，需求确认→报价阶段 显示「报价」，
+  // 推进到样品阶段显示「样品」，其余阶段用通用文案
   const advanceLabel =
     detail?.stage.key === "lead"
       ? t("crm.confirmStage")
       : detail?.stage.key === "qualify"
         ? t("crm.quoteStage")
         : nextStage
-          ? `推进到「${nextStage.title}」`
+          ? nextStage.key === "sample"
+            ? t("crm.sampleStage")
+            : `推进到「${nextStage.title}」`
           : null;
 
   // 每个阶段停留时长：leftAt 为空表示当前阶段（用当前时间计算进行中时长）
@@ -973,133 +1012,130 @@ export default function DealForm() {
 
             {/* 往来单位 / 联系人 */}
             <section className="flex flex-col gap-3">
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-x-4">
-                {/* 左列 */}
-                <div className="flex flex-col gap-3">
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="deal-contact-name" className="flex items-center gap-1.5">
-                      {t("contact.name")}
-                      {!isEdit && <span className="text-red-500"> *</span>}
-                      {contact.aiGenerated && !isContactComplete(contact) && (
-                        <Badge
-                          variant="outline"
-                          className="border-amber-500 text-amber-600"
-                          title={t("contact.aiPendingHint")}
-                        >
-                          {t("contact.aiPending")}
-                        </Badge>
-                      )}
-                    </Label>
-                    <Picker
-                      id="deal-contact-name"
-                      records={contacts}
-                      value={contactId}
-                      topN={5}
-                      searchMoreTitle={t("contact.name")}
-                      placeholder={t("contact.namePlaceholder")}
-                      onChange={(rec) => {
-                        setContactId(rec?.id ?? null);
-                        void loadContactFields(rec?.id ?? null);
-                      }}
-                      onCreate={(name) => void createContact(name)}
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="deal-cust-company">{t("contact.company")}</Label>
-                    <Picker
-                      id="deal-cust-company"
-                      records={companyRecords}
-                      value={contact.parentId || null}
-                      topN={5}
-                      searchMoreTitle={t("contact.company")}
-                      placeholder={t("contact.companyPlaceholder")}
-                      onChange={(rec) =>
-                        setContact((c) => ({ ...c, parentId: rec?.id ?? "" }))
-                      }
-                      onCreate={(name) => void createCompany(name)}
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="deal-contact-email">{t("contact.email")}</Label>
-                    <Input
-                      id="deal-contact-email"
-                      type="email"
-                      value={contact.email}
-                      onChange={(e) => setContact({ ...contact, email: e.target.value })}
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="deal-contact-phone">{t("contact.phone")}</Label>
-                    <Input
-                      id="deal-contact-phone"
-                      value={contact.phone}
-                      onChange={(e) => setContact({ ...contact, phone: e.target.value })}
-                    />
-                  </div>
+              {/* 左右两列放进同一 grid 按行配对（姓名|来源 / 公司|类型 / 邮箱|国家 / 电话|官网），
+                  每行高度共享，杜绝两列独立 flex 时因控件高度差异逐行漂移；
+                  标签统一固定行高，避免「待补充」Badge 把某行标签撑高导致左右错位 */}
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-x-4 [&>div>label]:flex [&>div>label]:h-5 [&>div>label]:items-center">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="deal-contact-name" className="flex items-center gap-1.5">
+                    {t("contact.name")}
+                    {!isEdit && <span className="text-red-500"> *</span>}
+                    {contact.aiGenerated && !isContactComplete(contact) && (
+                      <Badge
+                        variant="outline"
+                        className="border-amber-500 text-amber-600"
+                        title={t("contact.aiPendingHint")}
+                      >
+                        {t("contact.aiPending")}
+                      </Badge>
+                    )}
+                  </Label>
+                  <Picker
+                    id="deal-contact-name"
+                    records={contacts}
+                    value={contactId}
+                    topN={5}
+                    searchMoreTitle={t("contact.name")}
+                    placeholder={t("contact.namePlaceholder")}
+                    onChange={(rec) => {
+                      setContactId(rec?.id ?? null);
+                      void loadContactFields(rec?.id ?? null);
+                    }}
+                    onCreate={(name) => void createContact(name)}
+                  />
                 </div>
-                {/* 右列 */}
-                <div className="flex flex-col gap-3">
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="deal-source">{t("crm.fieldSource")}</Label>
-                    <Picker
-                      id="deal-source"
-                      records={DEAL_SOURCE_RECORDS}
-                      value={source}
-                      topN={7}
-                      searchMoreTitle={t("crm.fieldSource")}
-                      placeholder={t("crm.fieldSourcePlaceholder")}
-                      fallbackText={source}
-                      onChange={(rec) => setSource(rec?.label ?? "")}
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="deal-customer-type">
-                      {t("crm.fieldCustomerType")}
-                    </Label>
-                    <Picker
-                      id="deal-customer-type"
-                      records={DEAL_CUSTOMER_TYPE_RECORDS}
-                      value={contact.customerType}
-                      topN={7}
-                      searchMoreTitle={t("crm.fieldCustomerType")}
-                      placeholder={t("crm.fieldCustomerTypePlaceholder")}
-                      fallbackText={contact.customerType}
-                      onChange={(rec) =>
-                        setContact((c) => ({
-                          ...c,
-                          customerType: rec?.label ?? "",
-                        }))
-                      }
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="deal-cust-country">{t("contact.country")}</Label>
-                    <Picker
-                      id="deal-cust-country"
-                      records={DEAL_COUNTRY_RECORDS}
-                      value={contact.country}
-                      topN={6}
-                      searchMoreTitle={t("contact.country")}
-                      placeholder={t("contact.countryPlaceholder")}
-                      fallbackText={contact.country}
-                      onChange={(rec) =>
-                        setContact((c) => ({
-                          ...c,
-                          country: rec?.label ?? "",
-                        }))
-                      }
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="deal-cust-website">{t("contact.website")}</Label>
-                    <Input
-                      id="deal-cust-website"
-                      type="url"
-                      placeholder="https://"
-                      value={contact.website}
-                      onChange={(e) => setContact({ ...contact, website: e.target.value })}
-                    />
-                  </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="deal-source">{t("crm.fieldSource")}</Label>
+                  <Picker
+                    id="deal-source"
+                    records={DEAL_SOURCE_RECORDS}
+                    value={source}
+                    topN={7}
+                    searchMoreTitle={t("crm.fieldSource")}
+                    placeholder={t("crm.fieldSourcePlaceholder")}
+                    fallbackText={source}
+                    onChange={(rec) => setSource(rec?.label ?? "")}
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="deal-cust-company">{t("contact.company")}</Label>
+                  <Picker
+                    id="deal-cust-company"
+                    records={companyRecords}
+                    value={contact.parentId || null}
+                    topN={5}
+                    searchMoreTitle={t("contact.company")}
+                    placeholder={t("contact.companyPlaceholder")}
+                    onChange={(rec) =>
+                      setContact((c) => ({ ...c, parentId: rec?.id ?? "" }))
+                    }
+                    onCreate={(name) => void createCompany(name)}
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="deal-customer-type">
+                    {t("crm.fieldCustomerType")}
+                  </Label>
+                  <Picker
+                    id="deal-customer-type"
+                    records={DEAL_CUSTOMER_TYPE_RECORDS}
+                    value={contact.customerType}
+                    topN={7}
+                    searchMoreTitle={t("crm.fieldCustomerType")}
+                    placeholder={t("crm.fieldCustomerTypePlaceholder")}
+                    fallbackText={contact.customerType}
+                    onChange={(rec) =>
+                      setContact((c) => ({
+                        ...c,
+                        customerType: rec?.label ?? "",
+                      }))
+                    }
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="deal-contact-email">{t("contact.email")}</Label>
+                  <Input
+                    id="deal-contact-email"
+                    type="email"
+                    value={contact.email}
+                    onChange={(e) => setContact({ ...contact, email: e.target.value })}
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="deal-cust-country">{t("contact.country")}</Label>
+                  <Picker
+                    id="deal-cust-country"
+                    records={DEAL_COUNTRY_RECORDS}
+                    value={contact.country}
+                    topN={6}
+                    searchMoreTitle={t("contact.country")}
+                    placeholder={t("contact.countryPlaceholder")}
+                    fallbackText={contact.country}
+                    onChange={(rec) =>
+                      setContact((c) => ({
+                        ...c,
+                        country: rec?.label ?? "",
+                      }))
+                    }
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="deal-contact-phone">{t("contact.phone")}</Label>
+                  <Input
+                    id="deal-contact-phone"
+                    value={contact.phone}
+                    onChange={(e) => setContact({ ...contact, phone: e.target.value })}
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="deal-cust-website">{t("contact.website")}</Label>
+                  <Input
+                    id="deal-cust-website"
+                    type="url"
+                    placeholder="https://"
+                    value={contact.website}
+                    onChange={(e) => setContact({ ...contact, website: e.target.value })}
+                  />
                 </div>
               </div>
             </section>
@@ -1175,6 +1211,26 @@ export default function DealForm() {
                           </span>
                           <span className="font-heading text-sm font-semibold tabular-nums text-foreground">
                             {quoteCount}
+                          </span>
+                        </button>
+                      );
+                    }
+                    // 「费用单」产物：显示真实费用项数量，点击进入费用单页
+                    if (d.key === "fee" && isEdit && id) {
+                      return (
+                        <button
+                          key={d.key}
+                          type="button"
+                          className="flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1 transition-colors hover:bg-muted/50"
+                          title={label}
+                          onClick={() => navigate(`/crm/deals/${id}/fees`)}
+                        >
+                          <Icon className="size-4 shrink-0 text-amber-500" />
+                          <span className="max-w-24 truncate text-xs text-muted-foreground">
+                            {label}
+                          </span>
+                          <span className="font-heading text-sm font-semibold tabular-nums text-foreground">
+                            {feeCount}
                           </span>
                         </button>
                       );
@@ -1290,6 +1346,37 @@ export default function DealForm() {
               onClick={handleDelete}
             >
               {deleting ? t("common.loading") : t("common.confirm")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 推进到「样品」阶段但费用单缺「样品费」：警告后仍可推进 */}
+      <Dialog open={sampleFeeWarnOpen} onOpenChange={setSampleFeeWarnOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("crm.fees.sampleWarnTitle")}</DialogTitle>
+            <DialogDescription>
+              {t("crm.fees.sampleWarnDesc")}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setSampleFeeWarnOpen(false)}
+            >
+              {t("common.cancel")}
+            </Button>
+            <Button
+              type="button"
+              disabled={moving}
+              onClick={() => {
+                setSampleFeeWarnOpen(false);
+                if (pendingStage) void doAdvance(pendingStage);
+              }}
+            >
+              {moving ? t("crm.advancing") : t("crm.fees.proceedAnyway")}
             </Button>
           </DialogFooter>
         </DialogContent>

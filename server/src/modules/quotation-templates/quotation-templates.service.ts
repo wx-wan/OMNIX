@@ -11,8 +11,9 @@ import { UpdateQuotationTemplateDto } from "./dto/update-quotation-template.dto"
 export class QuotationTemplatesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  list() {
+  list(docType?: string) {
     return this.prisma.quotationTemplate.findMany({
+      where: docType ? { docType } : undefined,
       orderBy: { updatedAt: "desc" },
     });
   }
@@ -25,7 +26,11 @@ export class QuotationTemplatesService {
 
   create(dto: CreateQuotationTemplateDto) {
     return this.prisma.quotationTemplate.create({
-      data: { name: dto.name, layout: dto.layout as never },
+      data: {
+        name: dto.name,
+        docType: dto.docType ?? "quotation",
+        sheetSnapshot: dto.sheetSnapshot as never,
+      },
     });
   }
 
@@ -35,7 +40,10 @@ export class QuotationTemplatesService {
       where: { id },
       data: {
         ...(dto.name !== undefined ? { name: dto.name } : {}),
-        ...(dto.layout !== undefined ? { layout: dto.layout as never } : {}),
+        ...(dto.docType !== undefined ? { docType: dto.docType } : {}),
+        ...(dto.sheetSnapshot !== undefined
+          ? { sheetSnapshot: dto.sheetSnapshot as never }
+          : {}),
       },
     });
   }

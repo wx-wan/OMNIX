@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { lazy, Suspense, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Puzzle,
@@ -83,7 +83,8 @@ import { SearchableSelect, type SelectRecord } from "@/components/common/Searcha
 import { OrderLinesTable } from "@/components/crm/OrderLinesTable";
 import QuotationExportDemo from "@/components/demo/QuotationExportDemo";
 import RichTextEditorDemo from "@/components/demo/RichTextEditorDemo";
-import QuotationTemplateDemo from "@/components/demo/QuotationTemplateDemo";
+// 重型 Univer preset 按需加载（进入该演示区块时才拉取独立 chunk）
+const UniverSheetsDemo = lazy(() => import("@/components/demo/UniverSheetsDemo"));
 
 // 演示用图片（内联 SVG，避免依赖网络）
 const SAMPLE_IMAGE = `data:image/svg+xml;utf8,${encodeURIComponent(
@@ -561,11 +562,13 @@ export default function Showcase() {
       </Section>
 
       <Section
-        title="报价单模板设计器 Demo（拖动系统字段 + 表格循环）"
-        description="拖拽/点击左侧系统字段插入占位符；点工具条「表格」插入表格，再把「明细行」字段拖入单元格，预览即按明细行循环输出"
+        title="Univer 在线电子表格 Demo（真·Excel 体验）"
+        description="Univer（Apache-2.0 开源、可私有化）嵌入工作表引擎：真公式、填充柄、排序筛选、单元格样式/货币格式。对比 WPS 无需企业授权与云端回调。"
         icon={Puzzle}
       >
-        <QuotationTemplateDemo />
+        <Suspense fallback={<Skeleton className="h-[600px] w-full rounded-lg" />}>
+          <UniverSheetsDemo />
+        </Suspense>
       </Section>
     </div>
   );

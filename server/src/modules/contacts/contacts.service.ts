@@ -52,6 +52,50 @@ export class ContactsService {
     });
   }
 
+  /** 列表分页（应对超大数据量）：返回本页 items + 总数 total。
+   *  与 list() 复用同一套 where；用事务并行取「本页数据」与「总数」，避免 N+1。 */
+  async listPaginated(
+    page: number,
+    pageSize: number,
+    type?: ContactType,
+    isCompany?: boolean,
+    parentId?: string,
+    includeArchived = false,
+    q?: string,
+  ) {
+    const where: Prisma.ContactWhereInput = {
+      ...(type ? { type } : {}),
+      ...(isCompany !== undefined ? { isCompany } : {}),
+      ...(parentId !== undefined ? { parentId } : {}),
+      isSystem: false,
+      ...(includeArchived ? {} : { archived: false }),
+      ...(q && q.trim()
+        ? {
+            OR: [
+              { name: { contains: q.trim(), mode: "insensitive" } },
+              { email: { contains: q.trim(), mode: "insensitive" } },
+              { company: { contains: q.trim(), mode: "insensitive" } },
+              { parent: { name: { contains: q.trim(), mode: "insensitive" } } },
+            ],
+          }
+        : {}),
+    };
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.contact.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        include: {
+          _count: { select: { deals: true } },
+          parent: { select: { id: true, name: true } },
+        },
+      }),
+      this.prisma.contact.count({ where }),
+    ]);
+    return { items, total, page, pageSize };
+  }
+
   async getOne(id: string) {
     const c = await this.prisma.contact.findUnique({
       where: { id },

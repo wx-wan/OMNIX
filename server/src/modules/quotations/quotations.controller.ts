@@ -12,6 +12,8 @@ import type { Request } from "express";
 import { QuotationsService } from "./quotations.service";
 import { CreateQuotationDto } from "./dto/create-quotation.dto";
 import { UpdateQuotationDto } from "./dto/update-quotation.dto";
+import { SendQuotationDto } from "./dto/send-quotation.dto";
+import { MailService } from "../mail/mail.service";
 
 /**
  * 报价单 API（全局 session 守卫保护）。
@@ -23,7 +25,10 @@ import { UpdateQuotationDto } from "./dto/update-quotation.dto";
  */
 @Controller("quotations")
 export class QuotationsController {
-  constructor(private readonly quotations: QuotationsService) {}
+  constructor(
+    private readonly quotations: QuotationsService,
+    private readonly mail: MailService,
+  ) {}
 
   @Get()
   list(@Query("dealId") dealId?: string) {
@@ -49,5 +54,21 @@ export class QuotationsController {
   ) {
     const actorId = (req.session as { userId?: string } | undefined)?.userId;
     return this.quotations.update(id, dto, actorId);
+  }
+
+  /** 发送报价单邮件（可附 Excel 附件，附件由前端生成 base64 传上）。 */
+  @Post(":id/send")
+  send(@Param("id") id: string, @Body() dto: SendQuotationDto) {
+    return this.quotations.getOne(id).then(() =>
+      this.mail.send({
+        to: dto.to,
+        subject: dto.subject,
+        html: dto.body.replace(/\n/g, "<br>"),
+        text: dto.body,
+        attachment: dto.attachmentBase64
+          ? { filename: dto.attachmentName || "quotation.xlsx", base64: dto.attachmentBase64 }
+          : null,
+      }),
+    );
   }
 }

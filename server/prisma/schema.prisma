@@ -75,6 +75,9 @@ model Contact {
 
   @@index([type])
   @@index([parentId])
+  // 列表高频过滤组合：isCompany + archived（公司维护表 / 归档切换）+ 按 createdAt 倒序分页
+  @@index([isCompany, archived])
+  @@index([createdAt])
   @@map("contacts")
 }
 
@@ -126,6 +129,7 @@ model Deal {
   linesJson   String? @map("lines_json") // 订单明细（含组合/备注/排序；行级数量与折扣随行存；空 productId 的产品行会落入产品库）
   priceIncludeTax Boolean @default(true) @map("price_include_tax") // 价格是否含税：true=单价含税（倒算税额），false=单价不含税（税额另计）
   quotations  Quotation[]
+  fees        Fee[]
   stageLogs   DealStageLog[]
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -134,6 +138,22 @@ model Deal {
   @@index([contactId])
   @@index([productId])
   @@map("deals")
+}
+
+// 费用单：按商机归集的费用明细（设计费 / 样品费 / 物流费 等），全部集中在费用单展示。
+// 推进到「样品」阶段时，后端/前端会检查是否存在 type=样品费 的费用。
+model Fee {
+  id        String   @id @default(cuid())
+  deal      Deal     @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  dealId    String   @map("deal_id")
+  type      String // 费用类型（如 样品费 / 设计费 / 物流费 / 其他）
+  amount    Decimal  @db.Decimal(12, 2) // 金额（元，CNY）
+  note      String? // 备注（如费用说明 / 凭证号）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([dealId])
+  @@map("fees")
 }
 
 // CRM 阶段停留日志：每次进入某阶段记一条，leftAt 为空表示当前所处阶段。
@@ -212,11 +232,13 @@ model Quotation {
 // 与「文档实例」分离：在弹窗里按单手改生成 quotations.document_json 冻结副本，绝不会回写本表 layout。
 model QuotationTemplate {
   id        String   @id @default(cuid())
-  name      String // 模板名称（如「标准报价单」「简洁报价单」）
-  layout    Json // TipTap 文档 JSON（含 mergeField 占位符；line.* 表格预览时按明细循环展开）
-  createdAt DateTime @default(now())
+  name          String // 模板名称（如「标准报价单」「简洁报价单」）
+  docType       String   @default("quotation") @map("doc_type") // 适用单据类型：quotation=报价单（预留 sale-order 等）
+  sheetSnapshot Json // Univer 工作簿快照（前端 UniverSheetsDemo 的 getSnapshot 产物；旧 TipTap JSON 不含 sheets，前端会忽略并回退默认表格）
+  createdAt     DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([docType])
   @@map("quotation_templates")
 }
 
@@ -236,4 +258,16 @@ model OAuthToken {
 
   @@index([userId, clientId, scope])
   @@map("oauth_tokens")
+}
+
+// 会话表：由 connect-pg-simple（express-session 的 PG 存储）自动创建与维护，不归 Prisma 管理。
+// 用 @@ignore 让 Prisma 既不纳入客户端、也不在 db push 时被当作漂移删除（避免清空线上会话）。
+// 列结构需与 connect-pg-simple 默认一致：sid(PK) / sess(json) / expire(timestamp)。
+model Session {
+  sid    String   @id
+  sess   Json
+  expire DateTime
+
+  @@ignore
+  @@map("session")
 }

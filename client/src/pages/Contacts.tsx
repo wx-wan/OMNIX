@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { useTranslation } from "react-i18next";
 import { Search, Archive, ArchiveRestore } from "lucide-react";
 import { toast } from "sonner";
@@ -6,7 +7,6 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Stack } from "@/components/layout/Stack";
 import { PageMeta } from "@/components/layout/PageMeta";
-import { Section } from "@/components/layout/Section";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -80,6 +80,160 @@ function InfoItem({ label, children }: { label: string; children?: React.ReactNo
   );
 }
 
+function typeLabelOf(t: (k: string) => string, type: ContactType): string {
+  return t(`contact.type${type[0].toUpperCase()}${type.slice(1)}`);
+}
+
+/** 列表行：memo 化，配合稳定回调，敲字/切视图时既有行不重渲染（消除卡顿主因） */
+const ContactListRow = memo(function ContactListRow({
+  c,
+  onOpen,
+  onArchive,
+}: {
+  c: Contact;
+  onOpen: (c: Contact) => void;
+  onArchive: (c: Contact) => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div
+      className="flex cursor-pointer items-center justify-between gap-3 px-5 py-3 hover:bg-muted/50"
+      onClick={() => onOpen(c)}
+    >
+      <div className="min-w-0">
+        <p className="flex items-center gap-2 truncate text-sm font-medium">
+          <span className="truncate">{c.name}</span>
+          {c.aiGenerated && !isContactComplete(c) && (
+            <Badge
+              variant="outline"
+              className="border-amber-500 text-amber-600"
+              title={t("contact.aiPendingHint")}
+            >
+              {t("contact.aiPending")}
+            </Badge>
+          )}
+          {(c.parent?.name ?? c.company) && (
+            <span className="ml-2 text-xs text-muted-foreground">
+              {c.parent?.name ?? c.company}
+            </span>
+          )}
+        </p>
+        <p className="truncate text-xs text-muted-foreground">
+          {c.email || c.phone || "—"}
+        </p>
+      </div>
+      <div className="flex shrink-0 items-center gap-3">
+        {!c.isCompany && (
+          <Badge variant={c.type === "user" ? "default" : "secondary"}>
+            {typeLabelOf(t, c.type)}
+          </Badge>
+        )}
+        {c.archived && (
+          <Badge variant="outline" className="border-slate-500 text-slate-500">
+            {t("common.archived")}
+          </Badge>
+        )}
+        {c.isCompany && (
+          <Badge variant="outline" className="border-sky-500 text-sky-600">
+            {t("contact.companyTab")}
+          </Badge>
+        )}
+        {c._count && (
+          <span className="text-xs text-muted-foreground">{c._count.deals}</span>
+        )}
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="text-muted-foreground hover:text-foreground"
+          aria-label={c.archived ? t("common.unarchive") : t("common.archive")}
+          title={c.archived ? t("common.unarchive") : t("common.archive")}
+          onClick={(e) => {
+            e.stopPropagation();
+            onArchive(c);
+          }}
+        >
+          {c.archived ? <ArchiveRestore /> : <Archive />}
+        </Button>
+      </div>
+    </div>
+  );
+});
+
+/** 卡片行：同样 memo 化，避免网格视图下全量重渲染 */
+const ContactGridCard = memo(function ContactGridCard({
+  c,
+  onOpen,
+  onArchive,
+}: {
+  c: Contact;
+  onOpen: (c: Contact) => void;
+  onArchive: (c: Contact) => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <Card
+      className={"cursor-pointer" + (c.archived ? " opacity-60" : "")}
+      onClick={() => onOpen(c)}
+    >
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <span className="truncate">{c.name}</span>
+          {c.aiGenerated && !isContactComplete(c) && (
+            <Badge
+              variant="outline"
+              className="border-amber-500 text-amber-600"
+              title={t("contact.aiPendingHint")}
+            >
+              {t("contact.aiPending")}
+            </Badge>
+          )}
+          <div
+            className="ml-auto flex items-center gap-1"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="text-muted-foreground hover:text-foreground"
+              aria-label={c.archived ? t("common.unarchive") : t("common.archive")}
+              title={c.archived ? t("common.unarchive") : t("common.archive")}
+              onClick={() => onArchive(c)}
+            >
+              {c.archived ? <ArchiveRestore /> : <Archive />}
+            </Button>
+          </div>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-1 text-sm text-muted-foreground">
+        {(c.parent?.name ?? c.company) && (
+          <span className="truncate">{c.parent?.name ?? c.company}</span>
+        )}
+        <span className="truncate">{c.email || c.phone || "—"}</span>
+        <div className="flex flex-wrap items-center gap-2 pt-1">
+          {!c.isCompany && (
+            <Badge variant={c.type === "user" ? "default" : "secondary"}>
+              {typeLabelOf(t, c.type)}
+            </Badge>
+          )}
+          {c.archived && (
+            <Badge variant="outline" className="border-slate-500 text-slate-500">
+              {t("common.archived")}
+            </Badge>
+          )}
+          {c.isCompany && (
+            <Badge variant="outline" className="border-sky-500 text-sky-600">
+              {t("contact.companyTab")}
+            </Badge>
+          )}
+          {c._count && (
+            <span className="text-xs text-muted-foreground">{c._count.deals} 商机</span>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+});
+
 export default function Contacts() {
   const { t } = useTranslation();
   const { user } = useAuth();
@@ -102,6 +256,14 @@ export default function Contacts() {
   const [refreshKey, setRefreshKey] = useState(0); // 手动刷新（新建/编辑/删除/归档后）
   const [qParam, setQParam] = useState(""); // 防抖后的搜索词，驱动后端 filter
 
+  // 分页 + 虚拟滚动状态：后端按 page 返回 { items, total }，前端滚动到底自动加载下一页
+  const PAGE_SIZE = 30;
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const [cols, setCols] = useState(1); // 网格视图列数（按容器宽度计算）
+
   // 公司列表（isCompany=true 的往来单位），供联系人的「所属公司」Picker 选用
   const [companyRecords, setCompanyRecords] = useState<SelectRecord[]>([]);
 
@@ -115,7 +277,7 @@ export default function Contacts() {
   }, [view]);
 
   // 手动刷新：保存/删除/归档后触发主列表重新请求（不重新拉公司下拉）
-  const load = () => setRefreshKey((k) => k + 1);
+  const load = useCallback(() => setRefreshKey((k) => k + 1), []);
 
   // 公司列表（isCompany=true 的往来单位），供联系人的「所属公司」Picker 选用；仅挂载时拉一次
   useEffect(() => {
@@ -131,23 +293,95 @@ export default function Contacts() {
 
   // 搜索词防抖（300ms）后再驱动后端请求，避免每次按键都打接口
   useEffect(() => {
-    const t = setTimeout(() => setQParam(q), 300);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setQParam(q), 300);
+    return () => clearTimeout(timer);
   }, [q]);
 
-  // 主列表：按分类 / 搜索 / 归档开关走后端 filter，不再一次性拉全量在内存过滤
+  // 主列表：按分类 / 搜索 / 归档开关后端过滤 + 分页拉第一页；切换条件时重置
   useEffect(() => {
     setLoading(true);
-    const params: Record<string, unknown> = { includeArchived: showArchived };
+    const params: Record<string, unknown> = {
+      includeArchived: showArchived,
+      page: 1,
+      pageSize: PAGE_SIZE,
+    };
     if (tab === "company") params.isCompany = true;
     else if (tab) params.type = tab;
     if (qParam.trim()) params.q = qParam.trim();
     api
-      .get<Contact[]>("/contacts", { params })
-      .then((r) => setList(r.data))
+      .get<{ items: Contact[]; total: number; page: number; pageSize: number }>(
+        "/contacts",
+        { params },
+      )
+      .then((r) => {
+        setList(r.data.items);
+        setTotal(r.data.total);
+        setPage(1);
+      })
       .catch(() => setList([]))
       .finally(() => setLoading(false));
-  }, [tab, qParam, showArchived, refreshKey]);
+  }, [tab, qParam, showArchived, refreshKey, PAGE_SIZE]);
+
+  // 滚动到底自动加载下一页（无限加载），合并到同一 list
+  const loadMore = useCallback(() => {
+    if (loadingMore || loading || list.length >= total) return;
+    const next = page + 1;
+    setLoadingMore(true);
+    const params: Record<string, unknown> = {
+      includeArchived: showArchived,
+      page: next,
+      pageSize: PAGE_SIZE,
+    };
+    if (tab === "company") params.isCompany = true;
+    else if (tab) params.type = tab;
+    if (qParam.trim()) params.q = qParam.trim();
+    api
+      .get<{ items: Contact[]; total: number; page: number; pageSize: number }>(
+        "/contacts",
+        { params },
+      )
+      .then((r) => {
+        setList((prev) => [...prev, ...r.data.items]);
+        setTotal(r.data.total);
+        setPage(next);
+      })
+      .catch(() => {})
+      .finally(() => setLoadingMore(false));
+  }, [loadingMore, loading, page, total, list.length, tab, qParam, showArchived, PAGE_SIZE]);
+
+  // 网格视图列数：按滚动容器宽度计算（对齐 Tailwind 断点 640/1024）
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const update = () => {
+      const w = el.clientWidth;
+      setCols(w >= 1024 ? 3 : w >= 640 ? 2 : 1);
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // 列表 / 网格统一虚拟滚动：列表按行、网格按行（每行 cols 个卡片）
+  const isGrid = view === "grid";
+  const rowCount = isGrid ? Math.ceil(list.length / cols) : list.length;
+  const virtualizer = useVirtualizer({
+    count: rowCount,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => (isGrid ? 200 : 56),
+    overscan: 8,
+  });
+  const virtualItems = virtualizer.getVirtualItems();
+
+  // 接近列表尾部时触发下一页加载
+  const lastIndex =
+    virtualItems.length > 0 ? virtualItems[virtualItems.length - 1].index : -1;
+  useEffect(() => {
+    if (lastIndex >= rowCount - 6 && list.length < total && !loadingMore && !loading) {
+      loadMore();
+    }
+  }, [lastIndex, rowCount, list.length, total, loadingMore, loading, loadMore]);
 
   // 主列表已交由后端按 tab / q / includeArchived 过滤，前端直接使用 list
   const openCreate = () => {
@@ -178,8 +412,8 @@ export default function Contacts() {
     setFormOpen(true);
   };
 
-  const openDetail = async (c: Contact) => {
-    // 拉取完整记录（含所属公司 parent 与下属联系人 children），展示双向关联
+  // 拉取完整记录（含所属公司 parent 与下属联系人 children），展示双向关联
+  const openDetail = useCallback(async (c: Contact) => {
     try {
       const r = await api.get<Contact>(`/contacts/${c.id}`);
       setDetail(r.data);
@@ -187,7 +421,7 @@ export default function Contacts() {
       setDetail(c);
     }
     setDetailOpen(true);
-  };
+  }, []);
 
   // 在联系人表单的「所属公司」选择器中即时创建公司（isCompany=true），建好后回填 parentId
   const createCompany = async (name: string) => {
@@ -246,22 +480,22 @@ export default function Contacts() {
   };
 
   // 归档 / 取消归档：关联了商机的往来单位不允许删除，用归档隐藏代替
-  const handleArchive = async (c: Contact) => {
-    try {
-      await api.patch(`/contacts/${c.id}`, { archived: !c.archived });
-      toast.success(
-        (c.archived ? t("common.unarchive") : t("common.archive")) +
-          " " +
-          t("common.success"),
-      );
-      load();
-    } catch (e) {
-      toast.error(extractErrorDetail(e));
-    }
-  };
-
-  const typeLabel = (type: ContactType) =>
-    t(`contact.type${type[0].toUpperCase()}${type.slice(1)}`);
+  const handleArchive = useCallback(
+    async (c: Contact) => {
+      try {
+        await api.patch(`/contacts/${c.id}`, { archived: !c.archived });
+        toast.success(
+          (c.archived ? t("common.unarchive") : t("common.archive")) +
+            " " +
+            t("common.success"),
+        );
+        load();
+      } catch (e) {
+        toast.error(extractErrorDetail(e));
+      }
+    },
+    [load, t],
+  );
 
   return (
     <Stack gap={6}>
@@ -308,168 +542,69 @@ export default function Contacts() {
         </Button>
       </div>
 
-      {view === "list" ? (
-        <Section noPadding>
-          <div className="flex flex-col gap-1">
-            {list.map((c) => (
+      {/* 列表 / 网格统一虚拟滚动容器：内部滚动，仅渲染可视区域；到底自动加载下一页 */}
+      <div
+        ref={scrollRef}
+        className="max-h-[72vh] overflow-y-auto rounded-lg border border-border bg-background"
+      >
+        {list.length === 0 ? (
+          <div className="py-10 text-center text-sm text-muted-foreground">
+            {loading ? t("common.loading") : t("contact.empty")}
+          </div>
+        ) : (
+          <div
+            style={{
+              height: virtualizer.getTotalSize(),
+              position: "relative",
+              width: "100%",
+            }}
+          >
+            {virtualItems.map((vi) => (
               <div
-                key={c.id}
-                className="flex cursor-pointer items-center justify-between gap-3 px-5 py-3 hover:bg-muted/50"
-                onClick={() => openDetail(c)}
+                key={vi.key}
+                data-index={vi.index}
+                ref={virtualizer.measureElement}
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  width: "100%",
+                  transform: `translateY(${vi.start}px)`,
+                }}
               >
-                <div className="min-w-0">
-                  <p className="flex items-center gap-2 truncate text-sm font-medium">
-                    <span className="truncate">{c.name}</span>
-                    {c.aiGenerated && !isContactComplete(c) && (
-                      <Badge
-                        variant="outline"
-                        className="border-amber-500 text-amber-600"
-                        title={t("contact.aiPendingHint")}
-                      >
-                        {t("contact.aiPending")}
-                      </Badge>
-                    )}
-                    {(c.parent?.name ?? c.company) && (
-                      <span className="ml-2 text-xs text-muted-foreground">
-                        {c.parent?.name ?? c.company}
-                      </span>
-                    )}
-                  </p>
-                  <p className="truncate text-xs text-muted-foreground">
-                    {c.email || c.phone || "—"}
-                  </p>
-                </div>
-                <div className="flex shrink-0 items-center gap-3">
-                  {!c.isCompany && (
-                  <Badge variant={c.type === "user" ? "default" : "secondary"}>
-                    {typeLabel(c.type)}
-                  </Badge>
-                  )}
-                  {c.archived && (
-                    <Badge
-                      variant="outline"
-                      className="border-slate-500 text-slate-500"
-                    >
-                      {t("common.archived")}
-                    </Badge>
-                  )}
-                  {c.isCompany && (
-                    <Badge
-                      variant="outline"
-                      className="border-sky-500 text-sky-600"
-                    >
-                      {t("contact.companyTab")}
-                    </Badge>
-                  )}
-                  {c._count && (
-                    <span className="text-xs text-muted-foreground">
-                      {c._count.deals}
-                    </span>
-                  )}
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    className="text-muted-foreground hover:text-foreground"
-                    aria-label={c.archived ? t("common.unarchive") : t("common.archive")}
-                    title={c.archived ? t("common.unarchive") : t("common.archive")}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleArchive(c);
-                    }}
+                {isGrid ? (
+                  <div
+                    className="grid gap-3 p-3"
+                    style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
                   >
-                    {c.archived ? <ArchiveRestore /> : <Archive />}
-                  </Button>
-                </div>
+                    {list
+                      .slice(vi.index * cols, vi.index * cols + cols)
+                      .map((c) => (
+                        <ContactGridCard
+                          key={c.id}
+                          c={c}
+                          onOpen={openDetail}
+                          onArchive={handleArchive}
+                        />
+                      ))}
+                  </div>
+                ) : (
+                  <ContactListRow
+                    c={list[vi.index]}
+                    onOpen={openDetail}
+                    onArchive={handleArchive}
+                  />
+                )}
               </div>
             ))}
-            {list.length === 0 && (
-              <p className="px-5 py-4 text-sm text-muted-foreground">
-                {loading ? t("common.loading") : t("contact.empty")}
-              </p>
-            )}
           </div>
-        </Section>
-      ) : list.length === 0 ? (
-        <Card>
-          <CardContent className="py-10 text-center text-sm text-muted-foreground">
-            {loading ? t("common.loading") : t("contact.empty")}
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {list.map((c) => (
-            <Card
-              key={c.id}
-              className={"cursor-pointer" + (c.archived ? " opacity-60" : "")}
-              onClick={() => openDetail(c)}
-            >
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <span className="truncate">{c.name}</span>
-                  {c.aiGenerated && !isContactComplete(c) && (
-                    <Badge
-                      variant="outline"
-                      className="border-amber-500 text-amber-600"
-                      title={t("contact.aiPendingHint")}
-                    >
-                      {t("contact.aiPending")}
-                    </Badge>
-                  )}
-                  <div
-                    className="ml-auto flex items-center gap-1"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      className="text-muted-foreground hover:text-foreground"
-                      aria-label={c.archived ? t("common.unarchive") : t("common.archive")}
-                      title={c.archived ? t("common.unarchive") : t("common.archive")}
-                      onClick={() => handleArchive(c)}
-                    >
-                      {c.archived ? <ArchiveRestore /> : <Archive />}
-                    </Button>
-                  </div>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-1 text-sm text-muted-foreground">
-                {(c.parent?.name ?? c.company) && (
-                  <span className="truncate">{c.parent?.name ?? c.company}</span>
-                )}
-                <span className="truncate">{c.email || c.phone || "—"}</span>
-                <div className="flex flex-wrap items-center gap-2 pt-1">
-                  {!c.isCompany && (
-                  <Badge variant={c.type === "user" ? "default" : "secondary"}>
-                    {typeLabel(c.type)}
-                  </Badge>
-                  )}
-                  {c.archived && (
-                    <Badge
-                      variant="outline"
-                      className="border-slate-500 text-slate-500"
-                    >
-                      {t("common.archived")}
-                    </Badge>
-                  )}
-                  {c.isCompany && (
-                    <Badge
-                      variant="outline"
-                      className="border-sky-500 text-sky-600"
-                    >
-                      {t("contact.companyTab")}
-                    </Badge>
-                  )}
-                  {c._count && (
-                    <span className="text-xs text-muted-foreground">
-                      {c._count.deals} 商机
-                    </span>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
+        )}
+        {loadingMore && list.length > 0 && (
+          <p className="border-t border-border py-3 text-center text-sm text-muted-foreground">
+            {t("common.loading")}
+          </p>
+        )}
+      </div>
 
       {/* 新建 / 编辑 侧滑 */}
       <Sheet
@@ -523,7 +658,7 @@ export default function Contacts() {
                 <div className="flex items-center gap-2">
                   {!detail.isCompany && (
                   <Badge variant={detail.type === "user" ? "default" : "secondary"}>
-                    {typeLabel(detail.type)}
+                    {typeLabelOf(t, detail.type)}
                   </Badge>
                   )}
                   {detail.archived && (

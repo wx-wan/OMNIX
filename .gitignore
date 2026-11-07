@@ -36,3 +36,6 @@ server/uploads/
 
 # Coverage
 coverage/
+
+# Playwright CLI 运行时产物（下载的 xlsx、控制台日志等）
+client/.playwright-cli/

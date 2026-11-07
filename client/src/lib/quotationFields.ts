@@ -149,12 +149,16 @@ export function formatField(def: FieldDef, value: unknown): string {
   return String(value);
 }
 
-/** 按 key 从数据中取值（line.* 在循环表内从 loopItem 取） */
+/** 按 key 从数据中取值（支持 "a.b.c" 点路径；line.* 在循环表内从 loopItem 取） */
 export function resolveKey(data: TemplateData, key: string, loopItem?: LineItem): unknown {
   const target = key.startsWith("line.") ? loopItem : data;
   if (!target) return "";
   const path = key.startsWith("line.") ? key.slice("line.".length) : key;
-  return (target as unknown as Record<string, unknown>)[path] ?? "";
+  const value = path.split(".").reduce<unknown>((acc, seg) => {
+    if (acc && typeof acc === "object") return (acc as Record<string, unknown>)[seg];
+    return undefined;
+  }, target);
+  return value ?? "";
 }
 
 /** 默认样例数据（演示用；生产环境由真实报价单填充，公司信息由用户在模板里手动输入） */

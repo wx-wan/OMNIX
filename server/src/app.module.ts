@@ -15,6 +15,7 @@ import { SettingsModule } from "./modules/settings/settings.module";
 import { OauthModule } from "./modules/oauth/oauth.module";
 import { QuotationsModule } from "./modules/quotations/quotations.module";
 import { QuotationTemplatesModule } from "./modules/quotation-templates/quotation-templates.module";
+import { FeesModule } from "./modules/fees/fees.module";
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { QuotationTemplatesModule } from "./modules/quotation-templates/quotatio
     OauthModule,
     QuotationsModule,
     QuotationTemplatesModule,
+    FeesModule,
   ],
   controllers: [HealthController],
   providers: [

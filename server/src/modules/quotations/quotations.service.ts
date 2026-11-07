@@ -157,6 +157,7 @@ export class QuotationsService {
       notes: q.notes,
       templateId: q.templateId,
       documentJson: q.documentJson,
+      linesJson: q.linesJson,
     };
   }
 

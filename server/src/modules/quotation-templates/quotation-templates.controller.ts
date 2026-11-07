@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
 import { QuotationTemplatesService } from "./quotation-templates.service";
 import { CreateQuotationTemplateDto } from "./dto/create-quotation-template.dto";
 import { UpdateQuotationTemplateDto } from "./dto/update-quotation-template.dto";
@@ -17,8 +17,8 @@ export class QuotationTemplatesController {
   constructor(private readonly svc: QuotationTemplatesService) {}
 
   @Get()
-  list() {
-    return this.svc.list();
+  list(@Query("docType") docType?: string) {
+    return this.svc.list(docType);
   }
 
   @Get(":id")
