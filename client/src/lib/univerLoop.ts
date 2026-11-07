@@ -366,13 +366,16 @@ export function expandSnapshot(snapshot: unknown, lines: LineItem[], data?: Temp
     sheet.cellData = newCellData;
 
     // 4) 合并：块内合并按实例复制；下方合并下移；上方合并保留。
-    // 块是「垂直整段复制」，列向不变——故「块内合并」只判定整段落在块行区间
-    // [startRow,endRow] 内即可（不再要求列也落在 [startColumn,endColumn]），
-    // 否则块内比 token 更宽的标签合并（如整行标题横并多列）会被漏复制。
+    // 块是「垂直整段复制」，列向不变——故「块内合并」只按行区间判定：
+    // 只要与块行区间 [startRow,endRow] 有交集即随实例复制（不要求完全落在块内，
+    // 也不要求列落在区域列内）。否则两类常见合并会被漏复制：
+    //  - 比 token 更宽的整行标签横并；
+    //  - 竖跨整个产品块的「产品图片」列——它常比行区块上探/下沉一行（如块 9-19、图 8-18），
+    //    若要求完全落在块内会被判为区域外而只在首个实例保留合并。
     const mergeData: any[] = sheet.mergeData ?? [];
     const newMerge: any[] = [];
     for (const m of mergeData) {
-      const inPattern = m.startRow >= startRow && m.endRow <= endRow;
+      const inPattern = m.endRow >= startRow && m.startRow <= endRow;
       if (inPattern) {
         for (let i = 0; i < n; i++) {
           const off = i * blockH;
