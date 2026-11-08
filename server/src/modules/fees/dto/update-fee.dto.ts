@@ -1,4 +1,4 @@
-import { IsNumber, IsOptional, IsString, Min } from "class-validator";
+import { IsArray, IsNumber, IsOptional, IsString, Min } from "class-validator";
 
 export class UpdateFeeDto {
   /** 费用类型（如 样品费 / 设计费 / 物流费 / 其他）。 */
@@ -16,4 +16,24 @@ export class UpdateFeeDto {
   @IsOptional()
   @IsString()
   note?: string;
+
+  /** 回款凭证附件列表，可选；不传则保留原值。 */
+  @IsOptional()
+  @IsArray()
+  attachments?: { name?: string; url: string }[];
+
+  /** 旧版单图凭证 URL（兼容保留，可选）。 */
+  @IsOptional()
+  @IsString()
+  voucherUrl?: string;
+
+  /** 付款日期（ISO 日期字符串，可选）。 */
+  @IsOptional()
+  @IsString()
+  paidAt?: string;
+
+  /** 资金账户（可选）。 */
+  @IsOptional()
+  @IsString()
+  fundAccount?: string;
 }

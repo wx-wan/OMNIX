@@ -271,6 +271,102 @@ export function substituteSystemTokens(value: unknown, data?: TemplateData): unk
 }
 
 /**
+ * 富文本 body（Univer 文档模型）内的占位符替换。
+ * 富文本单元格的文本存于 p.body.dataStream（如 "To：{{customer.name}}\r\n"），
+ * textRuns 的 st/ed 与 paragraphs/sectionBreaks 的 startIndex 均按字符位对齐——
+ * 替换改变文本长度后必须同步重建/平移，否则渲染错位。
+ * 策略：按 token 边界切分原子段，逐段继承所在 run 的样式重建 runs；
+ * 段落/分节等锚点按其之前的累计位移平移（\r\n 段落结构不破坏，行数不变）。
+ */
+function substituteRichBody(
+  body: {
+    dataStream?: string;
+    textRuns?: { st: number; ed: number; ts?: unknown }[];
+    paragraphs?: { startIndex: number }[];
+    sectionBreaks?: { startIndex: number }[];
+    customRanges?: { startIndex: number; endIndex: number }[];
+    [k: string]: unknown;
+  },
+  data: TemplateData,
+  line: LineItem | undefined,
+  systemOnly: boolean,
+): typeof body {
+  const stream = body.dataStream ?? "";
+  if (typeof stream !== "string" || !stream.includes("{{")) return body;
+
+  // 1) 收集 token 区间（systemOnly 时保留 {{line.*}} 字面量，语义与 substituteSystemTokens 一致）
+  const tokens: { start: number; end: number; value: string }[] = [];
+  for (const m of stream.matchAll(TOKEN_RE)) {
+    const key = m[1];
+    if (systemOnly && key.startsWith("line.")) continue;
+    tokens.push({ start: m.index, end: m.index + m[0].length, value: resolveToken(key, data, line) });
+  }
+  if (!tokens.length) return body;
+
+  // 2) token 边界切分原子段（run 可能横跨 token，需先在边界处切开）
+  const points = [...new Set([0, stream.length, ...tokens.flatMap((t) => [t.start, t.end])])].sort(
+    (a, b) => a - b,
+  );
+  const runs = Array.isArray(body.textRuns) ? body.textRuns : [];
+  const styleAt = (p: number) => runs.find((r) => p >= r.st && p < r.ed)?.ts;
+
+  // 3) 重建 dataStream 与 textRuns（相邻同样式段合并）
+  let out = "";
+  const newRuns: { st: number; ed: number; ts?: unknown }[] = [];
+  const deltas: { at: number; delta: number }[] = [];
+  for (let i = 0; i < points.length - 1; i++) {
+    const s = points[i];
+    const e = points[i + 1];
+    const tok = tokens.find((t) => t.start === s && t.end === e);
+    const text = tok ? tok.value : stream.slice(s, e);
+    if (tok) deltas.push({ at: s, delta: text.length - (e - s) });
+    if (!text.length) continue;
+    const ts = styleAt(s);
+    const last = newRuns[newRuns.length - 1];
+    if (last && last.ts === ts) {
+      last.ed += text.length;
+    } else {
+      newRuns.push({ st: out.length, ed: out.length + text.length, ts });
+    }
+    out += text;
+  }
+
+  // 4) 锚点平移：startIndex 之前发生过的替换长度变化累计上去
+  const shift = (idx: number) =>
+    idx + deltas.reduce((acc, d) => (d.at < idx ? acc + d.delta : acc), 0);
+
+  return {
+    ...body,
+    dataStream: out,
+    textRuns: newRuns,
+    paragraphs: body.paragraphs?.map((p) => ({ ...p, startIndex: shift(p.startIndex) })),
+    sectionBreaks: body.sectionBreaks?.map((s) => ({ ...s, startIndex: shift(s.startIndex) })),
+    customRanges: body.customRanges?.map((r) => ({
+      ...r,
+      startIndex: shift(r.startIndex),
+      endIndex: shift(r.endIndex),
+    })),
+  };
+}
+
+/**
+ * 单元格级占位符替换：同时处理纯文本 v 与富文本 p（body.dataStream）。
+ * 富文本单元格的 {{token}} 存在 dataStream 里而非 v——只替换 v 会漏掉它们，
+ * 表现为「预览/导出后占位符原样保留」。
+ */
+function substituteCell(cell: unknown, data: TemplateData, line?: LineItem, systemOnly = false) {
+  if (!cell || typeof cell !== "object") return;
+  const c = cell as { v?: unknown; p?: { body?: Parameters<typeof substituteRichBody>[0] } };
+  if (systemOnly) {
+    c.v = substituteSystemTokens(c.v, data);
+    if (c.p?.body) c.p.body = substituteRichBody(c.p.body, data, undefined, true);
+  } else {
+    c.v = substituteTokens(c.v, data, line);
+    if (c.p?.body) c.p.body = substituteRichBody(c.p.body, data, line, false);
+  }
+}
+
+/**
  * 按明细行「块级」循环展开快照（小满模型）：
  *  - 循环区 = 用户界定的整块行区间（如产品块 8~20 行，含标签行/静态文本/跨行合并）；
  *  - 复制 N 份（N = 明细 length，至少 1），每个实例内 {{line.x}} 替换为对应明细行值，
@@ -300,7 +396,7 @@ export function expandSnapshot(snapshot: unknown, lines: LineItem[], data?: Temp
     for (const sheet of Object.values(plain.sheets ?? {})) {
       for (const row of Object.values(sheet.cellData ?? {})) {
         for (const cell of Object.values(row)) {
-          cell.v = substituteTokens(cell.v, data);
+          substituteCell(cell, data);
         }
       }
     }
@@ -339,14 +435,17 @@ export function expandSnapshot(snapshot: unknown, lines: LineItem[], data?: Temp
       }
     }
 
-    // 2) 逐行实例写入（i=0 覆盖原区域，i>=1 向下追加）；实例内 line.* 按该明细行取值
+    // 2) 逐行实例写入（i=0 覆盖原区域，i>=1 向下追加）；实例内 line.* 按该明细行取值。
+    //    每个实例深拷贝单元格：富文本 p.body 是嵌套对象，浅拷贝会让各实例共享同一 body，
+    //    第一份替换会污染后续实例。
     for (let i = 0; i < n; i++) {
       const line = lines[i];
       const rowOffset = i * blockH;
       for (const p of pattern) {
         const nr = p.r + rowOffset;
         const nc = p.c;
-        const newCell = { ...p.cell, v: substituteTokens(p.cell.v, data, line) };
+        const newCell = JSON.parse(JSON.stringify(p.cell));
+        substituteCell(newCell, data, line);
         (newCellData[String(nr)] ??= {})[String(nc)] = newCell;
       }
     }
@@ -358,7 +457,7 @@ export function expandSnapshot(snapshot: unknown, lines: LineItem[], data?: Temp
       if (r < startRow || r > endRow) {
         const copy = JSON.parse(JSON.stringify(row)) as Record<string, any>;
         for (const cell of Object.values(copy)) {
-          cell.v = substituteSystemTokens(cell.v, data);
+          substituteCell(cell, data, undefined, true);
         }
         newCellData[String(r < startRow ? r : r + shift)] = copy;
       }

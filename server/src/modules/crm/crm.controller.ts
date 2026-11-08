@@ -99,4 +99,18 @@ export class CrmController {
     const userId = (req.session as { userId?: string } | undefined)?.userId;
     return this.crm.deleteChatter(id, msgId, userId);
   }
+
+  // POST /api/crm/deals/:id/chatter/archive —— 以机器人身份同步存档一条带附件的消息
+  // （如导出报价单 xlsx：客户端传 base64，服务端落盘 /uploads 并写入讨论区）
+  @Post("deals/:id/chatter/archive")
+  archiveChatterFile(
+    @Param("id") id: string,
+    @Body() body: { attachmentName?: string; attachmentData?: string },
+  ) {
+    const { attachmentName, attachmentData } = body ?? {};
+    if (!attachmentName || !attachmentData) {
+      throw new BadRequestException("attachmentName 与 attachmentData 必填");
+    }
+    return this.crm.postArchiveFile(id, attachmentName, attachmentData);
+  }
 }

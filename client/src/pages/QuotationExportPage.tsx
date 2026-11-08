@@ -43,6 +43,7 @@ const UniverSheetsDemo = lazy(() => import("@/components/demo/UniverSheetsDemo")
 interface QuotationRecord {
   id: string;
   number: string;
+  dealId?: string | null;
   contact?: {
     name?: string;
     company?: string;
@@ -150,6 +151,8 @@ export default function QuotationExportPage() {
   const [tplData, setTplData] = useState<TemplateData | null>(null);
   const [templates, setTemplates] = useState<QuotationTemplate[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  // 报价单所属商机 id：讨论区挂在商机线程上，下载存档消息发往该商机
+  const [dealId, setDealId] = useState<string | null>(null);
   // 模板列表就绪门控：决定画布初始快照前必须等它（避免按残留旧值挂载）
   const [tplLoaded, setTplLoaded] = useState(false);
   // 报价单加载失败（不存在/已删除/网络错误）：阻断画布渲染并给出明确错误界面
@@ -205,6 +208,7 @@ export default function QuotationExportPage() {
 
         setTplData(buildTemplateData(q, linesRaw));
         setSelectedTemplateId(q.templateId ?? null);
+        setDealId(q.dealId ?? null);
         try {
           const list = await listQuotationTemplates("quotation");
           if (!alive) return;
@@ -253,8 +257,25 @@ export default function QuotationExportPage() {
 
   const handleDownload = async () => {
     const num = tplData?.quotation.number;
-    await univerRef.current?.exportXlsx(num ? `${num}.xlsx` : "quotation.xlsx");
+    const fileName = num ? `${num}.xlsx` : "quotation.xlsx";
+    await univerRef.current?.exportXlsx(fileName);
     toast.success("已开始下载 Excel");
+    // 同步：把当前画布成品以机器人身份发到所属商机讨论区存档（含 xlsx 附件）
+    if (dealId) {
+      try {
+        const snap = await univerRef.current?.getSnapshot();
+        const base64 = await snapshotToXlsxBase64(snap);
+        if (base64) {
+          await api.post(`/crm/deals/${dealId}/chatter/archive`, {
+            attachmentName: fileName,
+            attachmentData: base64,
+          });
+        }
+      } catch (err: unknown) {
+        console.error("导出存档到讨论区失败", err);
+        toast.error("已下载，但同步到讨论区存档失败");
+      }
+    }
   };
 
   const openSendDialog = () => {

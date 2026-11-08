@@ -12,6 +12,8 @@ import { Textarea } from "@/components/ui/textarea";
 export interface ChatterAttachment {
   name: string;
   size?: string;
+  /** 附件访问 URL（如 /uploads/xxx），存在时渲染为可点击下载。 */
+  url?: string;
 }
 
 export interface ChatterMessage {
@@ -79,6 +81,43 @@ function formatNow(d = new Date()): string {
 
 /** 撤回窗口：发送后 3 分钟内可撤回 */
 const RECALL_WINDOW = 3 * 60 * 1000;
+
+/** 附件渲染：可点击下载（有 url 时），展示回形针 + 文件名 + 大小 */
+function renderAttachments(attachments?: ChatterAttachment[]) {
+  if (!attachments || attachments.length === 0) return null;
+  return (
+    <div className="mt-1.5 flex flex-wrap gap-1.5">
+      {attachments.map((a, i) => {
+        const chip = (
+          <>
+            <Paperclip className="size-3" />
+            <span className="truncate">{a.name}</span>
+            {a.size && <span className="opacity-70">{a.size}</span>}
+          </>
+        );
+        return a.url ? (
+          <a
+            key={i}
+            href={a.url}
+            download={a.name}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex max-w-[220px] items-center gap-1 rounded border border-black/10 bg-white/50 px-1.5 py-0.5 text-xs text-[#1f1f1f] transition-colors hover:bg-white"
+          >
+            {chip}
+          </a>
+        ) : (
+          <span
+            key={i}
+            className="inline-flex max-w-[220px] items-center gap-1 rounded border border-black/10 bg-white/50 px-1.5 py-0.5 text-xs text-[#1f1f1f]"
+          >
+            {chip}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
 
 /** Chatter：记录级讨论面板（Odoo 风格）——消息流 + 发消息输入框，可挂到任意业务单据底部。展示型，发消息走 onSend，组件内保留本地草稿。 */
 export function Chatter({
@@ -177,6 +216,7 @@ export function Chatter({
             time={m.timestamp}
           >
             <p className="whitespace-pre-wrap break-words">{m.body}</p>
+            {renderAttachments(m.attachments)}
           </ChatBubble>
         </Fragment>
       );
@@ -192,20 +232,7 @@ export function Chatter({
     const bubbleContent = (
       <>
         <p className="whitespace-pre-wrap break-words">{m.body}</p>
-        {m.attachments && m.attachments.length > 0 && (
-          <div className="mt-1.5 flex flex-wrap gap-1.5">
-            {m.attachments.map((a, i) => (
-              <span
-                key={i}
-                className="inline-flex items-center gap-1 rounded border border-black/10 bg-white/50 px-1.5 py-0.5 text-xs text-[#1f1f1f]"
-              >
-                <Paperclip className="size-3" />
-                {a.name}
-                {a.size && <span className="opacity-70">{a.size}</span>}
-              </span>
-            ))}
-          </div>
-        )}
+        {renderAttachments(m.attachments)}
       </>
     );
     const bubble = (

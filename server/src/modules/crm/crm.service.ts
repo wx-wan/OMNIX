@@ -10,6 +10,13 @@ import { isContactComplete } from "../contacts/contact-complete";
 import { UpdateDealDto } from "./dto/update-deal.dto";
 import { CreateDealDto } from "./dto/create-deal.dto";
 import { DealLineDto } from "./dto/deal-line.dto";
+import { existsSync, mkdirSync } from "fs";
+import { writeFile } from "fs/promises";
+import { join } from "path";
+import { randomUUID } from "crypto";
+
+/** 讨论区附件落盘目录（与上传模块共用 /uploads，由 main.ts 静态托管为 /uploads/xxx）。 */
+const CHATTER_UPLOAD_DIR = join(process.cwd(), "uploads");
 
 // 字段中文标签：把「字段级修改」翻译成可读的操作历史
 const FIELD_LABELS: Record<string, string> = {
@@ -61,6 +68,56 @@ export class CrmService {
         authorIsBot: true,
         authorAvatar: bot.avatarUrl ?? null,
         body,
+      },
+    });
+  }
+
+  /**
+   * 以系统机器人身份，往讨论区同步发一条「带附件的存档消息」（如导出报价单 xlsx）。
+   * 客户端传 base64，服务端落盘到 /uploads 并写入 ChatterMessage（authorIsBot=true）。
+   * 仅校验基本合法性，失败抛错由控制器转 400/500；附件名限定安全字符，避免路径穿越。
+   */
+  async postArchiveFile(
+    resId: string,
+    attachmentName: string,
+    attachmentData: string,
+    resModel = "deal",
+  ): Promise<ChatterMessage> {
+    const name = (attachmentName ?? "").trim();
+    if (!name) throw new BadRequestException("attachmentName 必填");
+    if (!attachmentData || typeof attachmentData !== "string")
+      throw new BadRequestException("attachmentData 必填");
+
+    // 支持 data URL 前缀；仅取 base64 主体
+    const b64 = attachmentData.includes(",")
+      ? attachmentData.slice(attachmentData.indexOf(",") + 1)
+      : attachmentData;
+    const buf = Buffer.from(b64, "base64");
+    if (!buf.length || buf.length > 25 * 1024 * 1024)
+      throw new BadRequestException("附件内容非法或过大");
+    // 校验 xlsx 实为 zip（PK\x03\x04 魔数），避免把任意数据落盘
+    if (buf[0] !== 0x50 || buf[1] !== 0x4b)
+      throw new BadRequestException("附件不是有效的 Excel 文件");
+
+    // 文件名白名单：保留原扩展名，其余替换，杜绝路径穿越
+    const safeBase = name.replace(/[\/\\]/g, "_").replace(/^\.+/, "").slice(0, 80) || "archive";
+    const ext = /\.xlsx?$/i.test(safeBase) ? "" : ".xlsx";
+    const fileName = `${randomUUID()}${ext ? ext : ""}`;
+    if (!existsSync(CHATTER_UPLOAD_DIR)) mkdirSync(CHATTER_UPLOAD_DIR, { recursive: true });
+    await writeFile(join(CHATTER_UPLOAD_DIR, fileName), buf);
+
+    const bot = await this.getBot();
+    return this.prisma.chatterMessage.create({
+      data: {
+        resModel,
+        resId,
+        authorId: bot.id ?? null,
+        authorName: bot.name,
+        authorIsBot: true,
+        authorAvatar: bot.avatarUrl ?? null,
+        body: `报价单「${name}」已导出并存档`,
+        attachmentName: name,
+        attachmentUrl: `/uploads/${fileName}`,
       },
     });
   }
@@ -449,6 +506,9 @@ export class CrmService {
       authorId: m.authorId,
       authorAvatar: m.authorAvatar ?? null,
       createdAt: m.createdAt.toISOString(),
+      attachments: m.attachmentName
+        ? [{ name: m.attachmentName, url: m.attachmentUrl ?? "" }]
+        : [],
     };
   }
 

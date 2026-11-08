@@ -149,6 +149,10 @@ model Fee {
   type      String // 费用类型（如 样品费 / 设计费 / 物流费 / 其他）
   amount    Decimal  @db.Decimal(12, 2) // 金额（元，CNY）
   note      String? // 备注（如费用说明 / 凭证号）
+  voucherUrl String? @map("voucher_url") // 旧版单图凭证 URL（保留兼容历史数据）
+  attachments Json? // 附件列表 [{name, url}]（回款凭证等，图片或 PDF）
+  paidAt     DateTime? @map("paid_at") // 付款日期
+  fundAccount String? @map("fund_account") // 资金账户（如 对公账户 / 支付宝）
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -184,6 +188,8 @@ model ChatterMessage {
   authorAvatar String? @map("author_avatar") // 作者头像 URL 快照（如 Accio work 的 web 头像），优先于首字母
   isRecall    Boolean  @default(false) // 是否为「撤回」系统记录（撤回后保留一条提示，仿微信）
   body        String // 消息/操作历史正文
+  attachmentName String? @map("attachment_name") // 附件文件名（如报价单 xlsx），由机器人存档消息携带
+  attachmentUrl  String? @map("attachment_url") // 附件访问 URL（/uploads/xxx），空表示纯文本
   createdAt   DateTime @default(now())
 
   @@index([resModel, resId])

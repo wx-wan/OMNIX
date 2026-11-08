@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
-import type { Fee } from "@prisma/client";
+import type { Fee, Prisma } from "@prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
 import { CrmService } from "../crm/crm.service";
 import { CreateFeeDto } from "./dto/create-fee.dto";
@@ -34,12 +34,21 @@ export class FeesService {
     const deal = await this.prisma.deal.findUnique({ where: { id: dto.dealId } });
     if (!deal) throw new NotFoundException(`Deal ${dto.dealId} not found`);
     const created = await this.prisma.fee.create({
-      data: { dealId: dto.dealId, type: dto.type, amount: dto.amount, note: dto.note },
+      data: {
+        dealId: dto.dealId,
+        type: dto.type,
+        amount: dto.amount,
+        note: dto.note,
+        voucherUrl: dto.voucherUrl,
+        attachments: (dto.attachments ?? []) as unknown as Prisma.InputJsonValue,
+        paidAt: dto.paidAt ? new Date(dto.paidAt) : null,
+        fundAccount: dto.fundAccount,
+      },
     });
     const actor = await this.crm.getActorName(actorId);
     await this.crm.recordEvent(
       dto.dealId,
-      `${actor} 添加了费用「${dto.type}」¥${dto.amount.toFixed(2)}`,
+      `${actor} 添加了费用「${dto.type}」（¥${dto.amount.toFixed(2)}）`,
       "deal",
     );
     return this.toDto(created);
@@ -50,10 +59,20 @@ export class FeesService {
     if (!exists) throw new NotFoundException(`Fee ${id} not found`);
     const updated = await this.prisma.fee.update({
       where: { id },
-      data: { type: dto.type, amount: dto.amount, note: dto.note },
+      data: {
+        type: dto.type,
+        amount: dto.amount,
+        note: dto.note,
+        voucherUrl: dto.voucherUrl,
+        attachments: dto.attachments
+          ? (dto.attachments as unknown as Prisma.InputJsonValue)
+          : undefined,
+        paidAt: dto.paidAt ? new Date(dto.paidAt) : undefined,
+        fundAccount: dto.fundAccount,
+      },
     });
     const actor = await this.crm.getActorName(actorId);
-    await this.crm.recordEvent(exists.dealId, `${actor} 修改了费用「${updated.type}」`, "deal");
+    await this.crm.recordEvent(exists.dealId, `${actor} 更新了费用「${updated.type}」`, "deal");
     return this.toDto(updated);
   }
 
@@ -73,6 +92,15 @@ export class FeesService {
       type: f.type,
       amount: f.amount.toNumber(),
       note: f.note,
+      voucherUrl: f.voucherUrl,
+      // 兼容历史单图凭证：无 attachments 时回退为单元素数组
+      attachments: Array.isArray(f.attachments)
+        ? f.attachments
+        : f.voucherUrl
+          ? [{ name: f.type, url: f.voucherUrl }]
+          : [],
+      paidAt: f.paidAt ? f.paidAt.toISOString() : null,
+      fundAccount: f.fundAccount,
       createdAt: f.createdAt.toISOString(),
       updatedAt: f.updatedAt.toISOString(),
     };

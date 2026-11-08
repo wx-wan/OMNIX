@@ -16,11 +16,9 @@ import {
   type TemplateData,
 } from "@/lib/quotationFields";
 import {
-  detectLoopRegionFromLines,
   extractLoopsFromSnapshot,
   REGION_GRAY_BG,
   TOKEN_HIGHLIGHT_BG,
-  rangeToA1,
   type LoopConfig,
 } from "@/lib/univerLoop";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -80,10 +78,6 @@ export interface UniverSheetsHandle {
   getSnapshot: () => Promise<unknown>;
   loadSnapshot: (snap: unknown) => void;
   exportXlsx: (filename?: string) => Promise<void>;
-  /** 当前选区的 A1 表示（如 "B8:I10"）；无选区返回 null（循环列弹窗「读取当前选区」用） */
-  getSelectedA1: () => string | null;
-  /** 进入循环字段绑定模式：明细字段点击写入 {{token}} 占位符（循环列弹窗确认后调用） */
-  beginLoopBinding: () => void;
   /** 把任意原始文本写入当前选中单元格（快捷文本插入用；不解析不格式化） */
   insertText: (text: string) => void;
 }
@@ -106,8 +100,6 @@ interface UniverSheetsProps {
    * 「内容溢出→滚动条→宽度变化→Univer 重渲染→回弹」的尺寸反馈震荡（选中框抖动根源）。
    */
   fill?: boolean;
-  /** 「完成循环表」后通知宿主（宿主负责取快照并展开完整明细） */
-  onLoopFinish?: () => void;
   /**
    * 模板编辑模式：左侧系统字段点击写入 {{占位符}}（导出/预览时再解析为真实值）；
    * 缺省 false=演示模式，点击直接写入字段真实值（Showcase 用）。
@@ -145,7 +137,7 @@ const LINE_COLUMNS: { key: string; label: string }[] = [
  */
 const UniverSheetsDemoInner = forwardRef<UniverSheetsHandle, UniverSheetsProps>(
   function UniverSheetsDemo(
-    { data, initialSnapshot, height = 600, fill = false, persistLoop = false, onLoopFinish, templateMode = false, hidePanel = false },
+    { data, initialSnapshot, height = 600, fill = false, persistLoop = false, templateMode = false, hidePanel = false },
     ref,
   ) {
     const reactId = useId();
@@ -159,9 +151,7 @@ const UniverSheetsDemoInner = forwardRef<UniverSheetsHandle, UniverSheetsProps>(
     const [status, setStatus] = useState<string>("先点选单元格，再点左侧字段——自动写入对应真实值");
     const [ready, setReady] = useState(false);
 
-    // 循环明细表：框选区域 → 写占位符 → 完成
-    const [loopMode, setLoopMode] = useState<null | "select" | "field">(null);
-    const [pendingRange, setPendingRange] = useState<LoopConfig | null>(null);
+    // 循环明细表：手动行号输入定义区域（输入即生效），清除按钮删除定义
     const [loopDefined, setLoopDefined] = useState(false);
     // 当前循环配置（命令式 getSnapshot 时挂载进快照）；从 initialSnapshot 还原，支持二次编辑模板
     const loopsRef = useRef<LoopConfig[]>([]);
@@ -263,8 +253,11 @@ const UniverSheetsDemoInner = forwardRef<UniverSheetsHandle, UniverSheetsProps>(
       const loops = extractLoopsFromSnapshot(initialSnapshot);
       loopsRef.current = loops;
       setLoopDefined(loops.length > 0);
-      setLoopMode(null);
-      setPendingRange(null);
+      // 行号输入框持久化：从已保存的循环区回填「明细行所在行」，重新打开模板时可见可改
+      if (loops.length) {
+        const l = loops[0];
+        setManualRows({ from: String(l.startRow + 1), to: String(l.endRow + 1) });
+      }
       // 设计态：区域内整片纯灰 + token 单元格蓝灰高亮
       try {
         applyDesignHighlight(loops);
@@ -368,19 +361,6 @@ const UniverSheetsDemoInner = forwardRef<UniverSheetsHandle, UniverSheetsProps>(
         const snap = await wbRef.current?.save?.();
         if (snap) await downloadUniverSnapshot(snap, filename);
       },
-      // 当前选区的 A1 表示（循环列弹窗「读取当前选区」）
-      getSelectedA1: () => {
-        const b = getSelectedRangeBounds(wbRef.current);
-        return b ? rangeToA1(b) : null;
-      },
-      // 进入循环字段绑定模式：明细字段点击写入占位符（循环列弹窗确认后调用）
-      beginLoopBinding: () => {
-        const loop = loopsRef.current[0];
-        if (!loop) return;
-        setPendingRange(loop);
-        setLoopMode("field");
-        setStatus("循环区域已标记（纯灰）。点选区域内单元格 → 点左侧「明细字段」绑定占位符；完成后点「完成循环表」展开完整明细");
-      },
       // 把原始文本写入当前选中单元格（快捷文本插入；不解析不格式化）
       insertText: (text: string) => {
         const wb = wbRef.current;
@@ -483,25 +463,6 @@ const UniverSheetsDemoInner = forwardRef<UniverSheetsHandle, UniverSheetsProps>(
       }
     };
 
-    /** 读取当前鼠标框选的完整选区范围（0 基，含端点）；无选区返回 null */
-    const getSelectedRangeBounds = (wb: any): LoopConfig | null => {
-      const sheet =
-        wb.getActiveSheet?.() ??
-        (typeof wb.getSheetByName === "function" ? wb.getSheetByName("sheet1") : null);
-      if (!sheet) return null;
-      const range = sheet.getActiveRange?.();
-      const ir = range && typeof range.getRange === "function" ? range.getRange() : range;
-      if (!ir) return null;
-      const { startRow, endRow, startColumn, endColumn } = ir as {
-        startRow: number;
-        endRow: number;
-        startColumn: number;
-        endColumn: number;
-      };
-      if ([startRow, endRow, startColumn, endColumn].some((n) => typeof n !== "number")) return null;
-      return { sheetId: sheet.getSheetId?.() ?? "sheet1", startRow, endRow, startColumn, endColumn };
-    };
-
     /**
      * 设计态循环区域标记：区域内整片单元格纯灰底（证明该区域按明细行循环），
      * 含 {{token}} 的单元格再叠加蓝灰高亮；已有填充（用户区块色）保留不动。
@@ -557,93 +518,24 @@ const UniverSheetsDemoInner = forwardRef<UniverSheetsHandle, UniverSheetsProps>(
       }
     };
 
-    // ---- 循环明细表流程：添加 → 框选区域 → 确认 → 写占位符 → 完成 ----
-    const handleStartLoop = () => {
-      setPendingRange(null);
-      setLoopMode("select");
-      setStatus("框选循环区域：用鼠标拖选要按明细循环的区域，再点「确认区域」");
-    };
-    /** 自动识别循环区域：扫描含 {{line.*}} 产品字段占位符的单元格，取其行列包围盒 */
-    const handleAutoDetectLoop = () => {
-      const wb = wbRef.current;
-      if (!wb) return;
-      try {
-        const snap = typeof wb.save === "function" ? wb.save() : null;
-        const region = snap ? detectLoopRegionFromLines(snap) : null;
-        if (!region) {
-          setStatus("未找到产品字段占位符（{{line.*}}）：请先在明细行写入产品字段");
-          return;
-        }
-        loopsRef.current = [region];
-        setLoopDefined(true);
-        setLoopMode(null);
-        setPendingRange(null);
-        try {
-          applyDesignHighlight([region]);
-        } catch {
-          /* 忽略 */
-        }
-        setStatus(
-          `已按产品字段所在行识别循环区域 ${rangeToA1(region)}（整片纯灰标记），完成保存后导出时按明细行展开`,
-        );
-      } catch (err) {
-        console.error("自动识别循环区域失败", err);
-        setStatus("自动识别循环区域失败");
-      }
-    };
-    const handleConfirmRange = () => {
-      const wb = wbRef.current;
-      if (!wb) return;
-      const b = getSelectedRangeBounds(wb);
-      if (!b) {
-        setStatus("未检测到选区，请先用鼠标拖选一片单元格");
-        return;
-      }
-      setPendingRange(b);
-      setLoopMode("field");
-      try {
-        applyDesignHighlight([b]);
-      } catch {
-        /* 忽略 */
-      }
-      setStatus("已确认区域。现在点选区域内单元格，再点左侧「明细字段」写入占位符；完成后点「完成循环表」");
-    };
-    const handleFinishLoop = () => {
-      if (!pendingRange) {
-        setLoopMode(null);
-        return;
-      }
-      loopsRef.current = [pendingRange];
-      setLoopDefined(true);
-      setLoopMode(null);
-      setPendingRange(null);
-      if (onLoopFinish) {
-        // 宿主（报价单弹窗）负责取快照并展开完整明细
-        onLoopFinish();
-        return;
-      }
-      setStatus("循环表已定义：预览时将按明细行逐行展开真实字段");
-    };
-    const handleLoopCancel = () => {
-      setLoopMode(null);
-      setPendingRange(null);
-      setStatus("已取消循环表定义");
-    };
+    // ---- 循环明细表：手动行号输入定义区域（applyManualLoop），清除按钮删除定义 ----
     const handleClearLoop = () => {
       loopsRef.current = [];
       setLoopDefined(false);
-      setLoopMode(null);
-      setPendingRange(null);
+      setManualRows({ from: "", to: "" }); // 行号输入与循环定义保持一致
       setStatus("已清除循环表定义（单元格内占位符需手动删除）");
     };
-    /** 照小满「产品字段编码所在行」：手动输入行号区间（1 起始，显示行号）定义明细循环区。
-     *  整行覆盖（列向取整表宽度），展开时按区间行数 × 明细行数复制。 */
-    const handleManualLoop = () => {
-      const from = parseInt(manualRows.from, 10);
-      const to = parseInt(manualRows.to, 10);
+    /**
+     * 照小满「产品字段编码所在行」：手动输入行号区间（1 起始，显示行号）定义明细循环区。
+     * 整行覆盖（列向取整表宽度），展开时按区间行数 × 明细行数复制。
+     * 输入即生效（无需「确定」按钮）：两侧均为有效行号时立即重定义区域并标记灰底；
+     * 输入不完整/非法时保持现有循环配置，等待继续输入或「保存」时一并落库。
+     */
+    const applyManualLoop = (fromStr: string, toStr: string) => {
+      const from = parseInt(fromStr, 10);
+      const to = parseInt(toStr, 10);
       if (!Number.isFinite(from) || !Number.isFinite(to) || from < 1 || to < from) {
-        setStatus("请输入有效的行号区间（起始 ≤ 结束，从第 1 行起）");
-        return;
+        return; // 未构成合法行号区间：不改动现有配置
       }
       try {
         const wb = wbRef.current;
@@ -667,14 +559,12 @@ const UniverSheetsDemoInner = forwardRef<UniverSheetsHandle, UniverSheetsProps>(
         };
         loopsRef.current = [range];
         setLoopDefined(true);
-        setLoopMode(null);
-        setPendingRange(null);
         try {
           applyDesignHighlight([range]);
         } catch {
           /* 忽略 */
         }
-        setStatus(`已按行号定义明细循环区：第 ${from} ~ ${to} 行`);
+        setStatus(`已按行号定义明细循环区：第 ${from} ~ ${to} 行（保存后导出按明细行展开）`);
       } catch (err) {
         console.error("手动定义循环区失败", err);
         setStatus("定义循环区失败");
@@ -743,75 +633,28 @@ const UniverSheetsDemoInner = forwardRef<UniverSheetsHandle, UniverSheetsProps>(
                 );
               })}
 
-              {/* 循环明细表：框选区域 → 写占位符 → 按明细行循环渲染真实字段 */}
+              {/* 循环明细表：手动输入行号定义区域 → 按明细行循环渲染真实字段 */}
               <div className="rounded-md border border-dashed border-primary/40 p-2">
                 <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-primary">
                   循环明细表（按行展开）
                 </p>
 
-                {loopMode === null && !loopDefined && (
-                  <div className="flex flex-col gap-1">
-                    <Button size="sm" className="w-full" onClick={handleStartLoop}>
-                      添加循环表
-                    </Button>
-                    <Button size="sm" variant="outline" className="w-full" onClick={handleAutoDetectLoop}>
-                      按产品字段所在行自动识别
-                    </Button>
-                  </div>
-                )}
-
-                {loopMode === "select" && (
-                  <div className="flex flex-col gap-1">
-                    <p className="text-[11px] text-muted-foreground">拖选循环区域后确认</p>
-                    <div className="flex gap-1">
-                      <Button size="sm" className="flex-1" onClick={handleConfirmRange}>
-                        确认区域
-                      </Button>
-                      <Button size="sm" variant="ghost" onClick={handleLoopCancel}>
-                        取消
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
-                {loopMode === "field" && (
-                  <div className="flex flex-col gap-1">
-                    <p className="text-[11px] text-muted-foreground">点单元格→点下方字段写占位符</p>
-                    <div className="flex gap-1">
-                      <Button size="sm" className="flex-1" onClick={handleFinishLoop}>
-                        完成循环表
-                      </Button>
-                      <Button size="sm" variant="ghost" onClick={handleLoopCancel}>
-                        取消
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
-                {loopDefined && loopMode === null && (
-                  <div className="flex flex-col gap-1">
-                    <p className="text-[11px] text-emerald-600">已定义循环表（按明细行循环）</p>
-                    <div className="flex gap-1">
-                      <Button size="sm" variant="outline" className="flex-1" onClick={handleStartLoop}>
-                        重新定义
-                      </Button>
-                      <Button size="sm" variant="ghost" onClick={handleClearLoop}>
-                        清除
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
-                {/* 照小满「产品字段编码所在行」：手动输入行号区间定义明细循环区 */}
-                {loopMode === null && (
-                  <div className="mt-2 flex flex-col gap-1">
+                {/* 照小满「产品字段编码所在行」：手动输入行号区间定义明细循环区。
+                    输入即生效（无需「确定」按钮）：两侧合法即重定义区域；保存时一并落库。
+                    已定义状态不再单独展示（行号回填 + 画布灰底即标记）；「清除」是唯一
+                    删除循环定义的入口，随行号行内联提供 */}
+                <div className="mt-2 flex flex-col gap-1">
                     <p className="text-[11px] font-semibold text-muted-foreground">
                       明细行所在行（输入行号）
                     </p>
                     <div className="flex items-center gap-1">
                       <Input
                         value={manualRows.from}
-                        onChange={(e) => setManualRows((s) => ({ ...s, from: e.target.value }))}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setManualRows((s) => ({ ...s, from: v }));
+                          applyManualLoop(v, manualRows.to);
+                        }}
                         inputMode="numeric"
                         placeholder="起始行"
                         className="h-7 rounded-lg px-2 text-xs"
@@ -819,22 +662,27 @@ const UniverSheetsDemoInner = forwardRef<UniverSheetsHandle, UniverSheetsProps>(
                       <span className="shrink-0 text-xs text-muted-foreground">~</span>
                       <Input
                         value={manualRows.to}
-                        onChange={(e) => setManualRows((s) => ({ ...s, to: e.target.value }))}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setManualRows((s) => ({ ...s, to: v }));
+                          applyManualLoop(manualRows.from, v);
+                        }}
                         inputMode="numeric"
                         placeholder="结束行"
                         className="h-7 rounded-lg px-2 text-xs"
                       />
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-7 shrink-0 px-2 text-xs"
-                        onClick={handleManualLoop}
-                      >
-                        确定
-                      </Button>
+                      {loopDefined && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 shrink-0 px-2 text-xs"
+                          onClick={handleClearLoop}
+                        >
+                          清除
+                        </Button>
+                      )}
                     </div>
-                  </div>
-                )}
+                </div>
 
                 {/* 明细字段：模板模式下点击即写入 {{line.x}} 占位符（灰底提示）；
                     产品字段编码所在行即明细循环区域，导出时自动按明细行展开，

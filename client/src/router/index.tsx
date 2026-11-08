@@ -10,6 +10,8 @@ import Quotations from "@/pages/Quotations";
 import QuotationDetail from "@/pages/QuotationDetail";
 import QuotationExportPage from "@/pages/QuotationExportPage";
 import QuotationTemplates from "@/pages/QuotationTemplates";
+import QuotationTemplateEditor from "@/pages/QuotationTemplateEditor";
+import QuotationTemplatePreview from "@/pages/QuotationTemplatePreview";
 import Settings from "@/pages/Settings";
 import Showcase from "@/pages/Showcase";
 import FeeSheet from "@/pages/FeeSheet";
@@ -40,6 +42,32 @@ export const router = createBrowserRouter([
     element: (
       <RequireAuth>
         <QuotationExportPage />
+      </RequireAuth>
+    ),
+  },
+  {
+    // 单据模板设计器：独立新标签页全屏编辑器（新建 / 编辑，不经 AppShell）
+    path: "/quotation-templates/new",
+    element: (
+      <RequireAuth>
+        <QuotationTemplateEditor />
+      </RequireAuth>
+    ),
+  },
+  {
+    path: "/quotation-templates/:id/edit",
+    element: (
+      <RequireAuth>
+        <QuotationTemplateEditor />
+      </RequireAuth>
+    ),
+  },
+  {
+    // 单据模板预览：独立新标签页只读预览（不经 AppShell）
+    path: "/quotation-templates/:id/preview",
+    element: (
+      <RequireAuth>
+        <QuotationTemplatePreview />
       </RequireAuth>
     ),
   },
