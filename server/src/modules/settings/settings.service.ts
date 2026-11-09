@@ -5,6 +5,7 @@ import { PrismaService } from "../../prisma/prisma.service";
 
 const KEY_ENABLED = "mcp.enabled";
 const KEY_TOKEN = "mcp.token";
+const KEY_DESIGN_AUTO_DECOMPOSE = "design.auto_decompose";
 
 export interface McpSettings {
   enabled: boolean;
@@ -72,5 +73,26 @@ export class SettingsService {
       update: { value: token },
     });
     return { token };
+  }
+
+  // —— 设计偏好：进入设计单页是否自动为本商机所有产品需求建草稿设计单 ——
+  async getDesignSettings(): Promise<{ autoDecompose: boolean }> {
+    const row = await this.prisma.setting.findUnique({
+      where: { key: KEY_DESIGN_AUTO_DECOMPOSE },
+    });
+    return { autoDecompose: row ? row.value === "true" : false };
+  }
+
+  async updateDesignSettings(input: {
+    autoDecompose?: boolean;
+  }): Promise<{ autoDecompose: boolean }> {
+    if (input.autoDecompose !== undefined) {
+      await this.prisma.setting.upsert({
+        where: { key: KEY_DESIGN_AUTO_DECOMPOSE },
+        create: { key: KEY_DESIGN_AUTO_DECOMPOSE, value: String(input.autoDecompose) },
+        update: { value: String(input.autoDecompose) },
+      });
+    }
+    return this.getDesignSettings();
   }
 }

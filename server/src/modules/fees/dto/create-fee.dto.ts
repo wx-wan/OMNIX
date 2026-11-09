@@ -47,4 +47,14 @@ export class CreateFeeDto {
   @IsString()
   @IsNotEmpty()
   fundAccount!: string;
+
+  /** 关联单据类型：design | sample（用于费用勾稽）。 */
+  @IsOptional()
+  @IsString()
+  refType?: string;
+
+  /** 关联单据 id（DesignOrder / SampleOrder id）。 */
+  @IsOptional()
+  @IsString()
+  refId?: string;
 }

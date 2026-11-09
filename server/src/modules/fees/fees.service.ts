@@ -43,6 +43,8 @@ export class FeesService {
         attachments: (dto.attachments ?? []) as unknown as Prisma.InputJsonValue,
         paidAt: dto.paidAt ? new Date(dto.paidAt) : null,
         fundAccount: dto.fundAccount,
+        refType: dto.refType ?? null,
+        refId: dto.refId ?? null,
       },
     });
     const actor = await this.crm.getActorName(actorId);
@@ -69,6 +71,8 @@ export class FeesService {
           : undefined,
         paidAt: dto.paidAt ? new Date(dto.paidAt) : undefined,
         fundAccount: dto.fundAccount,
+        ...(dto.refType !== undefined ? { refType: dto.refType } : {}),
+        ...(dto.refId !== undefined ? { refId: dto.refId } : {}),
       },
     });
     const actor = await this.crm.getActorName(actorId);
@@ -101,6 +105,8 @@ export class FeesService {
           : [],
       paidAt: f.paidAt ? f.paidAt.toISOString() : null,
       fundAccount: f.fundAccount,
+      refType: f.refType,
+      refId: f.refId,
       createdAt: f.createdAt.toISOString(),
       updatedAt: f.updatedAt.toISOString(),
     };

@@ -480,6 +480,9 @@ export default function DealForm() {
   const [quoteCount, setQuoteCount] = useState(0);
   // 当前商机的费用项数量（产物栏「费用单」计数）
   const [feeCount, setFeeCount] = useState(0);
+  // 当前商机的设计单 / 打样单数量（产物栏计数）
+  const [designCount, setDesignCount] = useState(0);
+  const [sampleCount, setSampleCount] = useState(0);
   // 往来单位（顶层公司）/ 联系人（公司下人员）实时拉取与创建
   const mapContact = (c: {
     id: string;
@@ -582,6 +585,18 @@ export default function DealForm() {
       .get<any[]>("/fees", { params: { dealId: id } })
       .then((r) => {
         if (alive) setFeeCount(r.data.length);
+      })
+      .catch(() => {});
+    api
+      .get<any[]>("/design-orders", { params: { dealId: id } })
+      .then((r) => {
+        if (alive) setDesignCount(r.data.length);
+      })
+      .catch(() => {});
+    api
+      .get<any[]>("/sample-orders", { params: { dealId: id } })
+      .then((r) => {
+        if (alive) setSampleCount(r.data.length);
       })
       .catch(() => {});
     return () => {
@@ -1216,21 +1231,33 @@ export default function DealForm() {
                       );
                     }
                     // 「费用单」产物：显示真实费用项数量，点击进入费用单页
-                    if (d.key === "fee" && isEdit && id) {
+                    if ((d.key === "fee" || d.key === "design" || d.key === "sampleOrder") && isEdit && id) {
+                      const target =
+                        d.key === "design"
+                          ? `/crm/deals/${id}/design-orders`
+                          : d.key === "sampleOrder"
+                            ? `/crm/deals/${id}/sample-orders`
+                            : `/crm/deals/${id}/fees`;
+                      const count =
+                        d.key === "design"
+                          ? designCount
+                          : d.key === "sampleOrder"
+                            ? sampleCount
+                            : feeCount;
                       return (
                         <button
                           key={d.key}
                           type="button"
                           className="flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1 transition-colors hover:bg-muted/50"
                           title={label}
-                          onClick={() => navigate(`/crm/deals/${id}/fees`)}
+                          onClick={() => navigate(target)}
                         >
                           <Icon className="size-4 shrink-0 text-amber-500" />
                           <span className="max-w-24 truncate text-xs text-muted-foreground">
                             {label}
                           </span>
                           <span className="font-heading text-sm font-semibold tabular-nums text-foreground">
-                            {feeCount}
+                            {count}
                           </span>
                         </button>
                       );

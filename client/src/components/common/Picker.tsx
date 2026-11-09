@@ -29,6 +29,8 @@ export interface PickerProps {
   fallbackText?: string;
   /** 无边框内嵌态：去掉边框/背景，便于嵌入表格单元格（如税项列） */
   bare?: boolean;
+  /** 聚焦时是否自动展开下拉（默认 true；false 时仅在输入/按 ↓ 时展开） */
+  openOnFocus?: boolean;
   id?: string;
   className?: string;
   disabled?: boolean;
@@ -56,6 +58,7 @@ export function Picker({
   pageSize,
   fallbackText,
   bare,
+  openOnFocus = true,
   id,
   className,
   disabled,
@@ -167,7 +170,9 @@ export function Picker({
               bare &&
                 "!border-0 !bg-transparent dark:!bg-transparent shadow-none focus-visible:!ring-0",
             )}
-            onFocus={openDropdown}
+            onFocus={() => {
+              if (openOnFocus) openDropdown();
+            }}
             onChange={(e) => {
               setQuery(e.target.value);
               onInputChange?.(e.target.value);

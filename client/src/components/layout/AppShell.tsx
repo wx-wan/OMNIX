@@ -16,6 +16,8 @@ import {
   Package,
   FileText,
   FileStack,
+  Wallet,
+  PenTool,
   LogOut,
 } from "lucide-react";
 import { cn } from "cn";
@@ -37,6 +39,8 @@ const navItems = [
   { to: "/products", labelKey: "nav.products", icon: Package, end: false },
   { to: "/quotations", labelKey: "nav.quotations", icon: FileText, end: false },
   { to: "/quotation-templates", labelKey: "nav.quotationTemplates", icon: FileStack, end: false },
+  { to: "/fees", labelKey: "nav.fees", icon: Wallet, end: false },
+  { to: "/design-orders", labelKey: "nav.designOrders", icon: PenTool, end: false },
   { to: "/showcase", labelKey: "nav.components", icon: Puzzle, end: false },
   { to: "/settings", labelKey: "nav.settings", icon: Settings, end: false },
 ];

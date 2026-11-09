@@ -44,6 +44,9 @@ export default function Settings() {
   const [saving, setSaving] = useState(false);
   const [enabled, setEnabled] = useState(true);
   const [token, setToken] = useState("");
+  // 设计偏好
+  const [designAuto, setDesignAuto] = useState(false);
+  const [designSaving, setDesignSaving] = useState(false);
   // 本机局域网 IP：优先后端返回（网卡直读，最可靠）；浏览器 WebRTC 探测仅作兜底。
   const [lanIp, setLanIp] = useState<string | null>(null);
 
@@ -64,6 +67,10 @@ export default function Settings() {
       })
       .catch(() => toast.error(t("settings.mcp.loadFailed")))
       .finally(() => setLoading(false));
+    api
+      .get<{ autoDecompose: boolean }>("/settings/design")
+      .then((r) => setDesignAuto(r.data.autoDecompose))
+      .catch(() => {});
   };
 
   useEffect(() => {
@@ -132,6 +139,18 @@ export default function Settings() {
 
   const copy = (text: string) => {
     navigator.clipboard.writeText(text).then(() => toast.success(t("settings.mcp.copied")));
+  };
+
+  const saveDesign = async () => {
+    setDesignSaving(true);
+    try {
+      await api.put("/settings/design", { autoDecompose: designAuto });
+      toast.success(t("settings.design.saved"));
+    } catch {
+      toast.error(t("settings.design.saveFailed"));
+    } finally {
+      setDesignSaving(false);
+    }
   };
 
   /** 把 Accio Work Skill 下载为 .md 文件，供一键导入。 */
@@ -378,6 +397,28 @@ export default function Settings() {
             </div>
           </div>
         )}
+      </Section>
+
+      <Section
+        title={t("settings.design.title")}
+        description={t("settings.design.desc")}
+        action={
+          <Button onClick={saveDesign} disabled={designSaving}>
+            {t("common.save")}
+          </Button>
+        }
+      >
+        <div className="flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            <Label className="text-sm font-medium">
+              {t("settings.design.autoDecompose")}
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              {t("settings.design.autoDecomposeHint")}
+            </p>
+          </div>
+          <Switch checked={designAuto} onCheckedChange={setDesignAuto} />
+        </div>
       </Section>
 
       <Section

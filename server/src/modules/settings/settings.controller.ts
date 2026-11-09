@@ -23,4 +23,14 @@ export class SettingsController {
   regenerate() {
     return this.settings.regenerateMcpToken();
   }
+
+  @Get("design")
+  getDesign() {
+    return this.settings.getDesignSettings();
+  }
+
+  @Put("design")
+  updateDesign(@Body() body: { autoDecompose?: boolean }) {
+    return this.settings.updateDesignSettings(body);
+  }
 }

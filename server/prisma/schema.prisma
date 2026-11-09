@@ -63,6 +63,7 @@ model Contact {
   website   String? // 官网
   password  String? // 仅 type=user 用于登录
   role      String? // 仅 type=user：admin | user
+  position  String? // 职位（设计 / 跟单 等；管理员可配置，用于设计单/打样单协助负责人筛选）
   isSystem  Boolean @default(false) // 系统级机器人（如 ominXBot），拥有最高权限并负责记录操作历史
   botCharacter String? @default("mochi") // 系统机器人的 3D 形象（wobnimo 角色 id），仅 isSystem 使用
   avatarUrl String? @map("avatar_url") // 头像 URL（如 MCP 代理用户 Accio work 用 web 头像）
@@ -70,6 +71,12 @@ model Contact {
   archived  Boolean @default(false) @map("archived") // 归档：关联了商机的往来单位不允许删除，只能归档隐藏
   deals     Deal[]
   quotations Quotation[]
+  designResponsible DesignOrder[] @relation("DesignOrderResponsible")
+  designAssistant   DesignOrder[] @relation("DesignOrderAssistant")
+  sampleResponsible SampleOrder[] @relation("SampleOrderResponsible")
+  ecoRequested      EngineeringChange[] @relation("EcoRequestedBy")
+  ecoApproved       EngineeringChange[] @relation("EcoApprovedBy")
+  sampleAssistant   SampleOrder[] @relation("SampleOrderAssistant")
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
 
@@ -84,7 +91,9 @@ model Contact {
 // 产品（新建商机时落库；也可在「产品」页独立维护）
 model Product {
   id          String   @id @default(cuid())
-  description String? // 描述（表单必填）
+  name        String? // 产品名称（设计单完善；与 description 区分；MCP 同步不写）
+  description String? // 描述（仅系统内人工维护，MCP 同步不覆盖）
+  sourceProductId String? @map("source_product_id") // 外部平台商品编号（MCP 引流归因/去重，避免重复建产品）
   mode        String? // 模式
   process     String? // 工艺
   audience    String? // 受众
@@ -95,17 +104,114 @@ model Product {
   image       String? // 产品主图 URL（上传接口返回）
   quantity    Int      @default(0) // 数量
   unit        String? // 单位（台 / 个 / 件 …）
+
+  // —— PLM：生命周期 / 版本 / 文档 ——
+  status        String   @default("requirement") @map("status") // requirement|designing|reviewing|released|obsolete
+  releasedAt    DateTime? @map("released_at") // 发布时间（状态置为 released 时写入）
+  obsoletedAt   DateTime? @map("obsoleted_at") // 停用时间（状态置为 obsolete 时写入）
+  partNo        String?  @map("part_no") // 产品编号 / 物料号（同一产品的多版本共享，用于版本分组）
+  revision      String   @default("A") @map("revision") // 版本号 A / B / C …
+  revisionParentId String? @map("revision_parent_id") // 上一版本 id（构成版本链）
+  revisionParent Product?  @relation("ProductRevisions", fields: [revisionParentId], references: [id])
+  revisionChildren Product[] @relation("ProductRevisions")
+  drawings      Json? // 该版本图纸 / 3D / 规格 PDF [{name,url}]
+
+  // —— Phase 4：分类与参数化规格 ——
+  categoryId   String?  @map("category_id") // 所属分类（树节点）
+  categoryRef  ProductCategory? @relation("ProductCategory", fields: [categoryId], references: [id])
+  specs        Json? // 参数化规格值：{ [attributeKey]: value }（结构由分类的 specTemplate 定义）
+
   parentId    String?   @map("parent_id") // 变体来源产品 id（为空=标准产品）
   parent      Product?  @relation("ProductVariants", fields: [parentId], references: [id])
   variants    Product[] @relation("ProductVariants")
   isRequirement Boolean  @default(false) @map("is_requirement") // 是否为需求阶段新建的产品（需求产品）
   archived     Boolean  @default(false) @map("archived") // 归档：关联了商机的产品不允许删除，只能归档隐藏
   deals       Deal[]
+  designOrders DesignOrder[] @relation("ProductDesignOrders")
+  sampleOrders SampleOrder[] @relation("ProductSampleOrders")
+  bomAsParent  BomItem[] @relation("ProductBomParent") // 作为父件时的 BOM 行
+  bomAsChild   BomItem[] @relation("ProductBomChild") // 作为子件时（where-used）
+  ecoLinks     EcoProduct[] @relation("EcoProducts") // 被哪些工程变更影响
   createdAt   DateTime @default(now())
+
+  @@index([sourceProductId])
   updatedAt   DateTime @updatedAt
 
   @@index([parentId])
+  @@index([partNo])
   @@map("products")
+}
+
+// BOM（物料清单）：多级装配结构。父件（装配）由若干子件（零件/部件）组成，
+// 每行含数量与位号；where-used 通过 childProductId 反查。
+model BomItem {
+  id              String   @id @default(cuid())
+  parentProductId String   @map("parent_product_id") // 父件（装配）
+  parent          Product  @relation("ProductBomParent", fields: [parentProductId], references: [id], onDelete: Cascade)
+  childProductId  String   @map("child_product_id") // 子件（零件/部件）
+  child           Product  @relation("ProductBomChild", fields: [childProductId], references: [id], onDelete: Cascade)
+  quantity        Int      @default(1) @map("quantity") // 单装数量
+  position        String?  @map("position") // 位号 / 序号
+  note            String?  @map("note")
+  createdAt       DateTime @default(now())
+
+  @@index([parentProductId])
+  @@index([childProductId])
+  @@map("bom_items")
+}
+
+// 产品分类树（Phase 4）：自引用的多级分类；每个分类可挂参数化规格模板。
+model ProductCategory {
+  id           String           @id @default(cuid())
+  name         String
+  parentId     String?          @map("parent_id")
+  parent       ProductCategory? @relation("CategoryTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children     ProductCategory[] @relation("CategoryTree")
+  position     Int              @default(0)
+  specTemplate Json?            @map("spec_template") // 参数化规格模板：[{ key, label, type, unit?, options?, required? }]
+  products     Product[]        @relation("ProductCategory")
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@index([parentId])
+  @@map("product_categories")
+}
+
+// 工程变更 ECO（Phase 3）：记录产品/版次/ BOM 的正式变更，含审批与实施。
+model EngineeringChange {
+  id            String           @id @default(cuid())
+  number        String           @unique // EC0001 自增编号
+  title         String
+  description   String?
+  status        String           @default("draft") @map("status") // draft|review|approved|implemented|closed|cancelled
+  reason        String? // 变更原因
+  impact        String? // 影响分析（成本/交期/合规等）
+  requestedById String?          @map("requested_by_id")
+  requestedBy   Contact?         @relation("EcoRequestedBy", fields: [requestedById], references: [id])
+  approvedById  String?          @map("approved_by_id")
+  approvedBy    Contact?         @relation("EcoApprovedBy", fields: [approvedById], references: [id])
+  effectiveDate DateTime?        @map("effective_date") // 生效日期
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  products      EcoProduct[]
+
+  @@map("engineering_changes")
+}
+
+// ECO 影响的产品（多对多）：一条 ECO 可影响多个产品（及各自版本）。
+model EcoProduct {
+  id        String            @id @default(cuid())
+  ecoId     String            @map("eco_id")
+  eco       EngineeringChange @relation(fields: [ecoId], references: [id], onDelete: Cascade)
+  productId String            @map("product_id")
+  product   Product           @relation("EcoProducts", fields: [productId], references: [id], onDelete: Cascade)
+  note      String?
+  createdAt DateTime          @default(now())
+
+  @@index([ecoId])
+  @@index([productId])
+  @@map("eco_products")
 }
 
 // CRM 交易/线索卡片（关联一个往来单位与一个产品）
@@ -130,6 +236,8 @@ model Deal {
   priceIncludeTax Boolean @default(true) @map("price_include_tax") // 价格是否含税：true=单价含税（倒算税额），false=单价不含税（税额另计）
   quotations  Quotation[]
   fees        Fee[]
+  designOrders DesignOrder[]
+  sampleOrders SampleOrder[]
   stageLogs   DealStageLog[]
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -153,11 +261,96 @@ model Fee {
   attachments Json? // 附件列表 [{name, url}]（回款凭证等，图片或 PDF）
   paidAt     DateTime? @map("paid_at") // 付款日期
   fundAccount String? @map("fund_account") // 资金账户（如 对公账户 / 支付宝）
+  refType    String?  @map("ref_type") // 关联单据类型：design | sample（用于费用勾稽）
+  refId      String?  @map("ref_id") // 关联单据 id（DesignOrder / SampleOrder id）
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([dealId])
+  @@index([refType])
+  @@index([refId])
   @@map("fees")
+}
+
+/// 设计单：跟踪产品设计任务（设计先于打样）。负责人继承商机负责人；协助负责人为职位「设计」的用户；产品仅关联已有 Product。
+model DesignOrder {
+  id              String   @id @default(cuid())
+  dealId          String   @map("deal_id")
+  deal            Deal     @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  productId       String   @map("product_id") // 关联已有产品（不允许新建）
+  product         Product  @relation("ProductDesignOrders", fields: [productId], references: [id])
+  productName     String // 完善的产品名称（同步回写 Product.name）
+  productType     String // 新品3D开发（设计） | 新品开发（设计）
+  responsibleId   String?  @map("responsible_id") // 负责人=商机负责人（继承快照）
+  responsible     Contact? @relation("DesignOrderResponsible", fields: [responsibleId], references: [id])
+  assistantId     String?  @map("assistant_id") // 协助负责人=职位「设计」
+  assistant       Contact? @relation("DesignOrderAssistant", fields: [assistantId], references: [id])
+  status          String   @default("draft") // draft|designing|pending_review|approved|rejected
+  mainImage       Json? // 产品主图 [{name,url}]
+  threeViews      Json? // 三视图+上色位 [{name,url}]
+  designFeeAmount Decimal? @db.Decimal(12, 2) @map("design_fee_amount") // 勾稽「设计费」
+  dueDate         DateTime? @map("due_date")
+  approvedAt      DateTime? @map("approved_at")
+  createdBy       String?  @map("created_by")
+  deletedAt       DateTime? @map("deleted_at") // 软删
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  samples         SampleOrder[]
+  @@index([dealId])
+  @@index([productId])
+  @@index([responsibleId])
+  @@index([assistantId])
+  @@map("design_orders")
+}
+
+/// 打样单：跟踪实物样品生产与寄送，关联已确认的设计单。负责人继承商机负责人；协助负责人为供应商职位「跟单」。
+model SampleOrder {
+  id                 String   @id @default(cuid())
+  dealId             String   @map("deal_id")
+  deal               Deal     @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  productId          String?  @map("product_id") // 落库产品（继承设计单或选）
+  product            Product? @relation("ProductSampleOrders", fields: [productId], references: [id])
+  designOrderId      String   @map("design_order_id") // 关联已确认设计单（业务必填）
+  designOrder        DesignOrder @relation(fields: [designOrderId], references: [id])
+  sampleType         String // 11 种打样类型
+  responsibleId      String?  @map("responsible_id") // 负责人=商机负责人（继承）
+  responsible        Contact? @relation("SampleOrderResponsible", fields: [responsibleId], references: [id])
+  assistantId        String?  @map("assistant_id") // 协助负责人=供应商职位「跟单」
+  assistant          Contact? @relation("SampleOrderAssistant", fields: [assistantId], references: [id])
+  status             String   @default("pending") // pending|sampling|shipped|confirmed|rejected
+  colorCode          String?  @map("color_code") // 色号要求
+  quantity           Int      @default(1) // 样品数量
+  craft              String? // 样品工艺
+  material           String? // 材质
+  hardness           String? // 硬度
+  length             Decimal? @db.Decimal(10, 2) // 产品尺寸-长
+  width              Decimal? @db.Decimal(10, 2) // 产品尺寸-宽
+  height             Decimal? @db.Decimal(10, 2) // 产品尺寸-高
+  requiredCompletion DateTime? @map("required_completion") // 要求完成时间
+  orderDate          DateTime? @map("order_date") // 下单日期（默认创建日期）
+  functionalReq      String?  @map("functional_req") // 功能要求
+  packagingImage     Json? // 包装图 [{name,url}]
+  engravingImage     Json? // 底部刻字图 [{name,url}]
+  otherAttachments   Json? @map("other_attachments") // 其他附件 [{name,url}]
+  acceptanceCriteria String?  @map("acceptance_criteria") // 验收标准
+  packagingLength    Decimal? @db.Decimal(10, 2) @map("packaging_length")
+  packagingWidth     Decimal? @db.Decimal(10, 2) @map("packaging_width")
+  packagingHeight    Decimal? @db.Decimal(10, 2) @map("packaging_height")
+  sampleFiles        Json? // 样品照片 [{name,url}]
+  trackingNo         String?  @map("tracking_no")
+  recipient          String? // 收件信息
+  createdBy          String?
+  deletedAt          DateTime? @map("deleted_at") // 软删
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([dealId])
+  @@index([productId])
+  @@index([designOrderId])
+  @@index([responsibleId])
+  @@index([assistantId])
+  @@map("sample_orders")
 }
 
 // CRM 阶段停留日志：每次进入某阶段记一条，leftAt 为空表示当前所处阶段。

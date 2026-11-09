@@ -246,25 +246,31 @@ export class CrmService {
           resolvedId = l.productId; // 描述未改：维持原产品关联，不碰产品库
         }
       } else {
-        // 新产品：先按描述去重（同一需求产品被多次询盘/多客户引用时复用，避免产品库膨胀）；
-        // 空描述（落为「未命名产品」）不去重。复用时行上的图片/单价保留在商机行，不覆盖产品库。
+        // 新产品：优先按外部商品编号(sourceProductId)去重（来自 MCP 引流的店铺商品，稳定且唯一）；
+        // 无 sourceProductId 时回退到按描述去重（兼容手写/老数据）。
+        // 注意：产品「描述(description)」为系统内人工维护字段，MCP 同步【不写入/不覆盖】——
+        // 带 sourceProductId 的新建产品 description 留空，由后续人工或设计单补全；name 同理不在 MCP 落库。
+        const srcId = l.sourceProductId?.trim() || null;
         const desc = l.description?.trim();
-        const existingProduct = desc
-          ? await tx.product.findFirst({
-              where: { description: { equals: desc, mode: "insensitive" } },
-              orderBy: { id: "asc" },
-            })
-          : null;
+        const existingProduct = srcId
+          ? await tx.product.findFirst({ where: { sourceProductId: srcId }, orderBy: { id: "asc" } })
+          : desc
+            ? await tx.product.findFirst({
+                where: { description: { equals: desc, mode: "insensitive" } },
+                orderBy: { id: "asc" },
+              })
+            : null;
         if (existingProduct) {
           l.productId = existingProduct.id; // 回填 → 幂等，后续保存不再重复建
           resolvedId = existingProduct.id;
         } else {
-          // 在产品库新建（图片/描述/单位/税项/成本价落产品库；单价只留商机行）
+          // 在产品库新建（图片/单位/税项/成本价落产品库；单价只留商机行；
+          // description/name 不写，留人工补全——MCP 不同步产品描述）
           const created = await tx.product.create({
             data: {
-              description: desc || "未命名产品",
+              sourceProductId: srcId,
+              description: srcId ? null : desc || null,
               unit: l.unit?.trim() || undefined,
-              // 单价(售价)只留在商机明细行，不写产品库；成本价归属产品库
               costPrice: l.costPrice != null ? new Prisma.Decimal(l.costPrice) : null,
               tax: l.taxRate != null ? new Prisma.Decimal(l.taxRate) : null,
               image: l.image || undefined,

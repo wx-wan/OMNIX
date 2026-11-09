@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { Trash2, Archive, ArchiveRestore } from "lucide-react";
+import { Trash2, Archive, ArchiveRestore, FolderTree, Pencil } from "lucide-react";
 
 import { api } from "@/lib/api";
 import { extractErrorDetail } from "@/lib/error";
@@ -10,6 +11,16 @@ import { PageMeta } from "@/components/layout/PageMeta";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Image } from "@/components/ui/image";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Picker } from "@/components/common/Picker";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -40,9 +51,30 @@ interface Product {
   image?: string | null;
   isRequirement?: boolean;
   archived?: boolean;
+  // PLM
+  status?: string;
+  partNo?: string | null;
+  revision?: string;
+  drawings?: { name: string; url: string }[] | null;
   // 是否被任一商机引用（Deal.productId 或 明细行 productId）；关联则不允许删除，只能归档
   linked?: boolean;
 }
+
+const PRODUCT_STATUS_KEYS = [
+  "requirement",
+  "designing",
+  "reviewing",
+  "released",
+  "obsolete",
+] as const;
+
+const PRODUCT_STATUS_CHIP: Record<string, string> = {
+  requirement: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+  designing: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400",
+  reviewing: "bg-sky-500/10 text-sky-600 dark:text-sky-400",
+  released: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+  obsolete: "bg-slate-500/10 text-slate-600 dark:text-slate-400",
+};
 
 function formatPrice(n: number | null, unit?: string | null) {
   if (n == null) return "";
@@ -51,6 +83,7 @@ function formatPrice(n: number | null, unit?: string | null) {
 
 export default function Products() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [list, setList] = useState<Product[]>([]);
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -59,6 +92,133 @@ export default function Products() {
   const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
+  const [statusFilter, setStatusFilter] = useState("all");
+
+  // —— 分类管理 ——
+  type CatNode = {
+    id: string;
+    name: string;
+    parentId: string | null;
+    position: number;
+    specTemplate: unknown;
+    children: CatNode[];
+  };
+  const [catTree, setCatTree] = useState<CatNode[]>([]);
+  const [catDialog, setCatDialog] = useState(false);
+  const [catForm, setCatForm] = useState({
+    id: "",
+    name: "",
+    parentId: "",
+    position: 0,
+  });
+  const [catSaving, setCatSaving] = useState(false);
+
+  const loadCategories = async () => {
+    try {
+      const r = await api.get<CatNode[]>("/product-categories");
+      setCatTree(r.data ?? []);
+    } catch {
+      // ignore
+    }
+  };
+
+  useEffect(() => {
+    void loadCategories();
+  }, []);
+
+  const catFlat = useMemo(() => {
+    const out: { id: string; label: string }[] = [];
+    const walk = (nodes: CatNode[], prefix: string) => {
+      for (const n of nodes) {
+        const label = prefix ? `${prefix} / ${n.name}` : n.name;
+        out.push({ id: n.id, label });
+        walk(n.children, label);
+      }
+    };
+    walk(catTree, "");
+    return out;
+  }, [catTree]);
+
+  const openCat = (node?: CatNode) => {
+    if (node)
+      setCatForm({
+        id: node.id,
+        name: node.name,
+        parentId: node.parentId ?? "",
+        position: node.position,
+      });
+    else setCatForm({ id: "", name: "", parentId: "", position: 0 });
+  };
+
+  const saveCat = async () => {
+    if (!catForm.name.trim()) return toast.error(t("common.required"));
+    setCatSaving(true);
+    try {
+      if (catForm.id) {
+        await api.patch(`/product-categories/${catForm.id}`, {
+          name: catForm.name,
+          parentId: catForm.parentId || null,
+          position: catForm.position,
+        });
+      } else {
+        await api.post("/product-categories", {
+          name: catForm.name,
+          parentId: catForm.parentId || null,
+          position: catForm.position,
+        });
+      }
+      setCatForm({ id: "", name: "", parentId: "", position: 0 });
+      await loadCategories();
+      toast.success(t("common.success"));
+    } catch {
+      toast.error(t("crm.saveFailed"));
+    } finally {
+      setCatSaving(false);
+    }
+  };
+
+  const deleteCat = async (id: string) => {
+    try {
+      await api.delete(`/product-categories/${id}`);
+      await loadCategories();
+      toast.success(t("common.success"));
+    } catch {
+      toast.error(t("crm.saveFailed"));
+    }
+  };
+
+  const renderTree = (nodes: CatNode[], depth: number): ReactNode =>
+    nodes.map((n) => (
+      <div key={n.id}>
+        <div
+          className="flex items-center justify-between gap-2 rounded px-2 py-1 hover:bg-muted/40"
+          style={{ paddingLeft: 8 + depth * 14 }}
+        >
+          <span className="truncate text-sm text-foreground">{n.name}</span>
+          <div className="flex shrink-0 items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-7"
+              onClick={() => openCat(n)}
+              aria-label={t("common.edit")}
+            >
+              <Pencil className="size-3.5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-7 text-destructive"
+              onClick={() => deleteCat(n.id)}
+              aria-label={t("common.delete")}
+            >
+              <Trash2 className="size-3.5" />
+            </Button>
+          </div>
+        </div>
+        {n.children.length > 0 && renderTree(n.children, depth + 1)}
+      </div>
+    ));
 
   // 卡片 / 列表 视图偏好（localStorage 持久化）
   const [view, setView] = useState<ViewMode>(() => {
@@ -105,7 +265,20 @@ export default function Products() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const visible = list.filter((p) => showArchived || !p.archived);
+  const visible = useMemo(
+    () =>
+      list.filter(
+        (p) =>
+          (showArchived || !p.archived) &&
+          (statusFilter === "all" || (p.status ?? "requirement") === statusFilter),
+      ),
+    [list, showArchived, statusFilter],
+  );
+
+  const statusLabel = (s: string) =>
+    (PRODUCT_STATUS_KEYS as readonly string[]).includes(s)
+      ? t(`product.status.${s}`)
+      : s;
 
   const handleCreate = async () => {
     if (!values.description.trim() || saving) return;
@@ -167,6 +340,19 @@ export default function Products() {
         title={t("nav.products")}
         actions={
           <div className="flex items-center gap-2">
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="h-8 w-[120px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{t("product.status.all")}</SelectItem>
+                {PRODUCT_STATUS_KEYS.map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {t(`product.status.${s}`)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <ViewToggle value={view} onChange={setView} />
             <Button
               variant="outline"
@@ -177,6 +363,17 @@ export default function Products() {
               }}
             >
               {showArchived ? t("common.hideArchived") : t("common.showArchived")}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                void loadCategories();
+                setCatDialog(true);
+              }}
+            >
+              <FolderTree className="size-4" />
+              {t("product.categoryManage")}
             </Button>
             <Button
               onClick={() => {
@@ -202,7 +399,16 @@ export default function Products() {
           {visible.map((p) => (
             <Card
               key={p.id}
-              className={p.archived ? "opacity-60" : ""}
+              role="button"
+              tabIndex={0}
+              onClick={() => navigate(`/products/${p.id}`)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") navigate(`/products/${p.id}`);
+              }}
+              className={
+                "cursor-pointer transition hover:shadow-md " +
+                (p.archived ? "opacity-60" : "")
+              }
             >
               {p.image && (
                 <Image
@@ -215,6 +421,18 @@ export default function Products() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   {p.description}
+                  {p.partNo && (
+                    <span className="text-xs font-normal text-muted-foreground">
+                      {p.partNo} · {p.revision ?? "A"}
+                    </span>
+                  )}
+                  {p.status && (
+                    <span
+                      className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-medium ${PRODUCT_STATUS_CHIP[p.status] ?? ""}`}
+                    >
+                      {statusLabel(p.status)}
+                    </span>
+                  )}
                   {p.isRequirement && (
                     <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-600">
                       {t("common.requirement")}
@@ -231,7 +449,10 @@ export default function Products() {
                     className="ml-auto text-muted-foreground hover:text-foreground"
                     aria-label={p.archived ? t("common.unarchive") : t("common.archive")}
                     title={p.archived ? t("common.unarchive") : t("common.archive")}
-                    onClick={() => handleArchive(p)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleArchive(p);
+                    }}
                   >
                     {p.archived ? <ArchiveRestore /> : <Archive />}
                   </Button>
@@ -244,7 +465,10 @@ export default function Products() {
                       p.linked ? t("common.deleteBlockedByDeal") : t("product.delete")
                     }
                     disabled={p.linked}
-                    onClick={() => setDeleteTarget(p)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDeleteTarget(p);
+                    }}
                   >
                     <Trash2 />
                   </Button>
@@ -287,8 +511,9 @@ export default function Products() {
               {visible.map((p) => (
                 <tr
                   key={p.id}
+                  onClick={() => navigate(`/products/${p.id}`)}
                   className={
-                    "border-b border-border/60 last:border-0 hover:bg-muted/40" +
+                    "cursor-pointer border-b border-border/60 last:border-0 hover:bg-muted/40" +
                     (p.archived ? " opacity-60" : "")
                   }
                 >
@@ -306,6 +531,11 @@ export default function Products() {
                   </td>
                   <td className="px-3 py-2 align-middle">
                     <div className="font-medium text-foreground">{p.description}</div>
+                    {p.partNo && (
+                      <div className="text-xs text-muted-foreground">
+                        {p.partNo} · {p.revision ?? "A"}
+                      </div>
+                    )}
                   </td>
                   <td className="px-3 py-2 align-middle text-muted-foreground">
                     {p.category || "—"}
@@ -326,7 +556,14 @@ export default function Products() {
                     {p.quantity || "—"}
                   </td>
                   <td className="px-3 py-2 align-middle">
-                    <div className="flex flex-wrap gap-1">
+                    <div className="flex flex-wrap items-center gap-1">
+                      {p.status && (
+                        <span
+                          className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-medium ${PRODUCT_STATUS_CHIP[p.status] ?? ""}`}
+                        >
+                          {statusLabel(p.status)}
+                        </span>
+                      )}
                       {p.isRequirement && (
                         <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-600">
                           {t("common.requirement")}
@@ -337,7 +574,7 @@ export default function Products() {
                           {t("common.archived")}
                         </span>
                       )}
-                      {!p.isRequirement && !p.archived && (
+                      {!p.status && !p.isRequirement && !p.archived && (
                         <span className="text-muted-foreground">—</span>
                       )}
                     </div>
@@ -350,7 +587,10 @@ export default function Products() {
                         className="text-muted-foreground hover:text-foreground"
                         aria-label={p.archived ? t("common.unarchive") : t("common.archive")}
                         title={p.archived ? t("common.unarchive") : t("common.archive")}
-                        onClick={() => handleArchive(p)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleArchive(p);
+                        }}
                       >
                         {p.archived ? <ArchiveRestore /> : <Archive />}
                       </Button>
@@ -363,7 +603,10 @@ export default function Products() {
                           p.linked ? t("common.deleteBlockedByDeal") : t("product.delete")
                         }
                         disabled={p.linked}
-                        onClick={() => setDeleteTarget(p)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeleteTarget(p);
+                        }}
                       >
                         <Trash2 />
                       </Button>
@@ -408,6 +651,61 @@ export default function Products() {
               {t("common.save")}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 分类管理 */}
+      <Dialog open={catDialog} onOpenChange={setCatDialog}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{t("product.categoryManage")}</DialogTitle>
+            <DialogDescription>{t("product.categoryManageHint")}</DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-2 rounded-lg bg-muted/40 p-3">
+              <Label>{catForm.id ? t("product.category") : t("product.categoryManage")}</Label>
+              <Input
+                value={catForm.name}
+                onChange={(e) => setCatForm({ ...catForm, name: e.target.value })}
+                placeholder={t("product.categoryManage")}
+              />
+              <div className="flex flex-col gap-1.5">
+                <Label>{t("product.category")}</Label>
+                <Picker
+                  records={catFlat.filter((c) => c.id !== catForm.id)}
+                  value={catForm.parentId || null}
+                  searchMoreTitle={t("product.category")}
+                  placeholder={t("product.noCategory")}
+                  onChange={(rec) =>
+                    setCatForm({ ...catForm, parentId: rec?.id ?? "" })
+                  }
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" onClick={saveCat} disabled={catSaving}>
+                  {t("common.confirm")}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() =>
+                    setCatForm({ id: "", name: "", parentId: "", position: 0 })
+                  }
+                >
+                  {t("common.reset")}
+                </Button>
+              </div>
+            </div>
+            <div className="flex flex-col gap-1">
+              {catTree.length === 0 ? (
+                <p className="py-4 text-center text-sm text-muted-foreground">
+                  {t("product.categoryEmpty")}
+                </p>
+              ) : (
+                renderTree(catTree, 0)
+              )}
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 

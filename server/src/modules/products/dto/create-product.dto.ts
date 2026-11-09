@@ -59,4 +59,24 @@ export class CreateProductDto {
   @IsOptional()
   @IsBoolean()
   isRequirement?: boolean; // 是否为需求阶段新建的产品（需求产品）
+
+  // —— PLM 扩展 ——
+  @IsOptional()
+  @IsString()
+  status?: string; // requirement|designing|reviewing|released|obsolete
+
+  @IsOptional()
+  @IsString()
+  partNo?: string; // 产品编号 / 物料号（多版本共享）
+
+  @IsOptional()
+  @IsString()
+  revision?: string; // 版本号，默认 A
+
+  @IsOptional()
+  @IsString()
+  revisionParentId?: string; // 上一版本 id
+
+  @IsOptional()
+  drawings?: { name: string; url: string }[]; // 该版本图纸 / 3D / 规格 PDF
 }

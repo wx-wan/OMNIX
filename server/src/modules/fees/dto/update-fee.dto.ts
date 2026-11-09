@@ -36,4 +36,14 @@ export class UpdateFeeDto {
   @IsOptional()
   @IsString()
   fundAccount?: string;
+
+  /** 关联单据类型：design | sample（可选）。 */
+  @IsOptional()
+  @IsString()
+  refType?: string;
+
+  /** 关联单据 id（可选）。 */
+  @IsOptional()
+  @IsString()
+  refId?: string;
 }

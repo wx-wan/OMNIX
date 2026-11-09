@@ -6,6 +6,7 @@ import CrmBoard from "@/pages/CrmBoard";
 import Contacts from "@/pages/Contacts";
 import DealForm from "@/pages/DealForm";
 import Products from "@/pages/Products";
+import ProductDetail from "@/pages/ProductDetail";
 import Quotations from "@/pages/Quotations";
 import QuotationDetail from "@/pages/QuotationDetail";
 import QuotationExportPage from "@/pages/QuotationExportPage";
@@ -15,6 +16,10 @@ import QuotationTemplatePreview from "@/pages/QuotationTemplatePreview";
 import Settings from "@/pages/Settings";
 import Showcase from "@/pages/Showcase";
 import FeeSheet from "@/pages/FeeSheet";
+import Fees from "@/pages/Fees";
+import DesignOrders from "@/pages/DesignOrders";
+import DesignOrdersList from "@/pages/DesignOrdersList";
+import SampleOrders from "@/pages/SampleOrders";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
 
@@ -25,7 +30,12 @@ const protectedRoutes = [
   { path: "crm/deals/new", element: <DealForm /> },
   { path: "crm/deals/:id", element: <DealForm /> },
   { path: "crm/deals/:id/fees", element: <FeeSheet /> },
+  { path: "fees", element: <Fees /> },
+  { path: "crm/deals/:id/design-orders", element: <DesignOrders /> },
+  { path: "design-orders", element: <DesignOrdersList /> },
+  { path: "crm/deals/:id/sample-orders", element: <SampleOrders /> },
   { path: "products", element: <Products /> },
+  { path: "products/:id", element: <ProductDetail /> },
   { path: "quotations", element: <Quotations /> },
   { path: "quotations/:id", element: <QuotationDetail /> },
   { path: "quotation-templates", element: <QuotationTemplates /> },
