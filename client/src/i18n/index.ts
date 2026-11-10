@@ -239,15 +239,16 @@ const resources = {
         designOrders: {
           title: "设计单",
           listTitle: "设计单",
+          feed: "设计单流",
           add: "添加设计单",
           edit: "编辑设计单",
           delete: "删除",
           product: "产品",
           productName: "产品名称",
-          productType: "产品类型",
-          productTypePlaceholder: "请选择",
-          assistant: "协助负责人（设计）",
-          assistantPlaceholder: "请选择设计师",
+          productType: "设计类型",
+          productTypePlaceholder: "请选择设计类型",
+          assistant: "协助负责人",
+          assistantPlaceholder: "请选择用户",
           status: "状态",
           draft: "草稿",
           designing: "设计中",
@@ -257,6 +258,9 @@ const resources = {
           mainImage: "产品主图",
           threeViews: "三视图+上色位",
           designFeeAmount: "设计费金额",
+          sampleFee: "是否收取样品费",
+          sampleFeeYes: "收取样品费",
+          sampleFeeNo: "不收取",
           dueDate: "交期",
           empty: "暂无设计单",
           all: "全部",
@@ -499,6 +503,7 @@ const resources = {
       settings: {
         aboutDesc:
           "React 19 + shadcn/ui（Base UI + Tailwind v4） · NestJS + Prisma + PostgreSQL",
+        pageSubtitle: "配置企业基础信息、业务规则与使用偏好。",
         comingSoon: "更多配置项（语言、主题、通知、安全等）将在此呈现。",
         mcp: {
           title: "MCP 集成",
@@ -553,6 +558,11 @@ const resources = {
           saved: "设计偏好已保存",
           saveFailed: "保存失败，请重试",
         },
+        templates: {
+          title: "模板维护",
+          desc: "管理与报价单、设计单相关的单据模板（版式、字段等）。",
+          hint: "跳转后可在独立模板管理页新建、编辑或删除模板。",
+        },
         bot: {
           title: "机器人形象（个人偏好）",
           desc: "自定义系统机器人的名称与 3D 形象。此设置仅对你的账号生效，修改不会影响其他用户。",
@@ -570,6 +580,8 @@ const resources = {
         priorityLow: "低",
         empty: "暂无商机",
         stageAmount: "本阶段商机金额合计",
+        stageAmountShort: "预计金额",
+        stageDealUnit: "个商机",
         aiSourcePrefix: "",
         aiSourceMark: "AI",
         aiSourceHint: "由 Accio MCP 自动导入",
@@ -939,15 +951,16 @@ const resources = {
         designOrders: {
           title: "Design orders",
           listTitle: "Design orders",
+          feed: "Design feed",
           add: "Add design order",
           edit: "Edit design order",
           delete: "Delete",
           product: "Product",
           productName: "Product name",
-          productType: "Product type",
-          productTypePlaceholder: "Select…",
-          assistant: "Co-owner (Design)",
-          assistantPlaceholder: "Select a designer",
+          productType: "Design type",
+          productTypePlaceholder: "Select a design type",
+          assistant: "Co-owner",
+          assistantPlaceholder: "Select a user",
           status: "Status",
           draft: "Draft",
           designing: "Designing",
@@ -957,6 +970,9 @@ const resources = {
           mainImage: "Product main image",
           threeViews: "Three-view + color map",
           designFeeAmount: "Design fee amount",
+          sampleFee: "Sample fee required",
+          sampleFeeYes: "Sample fee charged",
+          sampleFeeNo: "Not charged",
           dueDate: "Due date",
           empty: "No design orders yet",
           all: "All",
@@ -1201,6 +1217,8 @@ const resources = {
       settings: {
         aboutDesc:
           "React 19 + shadcn/ui (Base UI + Tailwind v4) · NestJS + Prisma + PostgreSQL",
+        pageSubtitle:
+          "Configure company basics, business rules and preferences.",
         comingSoon:
           "More settings (language, theme, notifications, security…) will appear here.",
         mcp: {
@@ -1257,6 +1275,11 @@ const resources = {
           saved: "Design preferences saved",
           saveFailed: "Save failed — please retry",
         },
+        templates: {
+          title: "Template maintenance",
+          desc: "Manage document templates for quotations and design orders (layouts, fields, etc.).",
+          hint: "Opens the standalone template manager to create, edit or delete templates.",
+        },
         bot: {
           title: "Bot appearance (personal)",
           desc: "Customize the system bot's name and 3D look. This setting applies to your account only — editing it won't affect other users.",
@@ -1274,6 +1297,8 @@ const resources = {
         priorityLow: "Low",
         empty: "No items",
         stageAmount: "Stage total amount",
+        stageAmountShort: "Expected",
+        stageDealUnit: "deals",
         aiSourcePrefix: "",
         aiSourceMark: "AI",
         aiSourceHint: "Auto-imported via Accio MCP",

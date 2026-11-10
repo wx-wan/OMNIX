@@ -836,7 +836,11 @@ export default function DealForm() {
       description: primaryLine?.description?.trim() || undefined,
       price: primaryLine ? primaryLine.price : undefined,
       tax: primaryLine ? primaryLine.taxRate : undefined,
-      quantity: primaryLine ? primaryLine.quantity : undefined,
+      // 数量在表单里是字符串（或小数）：转成整数数字传后端（products.quantity 为 Int），空/非法不传
+      quantity:
+        primaryLine && Number(primaryLine.quantity) > 0
+          ? Math.round(Number(primaryLine.quantity))
+          : undefined,
       unit: primaryLine?.unit?.trim() || undefined,
     },
     priceIncludeTax,

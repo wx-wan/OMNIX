@@ -1,4 +1,4 @@
-import { IsIn, IsOptional, IsString, IsNumber } from "class-validator";
+import { IsIn, IsOptional, IsString, IsBoolean } from "class-validator";
 import { DESIGN_PRODUCT_TYPES, DESIGN_STATUSES } from "./create-design-order.dto";
 
 export class UpdateDesignOrderDto {
@@ -30,8 +30,8 @@ export class UpdateDesignOrderDto {
   threeViews?: unknown;
 
   @IsOptional()
-  @IsNumber()
-  designFeeAmount?: number;
+  @IsBoolean()
+  sampleFee?: boolean;
 
   @IsOptional()
   @IsString()

@@ -8,6 +8,20 @@ import { KanbanBoard, type KanbanItem, type KanbanStage, type CardField } from "
 import { Stack } from "@/components/layout/Stack";
 import { Button } from "@/components/ui/button";
 import { CRM_DRAG_ENABLED } from "@/config";
+import {
+  Sparkles,
+  MessageCircle,
+  FileText,
+  Box,
+  ClipboardCheck,
+  CreditCard,
+  Factory,
+  Truck,
+  Banknote,
+  PackageCheck,
+  CircleCheck,
+  type LucideIcon,
+} from "lucide-react";
 
 interface RawDeal {
   id: string;
@@ -54,6 +68,25 @@ const DEFAULT_CARD_FIELDS: CardField[] = [
   "tag",
 ];
 
+/** 阶段图标：按服务端 stage.key 映射，与 accent 同为阶段识别信息，不写进通用看板组件。 */
+const STAGE_ICONS: Record<string, LucideIcon> = {
+  lead: Sparkles,
+  qualify: MessageCircle,
+  quote: FileText,
+  sample: Box,
+  order: ClipboardCheck,
+  payment: CreditCard,
+  production: Factory,
+  shipping: Truck,
+  balance: Banknote,
+  delivery: PackageCheck,
+  service: CircleCheck,
+};
+
+function withStageIcon(stage: Omit<KanbanStage, "icon">, key: string): KanbanStage {
+  return { ...stage, icon: STAGE_ICONS[key] };
+}
+
 // 兜底阶段：接口无数据 / 失败时也完整展示 11 个阶段（加载成功后替换为服务端数据）
 const FALLBACK_STAGES: KanbanStage[] = [
   { id: "lead", title: "线索到达", accent: "bg-slate-400", items: [] },
@@ -67,7 +100,7 @@ const FALLBACK_STAGES: KanbanStage[] = [
   { id: "balance", title: "尾款支付", accent: "bg-teal-500", items: [] },
   { id: "delivery", title: "客户收货", accent: "bg-emerald-500", items: [] },
   { id: "service", title: "售后服务", accent: "bg-rose-500", items: [] },
-];
+].map((s) => withStageIcon(s, s.id));
 
 function formatAmount(n: number) {
   return `¥${n.toLocaleString("zh-CN")}`;
@@ -107,12 +140,17 @@ export default function CrmBoard() {
       .then((r) => {
         setStages(
           r.data.length
-            ? r.data.map((s) => ({
-                id: s.id,
-                title: s.title,
-                accent: s.accent,
-                items: s.deals.map((d) => toItem(d, s.key)),
-              }))
+            ? r.data.map((s) =>
+                withStageIcon(
+                  {
+                    id: s.id,
+                    title: s.title,
+                    accent: s.accent,
+                    items: s.deals.map((d) => toItem(d, s.key)),
+                  },
+                  s.key,
+                ),
+              )
             : FALLBACK_STAGES,
         );
       })
@@ -134,8 +172,11 @@ export default function CrmBoard() {
     }
   };
 
+  // PageMeta portal 到顶栏，不占内容流；水平 gutter 由 AppShell 的 main 统一提供。
+  // 纵向阶段区块：页面按内容自然高度增长，由 main 承担纵向滚动；
+  // shrink-0 避免在 flex 列容器里被压缩。
   return (
-    <Stack gap={4}>
+    <Stack gap={4} className="shrink-0">
       <PageMeta
         title={t("nav.crm")}
         actions={
@@ -146,6 +187,7 @@ export default function CrmBoard() {
       />
 
       <KanbanBoard
+        orientation="vertical"
         stages={stages}
         draggable={CRM_DRAG_ENABLED}
         onDealMove={handleMove}

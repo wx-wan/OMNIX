@@ -31,7 +31,12 @@ export function Section({
       )}
     >
       {hasHeader && (
-        <header className="flex items-center justify-between gap-3 px-5 py-4">
+        <header
+          className={cn(
+            "flex items-center justify-between gap-3 px-5 pt-4",
+            noPadding ? "pb-3" : "pb-0",
+          )}
+        >
           <div className="flex min-w-0 items-center gap-2.5">
             {Icon && <Icon className="size-5 shrink-0 text-muted-foreground" />}
             <div className="min-w-0">
@@ -46,7 +51,8 @@ export function Section({
           {action && <div className="shrink-0">{action}</div>}
         </header>
       )}
-      <div className={cn(!noPadding && "p-5", bodyClassName)}>{children}</div>
+      {/* 标题与内容同组：由 body 的 16px 顶距统一给出，取代原 header 16 + body 20 = 36px 的「内松外紧」倒置。 */}
+      <div className={cn(!noPadding && "px-5 pb-5 pt-4", bodyClassName)}>{children}</div>
     </section>
   );
 }

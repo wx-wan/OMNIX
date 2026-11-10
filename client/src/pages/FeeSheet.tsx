@@ -136,6 +136,8 @@ export default function FeeSheet() {
   // 三栏详情布局：选中费用（目录定位 + 右栏编辑）/ 讨论区折叠
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [chatterOpen, setChatterOpen] = useState(true);
+  // 顶栏标题用商机名称
+  const [dealTitle, setDealTitle] = useState<string | null>(null);
 
   const load = async () => {
     if (!id) return;
@@ -186,6 +188,13 @@ export default function FeeSheet() {
           })),
         );
         setChatterHasMore(r.data.hasMore);
+      })
+      .catch(() => {});
+    // 顶栏标题用商机名称
+    api
+      .get<{ title?: string | null }>(`/crm/deals/${id}`)
+      .then((r) => {
+        if (alive) setDealTitle(r.data.title ?? null);
       })
       .catch(() => {});
     return () => {
@@ -443,7 +452,8 @@ export default function FeeSheet() {
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">
       <PageMeta
-        title={t("crm.fees.title")}
+        title={dealTitle ?? t("crm.fees.title")}
+        description={dealTitle ? t("crm.fees.title") : undefined}
         back={() => navigate(id ? `/crm/deals/${id}` : "/crm")}
       />
 

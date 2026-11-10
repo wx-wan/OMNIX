@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { Copy, Download, RefreshCw, ShieldAlert, Webhook, Bot } from "lucide-react";
+import { Copy, Download, RefreshCw, ShieldAlert, Webhook, Bot, FileStack, Settings as SettingsIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { api } from "@/lib/api";
@@ -16,6 +17,7 @@ import {
 import { ACCIO_SKILL_FILENAME, ACCIO_SKILL_MD } from "@/lib/accioSkill";
 import { Stack } from "@/components/layout/Stack";
 import { PageMeta } from "@/components/layout/PageMeta";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { Section } from "@/components/layout/Section";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -40,6 +42,7 @@ const BOT_CHARACTERS = [
 
 export default function Settings() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [enabled, setEnabled] = useState(true);
@@ -204,8 +207,13 @@ export default function Settings() {
   ];
 
   return (
-    <Stack gap={6}>
+    <Stack gap={5}>
       <PageMeta title={t("nav.settings")} />
+      <PageHeader
+        title={t("nav.settings")}
+        description={t("settings.pageSubtitle")}
+        icon={SettingsIcon}
+      />
 
       <Section title={t("appName")} description={t("settings.aboutDesc")}>
         <p className="text-sm text-muted-foreground">{t("settings.comingSoon")}</p>
@@ -399,7 +407,10 @@ export default function Settings() {
         )}
       </Section>
 
+      {/* 第二组：使用偏好（设计 / 模板 / 机器人形象）。组间 20 + 20 = 40px，
+          与组内 20px 形成紧—松节奏；卡片顺序与内容不变。 */}
       <Section
+        className="mt-5"
         title={t("settings.design.title")}
         description={t("settings.design.desc")}
         action={
@@ -419,6 +430,19 @@ export default function Settings() {
           </div>
           <Switch checked={designAuto} onCheckedChange={setDesignAuto} />
         </div>
+      </Section>
+
+      <Section
+        title={t("settings.templates.title")}
+        description={t("settings.templates.desc")}
+        icon={FileStack}
+        action={
+          <Button onClick={() => navigate("/quotation-templates")} variant="outline">
+            {t("templates.manageTemplates")}
+          </Button>
+        }
+      >
+        <p className="text-sm text-muted-foreground">{t("settings.templates.hint")}</p>
       </Section>
 
       <Section

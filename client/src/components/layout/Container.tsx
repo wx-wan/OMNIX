@@ -9,7 +9,8 @@ const SIZES = {
   full: "max-w-none",
 } as const;
 
-/** 内容容器：居中 + 响应式水平内边距。island 布局的页面宽度锚点。 */
+/** 内容容器：只定宽度上限（size="full" 时铺满）。
+ *  水平 gutter 由 AppShell 的 main 统一提供，避免常规页面与全幅页面各自叠加内边距。 */
 export function Container({
   size = "lg",
   className,
@@ -20,7 +21,7 @@ export function Container({
   children: ReactNode;
 }) {
   return (
-    <div className={cn("mx-auto w-full px-4 md:px-6", SIZES[size], className)}>
+    <div className={cn("mx-auto w-full", SIZES[size], className)}>
       {children}
     </div>
   );

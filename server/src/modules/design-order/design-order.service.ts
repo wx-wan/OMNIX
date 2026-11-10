@@ -65,8 +65,7 @@ export class DesignOrderService {
         status: dto.status ?? "draft",
         mainImage: (dto.mainImage as Prisma.InputJsonValue) ?? Prisma.JsonNull,
         threeViews: (dto.threeViews as Prisma.InputJsonValue) ?? Prisma.JsonNull,
-        designFeeAmount:
-          dto.designFeeAmount != null ? new Prisma.Decimal(dto.designFeeAmount) : null,
+        sampleFee: dto.sampleFee ?? false,
         dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
         createdBy: actorId ?? dto.createdBy ?? null,
       },
@@ -114,9 +113,7 @@ export class DesignOrderService {
     }
     if (dto.mainImage !== undefined) data.mainImage = dto.mainImage as Prisma.InputJsonValue;
     if (dto.threeViews !== undefined) data.threeViews = dto.threeViews as Prisma.InputJsonValue;
-    if (dto.designFeeAmount !== undefined)
-      data.designFeeAmount =
-        dto.designFeeAmount != null ? new Prisma.Decimal(dto.designFeeAmount) : null;
+    if (dto.sampleFee !== undefined) data.sampleFee = dto.sampleFee;
     if (dto.dueDate !== undefined) data.dueDate = dto.dueDate ? new Date(dto.dueDate) : null;
 
     const updated = await this.prisma.designOrder.update({
@@ -171,7 +168,7 @@ export class DesignOrderService {
       status: r.status,
       mainImage: (Array.isArray(r.mainImage) ? r.mainImage : []) as unknown[],
       threeViews: (Array.isArray(r.threeViews) ? r.threeViews : []) as unknown[],
-      designFeeAmount: r.designFeeAmount != null ? r.designFeeAmount.toNumber() : null,
+      sampleFee: r.sampleFee,
       dueDate: r.dueDate ? r.dueDate.toISOString() : null,
       approvedAt: r.approvedAt ? r.approvedAt.toISOString() : null,
       createdBy: r.createdBy,

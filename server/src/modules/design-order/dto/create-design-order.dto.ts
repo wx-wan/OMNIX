@@ -1,4 +1,4 @@
-import { IsIn, IsNotEmpty, IsOptional, IsString, IsNumber } from "class-validator";
+import { IsIn, IsNotEmpty, IsOptional, IsString, IsBoolean } from "class-validator";
 
 /** 设计单产品类型（仅两种）。 */
 export const DESIGN_PRODUCT_TYPES = ["新品3D开发（设计）", "新品开发（设计）"];
@@ -32,7 +32,7 @@ export class CreateDesignOrderDto {
   @IsIn(DESIGN_PRODUCT_TYPES)
   productType!: string;
 
-  /** 协助负责人：职位「设计」的用户。 */
+  /** 协助负责人：系统用户（Contact.type=user）。 */
   @IsOptional()
   @IsString()
   assistantId?: string;
@@ -50,10 +50,10 @@ export class CreateDesignOrderDto {
   @IsOptional()
   threeViews?: unknown;
 
-  /** 设计费金额（勾稽「设计费」）。 */
+  /** 是否收取样品费。 */
   @IsOptional()
-  @IsNumber()
-  designFeeAmount?: number;
+  @IsBoolean()
+  sampleFee?: boolean;
 
   /** 交期（ISO 日期）。 */
   @IsOptional()

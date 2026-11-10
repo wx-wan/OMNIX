@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { ArrowLeft, Boxes, Pencil, Plus, Split, Trash2, UserRound, Wallet } from "lucide-react";
+import { Boxes, ChevronDown, Plus, Split, Trash2, UserRound } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { toast } from "sonner";
@@ -24,6 +24,7 @@ import {
   type Attachment,
 } from "@/components/ui/attachment-upload";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Picker } from "@/components/common/Picker";
 import type { SelectRecord } from "@/components/common/SearchableSelect";
 import { Chatter, type ChatterMessage } from "@/components/chatter/Chatter";
@@ -50,7 +51,7 @@ interface DesignOrderItem {
   status: string;
   mainImage: Attachment[];
   threeViews: Attachment[];
-  designFeeAmount: number | null;
+  sampleFee: boolean;
   dueDate: string | null;
   approvedAt: string | null;
   createdAt: string;
@@ -103,10 +104,11 @@ export default function DesignOrders() {
   const [dealProductIds, setDealProductIds] = useState<Set<string>>(new Set());
   const [designers, setDesigners] = useState<{ id: string; name: string }[]>([]);
 
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  // 左侧讨论区折叠
+  const [chatterOpen, setChatterOpen] = useState(true);
 
   // 拆解（需求产品 → 设计单）与拆分（成套产品 → 多个子产品）
   const [decomposeOpen, setDecomposeOpen] = useState(false);
@@ -118,6 +120,8 @@ export default function DesignOrders() {
 
   // 自动拆解开关（全局设置，由 Settings 控制）：进入页面自动为本商机所有产品需求建草稿设计单
   const [autoDecompose, setAutoDecompose] = useState(false);
+  // 顶栏标题用商机名称
+  const [dealTitle, setDealTitle] = useState<string | null>(null);
 
   // 表单
   const [productId, setProductId] = useState("");
@@ -126,7 +130,7 @@ export default function DesignOrders() {
   const [assistantId, setAssistantId] = useState<string | null>(null);
   const [status, setStatus] = useState("draft");
   const [dueDate, setDueDate] = useState<Date | null>(null);
-  const [designFeeAmount, setDesignFeeAmount] = useState("");
+  const [sampleFee, setSampleFee] = useState(false);
   const [mainImage, setMainImage] = useState<Attachment[]>([]);
   const [threeViews, setThreeViews] = useState<Attachment[]>([]);
 
@@ -147,6 +151,24 @@ export default function DesignOrders() {
     [products],
   );
 
+  // 产品类型 / 状态 / 协助负责人 Picker 选项（portal 下拉，避免被滚动容器裁剪）
+  const productTypeRecords = useMemo<SelectRecord[]>(
+    () => DESIGN_TYPES.map((tp) => ({ id: tp, label: tp })),
+    [],
+  );
+  const statusRecords = useMemo<SelectRecord[]>(
+    () =>
+      DESIGN_STATUS_KEYS.map((s) => ({
+        id: s,
+        label: t(`crm.designOrders.${s}`),
+      })),
+    [t],
+  );
+  const assistantRecords = useMemo<SelectRecord[]>(
+    () => designers.map((c) => ({ id: c.id, label: c.name })),
+    [designers],
+  );
+
   const load = async () => {
     if (!dealId) return;
     setLoading(true);
@@ -165,16 +187,28 @@ export default function DesignOrders() {
         api.get<{ id: string; name: string; position?: string | null }[]>(
           "/contacts?type=user",
         ),
-        api.get<{ productId?: string | null; linesJson?: string | null }>(
-          `/crm/deals/${dealId}`,
-        ),
+        api.get<{
+          title?: string | null;
+          productId?: string | null;
+          linesJson?: string | null;
+        }>(`/crm/deals/${dealId}`),
       ]);
       setItems(list.data);
+      // 三段布局：默认选中第一条；当前选中项被删除后清空选择
+      if (selectedId && !list.data.find((x) => x.id === selectedId)) {
+        setSelectedId(null);
+        resetForm();
+      } else if (!selectedId && list.data[0]) {
+        setSelectedId(list.data[0].id);
+        startEdit(list.data[0]);
+      }
       setProducts(prod.data ?? []);
-      setDesigners((contacts.data ?? []).filter((c) => c.position === "设计"));
+      // 协助负责人可选全部系统用户（type=user），不再限「设计」职位
+      setDesigners(contacts.data ?? []);
 
       // 收敛「需求产品」到本商机：主产品 + 订单明细行引用的产品
       const d = dealRes.data;
+      setDealTitle(d?.title ?? null);
       const ids = new Set<string>();
       if (d?.productId) ids.add(d.productId);
       if (d?.linesJson) {
@@ -229,24 +263,23 @@ export default function DesignOrders() {
     setAssistantId(null);
     setStatus("draft");
     setDueDate(null);
-    setDesignFeeAmount("");
+    setSampleFee(false);
     setMainImage([]);
     setThreeViews([]);
-    setEditingId(null);
+    setSelectedId(null);
   };
 
   const startEdit = (d: DesignOrderItem) => {
-    setEditingId(d.id);
+    setSelectedId(d.id);
     setProductId(d.productId);
     setProductName(d.productName);
     setProductType(d.productType);
     setAssistantId(d.assistantId ?? null);
     setStatus(d.status);
     setDueDate(fromISODate(d.dueDate));
-    setDesignFeeAmount(d.designFeeAmount != null ? String(d.designFeeAmount) : "");
+    setSampleFee(d.sampleFee ?? false);
     setMainImage(d.mainImage ?? []);
     setThreeViews(d.threeViews ?? []);
-    setDialogOpen(true);
   };
 
   const submit = async () => {
@@ -264,15 +297,14 @@ export default function DesignOrders() {
       assistantId: assistantId ?? undefined,
       status,
       dueDate: toISODate(dueDate),
-      designFeeAmount: designFeeAmount.trim() === "" ? undefined : Number(designFeeAmount),
+      sampleFee,
       mainImage,
       threeViews,
     };
-    if (!editingId) {
+    if (!selectedId) {
       try {
         await api.post("/design-orders", body);
         toast.success(t("crm.designOrders.createSuccess"));
-        setDialogOpen(false);
         resetForm();
         await load();
         setRefreshToken((k) => k + 1);
@@ -284,9 +316,8 @@ export default function DesignOrders() {
       return;
     }
     try {
-      await api.patch(`/design-orders/${editingId}`, body);
+      await api.patch(`/design-orders/${selectedId}`, body);
       toast.success(t("crm.designOrders.saveSuccess"));
-      setDialogOpen(false);
       resetForm();
       await load();
       setRefreshToken((k) => k + 1);
@@ -310,16 +341,13 @@ export default function DesignOrders() {
     }
   };
 
-  // —— 拆解：需求产品 → 设计单 ——
-  const requirementProducts = useMemo(
-    () => products.filter((p) => p.isRequirement),
-    [products],
-  );
+  // —— 拆解：商机产品需求 → 设计单 ——
+  // 口径：本商机引用的全部产品（主产品 + 明细行产品），不限 isRequirement——
+  // 商机里每条产品行（含库内选品）都是一条需求，都应能建设计单。
   const dealRequirementProducts = useMemo(
-    () => requirementProducts.filter((p) => dealProductIds.has(p.id)),
-    [requirementProducts, dealProductIds],
+    () => products.filter((p) => dealProductIds.has(p.id)),
+    [products, dealProductIds],
   );
-  // 严格只认「本商机里的产品需求」：需求产品 ∩ 本商机引用的产品
   const decomposeCandidates = dealRequirementProducts;
 
   const existingProductIds = useMemo(
@@ -488,29 +516,18 @@ export default function DesignOrders() {
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">
       <PageMeta
-        title={t("crm.designOrders.title")}
-        description={t("crm.designOrders.listTitle")}
+        title={dealTitle ?? t("crm.designOrders.title")}
+        description={dealTitle ? t("crm.designOrders.title") : undefined}
+        back={() => navigate(`/crm/deals/${dealId}`)}
       />
-      <div className="flex items-center gap-2">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => navigate(`/crm/deals/${dealId}`)}
-          aria-label={t("common.back")}
-        >
-          <ArrowLeft className="size-4" />
-        </Button>
-        <h1 className="font-heading text-xl font-semibold text-foreground">
-          {t("crm.designOrders.title")}
-        </h1>
-      </div>
 
-      <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-10">
-        <div className="flex min-h-0 flex-col gap-4 lg:col-span-6">
-          <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-5 py-3.5">
+      <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-12">
+        {/* 左：设计单列表 + 历史与评论 */}
+        <div className="flex min-h-0 flex-col gap-4 lg:col-span-3">
+          <Card className="flex h-[42%] shrink-0 flex-col overflow-hidden">
+            <div className="flex shrink-0 items-center justify-between gap-2 px-4 pb-1 pt-4">
               <div className="flex items-center gap-2">
-                <h2 className="font-heading text-lg font-semibold text-foreground">
+                <h2 className="font-heading text-base font-semibold text-foreground">
                   {t("crm.designOrders.listTitle")}
                 </h2>
                 {!loading && items.length > 0 && (
@@ -519,29 +536,31 @@ export default function DesignOrders() {
                   </span>
                 )}
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1">
                 <Button
-                  variant="outline"
-                  size="sm"
+                  variant="ghost"
+                  size="icon"
+                  className="size-7"
                   onClick={() => {
                     resetForm();
-                    setDialogOpen(true);
+                    setSelectedId(null);
                   }}
+                  aria-label={t("crm.designOrders.add")}
                 >
                   <Plus className="size-4" />
-                  {t("crm.designOrders.add")}
                 </Button>
                 <Button
-                  variant="outline"
-                  size="sm"
+                  variant="ghost"
+                  size="icon"
+                  className="size-7"
                   onClick={() => setDecomposeOpen(true)}
+                  aria-label={t("crm.designOrders.decompose")}
                 >
                   <Boxes className="size-4" />
-                  {t("crm.designOrders.decompose")}
                 </Button>
               </div>
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto px-5 py-2">
+            <div className="min-h-0 flex-1 overflow-y-auto px-2 py-1">
               {loading && (
                 <div className="flex flex-col gap-2 py-2">
                   <Skeleton className="h-16 w-full rounded-lg" />
@@ -565,13 +584,23 @@ export default function DesignOrders() {
                 items.map((d) => (
                   <div
                     key={d.id}
-                    className="group -mx-2 flex items-start justify-between gap-3 rounded-lg px-2 py-3 transition-colors hover:bg-muted/40"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => startEdit(d)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") startEdit(d);
+                    }}
+                    className={`group -mx-2 flex cursor-pointer items-center justify-between gap-3 rounded-lg px-2.5 py-2 transition-colors ${
+                      selectedId === d.id
+                        ? "bg-primary/10"
+                        : "hover:bg-muted/40"
+                    }`}
                   >
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium text-foreground">
                         {d.productName}
                       </p>
-                      <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5">
                         <span
                           className={`inline-block rounded px-1.5 py-0.5 text-[11px] font-medium ${
                             STATUS_CHIP[d.status] ??
@@ -580,229 +609,337 @@ export default function DesignOrders() {
                         >
                           {statusLabel(d.status)}
                         </span>
-                        <span className="text-xs text-muted-foreground">
-                          {d.productType}
-                        </span>
-                        {d.assistant && (
-                          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                            <UserRound className="size-3.5" />
-                            {d.assistant.name}
-                          </span>
-                        )}
                         {d.dueDate && (
                           <span className="text-xs text-muted-foreground">
                             {d.dueDate.slice(0, 10)}
                           </span>
                         )}
                       </div>
-                      {(d.mainImage?.length > 0 || d.threeViews?.length > 0) && (
-                        <div className="mt-1.5 flex flex-wrap gap-1.5">
-                          {[...(d.mainImage ?? []), ...(d.threeViews ?? [])]
-                            .slice(0, 4)
-                            .map((a) => (
-                              <a key={a.url} href={a.url} target="_blank" rel="noreferrer">
-                                <img
-                                  src={a.url}
-                                  alt={a.name}
-                                  className="size-10 rounded-md border border-border object-cover"
-                                />
-                              </a>
-                            ))}
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-7 shrink-0 text-destructive opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDeleteId(d.id);
+                      }}
+                      aria-label={t("crm.designOrders.delete")}
+                    >
+                      <Trash2 className="size-3.5" />
+                    </Button>
+                  </div>
+                ))}
+            </div>
+          </Card>
+
+          {/* 历史与评论 */}
+          <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setChatterOpen((o) => !o)}
+              className="flex w-full shrink-0 items-center justify-between px-4 py-2.5 text-left"
+            >
+              <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                {t("crm.fees.historyTitle")}
+                {initialChatter && initialChatter.length > 0 && (
+                  <span className="rounded-full bg-muted px-1.5 py-0.5 text-xs font-medium tabular-nums text-muted-foreground">
+                    {initialChatter.length}
+                  </span>
+                )}
+              </span>
+              <ChevronDown
+                className={`size-4 text-muted-foreground transition-transform ${chatterOpen ? "" : "-rotate-90"}`}
+              />
+            </button>
+            {chatterOpen && (
+              <div className="min-h-0 flex-1">
+                {initialChatter && dealId ? (
+                  <Chatter
+                    key={dealId}
+                    fill
+                    className="h-full"
+                    initialMessages={initialChatter}
+                    hasMore={chatterHasMore}
+                    currentUser={user?.name}
+                    onSend={handleChatterSend}
+                    onRecall={handleChatterRecall}
+                    onLoadOlder={loadOlderChatter}
+                    onLoadLatest={loadLatestChatter}
+                    refreshToken={refreshToken}
+                    pollMs={15000}
+                  />
+                ) : null}
+              </div>
+            )}
+          </Card>
+        </div>
+
+        {/* 中：设计单流（竖向卡片） */}
+        <div className="min-h-0 lg:col-span-5">
+          <Card className="flex h-full min-h-0 flex-col overflow-hidden">
+            <div className="flex shrink-0 items-center justify-between gap-3 px-5 pb-2 pt-4">
+              <h2 className="font-heading text-lg font-semibold text-foreground">
+                {t("crm.designOrders.feed")}
+              </h2>
+              <span className="text-xs tabular-nums text-muted-foreground">
+                {items.length}
+              </span>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6 pt-2">
+              {loading && (
+                <div className="flex flex-col gap-4 py-2">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <Skeleton key={i} className="h-44 w-full rounded-xl" />
+                  ))}
+                </div>
+              )}
+              {!loading && items.length === 0 && (
+                <div className="flex flex-col items-center justify-center gap-1.5 py-12 text-center">
+                  <span className="mb-1 flex size-11 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                    <UserRound className="size-5" />
+                  </span>
+                  <p className="text-sm font-medium text-foreground">
+                    {t("crm.designOrders.empty")}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {t("crm.designOrders.emptyHint")}
+                  </p>
+                </div>
+              )}
+              {!loading &&
+                items.map((d) => {
+                  const feedImgs = [
+                    ...(d.mainImage ?? []),
+                    ...(d.threeViews ?? []),
+                  ].slice(0, 6);
+                  return (
+                    <div
+                      key={d.id}
+                      onClick={() => startEdit(d)}
+                      className={`mb-4 cursor-pointer rounded-xl bg-card p-4 shadow-card transition hover:shadow-md ${
+                        selectedId === d.id ? "ring-2 ring-primary" : ""
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="truncate text-sm font-medium text-foreground">
+                          {d.productName}
+                        </p>
+                        <span
+                          className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium ${
+                            STATUS_CHIP[d.status] ??
+                            "bg-slate-500/10 text-slate-600 dark:text-slate-400"
+                          }`}
+                        >
+                          {statusLabel(d.status)}
+                        </span>
+                      </div>
+                      {d.productType && (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {d.productType}
+                        </p>
+                      )}
+                      {feedImgs.length > 0 && (
+                        <div className="mt-3 flex flex-wrap gap-1.5">
+                          {feedImgs.map((a) => (
+                            <a
+                              key={a.url}
+                              href={a.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <img
+                                src={a.url}
+                                alt={a.name}
+                                className="size-12 rounded-md border border-border object-cover"
+                              />
+                            </a>
+                          ))}
                         </div>
                       )}
-                    </div>
-                    <div className="flex shrink-0 flex-col items-end gap-1.5">
-                      <span className="inline-flex items-center gap-1 font-heading text-base font-semibold tabular-nums text-foreground">
-                        <Wallet className="size-3.5 text-muted-foreground" />
-                        {d.designFeeAmount != null
-                          ? `¥${d.designFeeAmount.toFixed(2)}`
-                          : "—"}
-                      </span>
-                      <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="size-7"
-                          onClick={() => startEdit(d)}
-                          aria-label={t("crm.designOrders.edit")}
-                        >
-                          <Pencil className="size-3.5" />
-                        </Button>
+                      <div className="mt-3 flex flex-col gap-1.5 text-sm">
+                        {d.assistant && (
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="text-muted-foreground">
+                              {t("crm.designOrders.assistant")}
+                            </span>
+                            <span className="truncate text-foreground">
+                              {d.assistant.name}
+                            </span>
+                          </div>
+                        )}
+                        {d.dueDate && (
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="text-muted-foreground">
+                              {t("crm.designOrders.dueDate")}
+                            </span>
+                            <span className="tabular-nums text-foreground">
+                              {d.dueDate.slice(0, 10)}
+                            </span>
+                          </div>
+                        )}
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-muted-foreground">
+                            {t("crm.designOrders.sampleFee")}
+                          </span>
+                          <span
+                            className={`font-medium ${d.sampleFee ? "text-foreground" : "text-muted-foreground"}`}
+                          >
+                            {d.sampleFee
+                              ? t("crm.designOrders.sampleFeeYes")
+                              : t("crm.designOrders.sampleFeeNo")}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="mt-2 flex justify-end">
                         <Button
                           variant="ghost"
                           size="icon"
                           className="size-7 text-destructive"
-                          onClick={() => setDeleteId(d.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteId(d.id);
+                          }}
                           aria-label={t("crm.designOrders.delete")}
                         >
                           <Trash2 className="size-3.5" />
                         </Button>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
             </div>
           </Card>
         </div>
 
+        {/* 右：设计单编辑面板（新增/编辑共用） */}
         <div className="min-h-0 lg:col-span-4">
-          {initialChatter && dealId ? (
-            <Chatter
-              key={dealId}
-              fill
-              className="h-full"
-              initialMessages={initialChatter}
-              hasMore={chatterHasMore}
-              currentUser={user?.name}
-              onSend={handleChatterSend}
-              onRecall={handleChatterRecall}
-              onLoadOlder={loadOlderChatter}
-              onLoadLatest={loadLatestChatter}
-              refreshToken={refreshToken}
-              pollMs={15000}
-            />
-          ) : null}
+          <Card className="flex h-full min-h-0 flex-col overflow-hidden">
+            <div className="shrink-0 px-5 pb-2 pt-4">
+              <h2 className="font-heading text-lg font-semibold text-foreground">
+                {selectedId ? t("crm.designOrders.edit") : t("crm.designOrders.add")}
+              </h2>
+            </div>
+            <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-5">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="flex flex-col gap-1.5">
+                  <Label>
+                    {t("crm.designOrders.product")}
+                    <span className="ml-0.5 text-destructive">*</span>
+                  </Label>
+                  <Picker
+                    records={productRecords}
+                    value={productId || null}
+                    searchMoreTitle={t("crm.designOrders.product")}
+                    placeholder={t("crm.designOrders.productRequired")}
+                    onChange={(rec) => {
+                      setProductId(rec?.id ?? "");
+                      // 产品与产品名称同义：选品即定名
+                      if (rec) setProductName(rec.label);
+                    }}
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label>
+                    {t("crm.designOrders.productType")}
+                    <span className="ml-0.5 text-destructive">*</span>
+                  </Label>
+                  <Picker
+                    records={productTypeRecords}
+                    value={productType || null}
+                    searchMoreTitle={t("crm.designOrders.productType")}
+                    placeholder={t("crm.designOrders.productTypePlaceholder")}
+                    onChange={(rec) => setProductType(rec?.id ?? "")}
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label>{t("crm.designOrders.assistant")}</Label>
+                  <Picker
+                    records={assistantRecords}
+                    value={assistantId}
+                    searchMoreTitle={t("crm.designOrders.assistant")}
+                    placeholder={t("crm.designOrders.assistantPlaceholder")}
+                    onChange={(rec) => setAssistantId(rec?.id ?? null)}
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label>{t("crm.designOrders.status")}</Label>
+                  <Picker
+                    records={statusRecords}
+                    value={status}
+                    searchMoreTitle={t("crm.designOrders.status")}
+                    onChange={(rec) => setStatus(rec?.id ?? "draft")}
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label>{t("crm.designOrders.dueDate")}</Label>
+                  <DatePicker
+                    value={dueDate}
+                    onChange={setDueDate}
+                    placeholder={t("crm.designOrders.dueDate")}
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label>{t("crm.designOrders.sampleFee")}</Label>
+                  <label className="flex h-9 cursor-pointer items-center gap-2 text-sm text-foreground">
+                    <Checkbox
+                      checked={sampleFee}
+                      onCheckedChange={(v) => setSampleFee(v === true)}
+                    />
+                    {t("crm.designOrders.sampleFeeYes")}
+                  </label>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label>{t("crm.designOrders.mainImage")}</Label>
+                <AttachmentUpload value={mainImage} onChange={setMainImage} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label>{t("crm.designOrders.threeViews")}</Label>
+                <AttachmentUpload value={threeViews} onChange={setThreeViews} />
+              </div>
+            </div>
+            <div className="flex shrink-0 flex-col gap-2 border-t border-border p-4">
+              <Button onClick={submit} disabled={saving}>
+                {saving ? (
+                  t("common.loading")
+                ) : selectedId ? (
+                  t("common.save")
+                ) : (
+                  <>
+                    <Plus className="size-4" />
+                    {t("crm.designOrders.add")}
+                  </>
+                )}
+              </Button>
+              {selectedId && (
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    resetForm();
+                    setSelectedId(null);
+                  }}
+                >
+                  {t("crm.designOrders.add")}
+                </Button>
+              )}
+              {selectedId && (
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    const cur = items.find((x) => x.id === selectedId);
+                    if (cur) startEdit(cur);
+                  }}
+                >
+                  {t("common.cancel")}
+                </Button>
+              )}
+            </div>
+          </Card>
         </div>
       </div>
-
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>
-              {editingId
-                ? t("crm.designOrders.edit")
-                : t("crm.designOrders.add")}
-            </DialogTitle>
-            <DialogDescription>{t("crm.designOrders.listTitle")}</DialogDescription>
-          </DialogHeader>
-
-          <div className="flex flex-col gap-4">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="flex flex-col gap-1.5">
-                <Label>
-                  {t("crm.designOrders.product")}
-                  <span className="ml-0.5 text-destructive">*</span>
-                </Label>
-                <Picker
-                  records={productRecords}
-                  value={productId || null}
-                  searchMoreTitle={t("crm.designOrders.product")}
-                  placeholder={t("crm.designOrders.productRequired")}
-                  onChange={(rec) => {
-                    setProductId(rec?.id ?? "");
-                    if (rec && !productName.trim()) setProductName(rec.label);
-                  }}
-                />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label>
-                  {t("crm.designOrders.productName")}
-                  <span className="ml-0.5 text-destructive">*</span>
-                </Label>
-                <Input
-                  value={productName}
-                  onChange={(e) => setProductName(e.target.value)}
-                  placeholder={t("crm.designOrders.productName")}
-                />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label>
-                  {t("crm.designOrders.productType")}
-                  <span className="ml-0.5 text-destructive">*</span>
-                </Label>
-                <Select
-                  value={productType || null}
-                  onValueChange={(v) => setProductType(v ? String(v) : "")}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder={t("crm.designOrders.productTypePlaceholder")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {DESIGN_TYPES.map((tp) => (
-                      <SelectItem key={tp} value={tp}>
-                        {tp}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label>{t("crm.designOrders.assistant")}</Label>
-                <Select
-                  value={assistantId || null}
-                  onValueChange={(v) => setAssistantId(v ? String(v) : null)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder={t("crm.designOrders.assistantPlaceholder")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {designers.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label>{t("crm.designOrders.status")}</Label>
-                <Select
-                  value={status}
-                  onValueChange={(v) => setStatus(String(v))}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {DESIGN_STATUS_KEYS.map((s) => (
-                      <SelectItem key={s} value={s}>
-                        {t(`crm.designOrders.${s}`)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label>{t("crm.designOrders.dueDate")}</Label>
-                <DatePicker
-                  value={dueDate}
-                  onChange={setDueDate}
-                  placeholder={t("crm.designOrders.dueDate")}
-                />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label>{t("crm.designOrders.designFeeAmount")}</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={designFeeAmount}
-                  onChange={(e) => setDesignFeeAmount(e.target.value)}
-                  placeholder="0.00"
-                />
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <Label>{t("crm.designOrders.mainImage")}</Label>
-              <AttachmentUpload value={mainImage} onChange={setMainImage} />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label>{t("crm.designOrders.threeViews")}</Label>
-              <AttachmentUpload value={threeViews} onChange={setThreeViews} />
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setDialogOpen(false)}>
-              {t("common.cancel")}
-            </Button>
-            <Button onClick={submit} disabled={saving}>
-              {t("common.save")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* 拆解：需求产品 → 设计单 */}
       <Dialog open={decomposeOpen} onOpenChange={setDecomposeOpen}>

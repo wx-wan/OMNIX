@@ -15,7 +15,6 @@ import {
   Contact,
   Package,
   FileText,
-  FileStack,
   Wallet,
   PenTool,
   LogOut,
@@ -38,7 +37,6 @@ const navItems = [
   { to: "/crm", labelKey: "nav.crm", icon: KanbanSquare, end: false },
   { to: "/products", labelKey: "nav.products", icon: Package, end: false },
   { to: "/quotations", labelKey: "nav.quotations", icon: FileText, end: false },
-  { to: "/quotation-templates", labelKey: "nav.quotationTemplates", icon: FileStack, end: false },
   { to: "/fees", labelKey: "nav.fees", icon: Wallet, end: false },
   { to: "/design-orders", labelKey: "nav.designOrders", icon: PenTool, end: false },
   { to: "/showcase", labelKey: "nav.components", icon: Puzzle, end: false },
@@ -80,11 +78,11 @@ export function AppShell() {
 
   return (
     <div
-      className="app-shell grid h-dvh gap-3 overflow-hidden bg-canvas p-3"
+      className="app-shell grid h-dvh gap-3 overflow-hidden bg-background p-3"
       data-collapsed={collapsed}
     >
-      {/* Sidebar — floating card (island) */}
-      <aside className="flex flex-col overflow-hidden rounded-2xl bg-card p-3 shadow-card">
+      {/* Sidebar — 扁平融入纯白背景：无圆角 / 无底色 / 无阴影 */}
+      <aside className="flex flex-col overflow-hidden bg-transparent p-3">
         <div className={cn("flex h-14 items-center gap-2 px-1", collapsed && "justify-center")}>
           <img src="/logo.png" alt="logo" className="size-8" />
           {!collapsed && (
@@ -123,12 +121,15 @@ export function AppShell() {
         </button>
       </aside>
 
-      {/* Main column */}
-      <div className="flex min-h-0 min-w-0 flex-col gap-3">
-        <header className="relative flex h-12 shrink-0 items-center justify-between">
+      {/* Main column — 顶栏（管理员 / 中英文 / 主题）在上一层白底，与左侧 logo 同带；
+          灰色内容卡只承载页面内容，上/下/右在 p-3(12px) 基础上 +20px，左侧不变。
+          水平 gutter 由 main 的 px-4 / md:px-6 单点提供，常规页面与全幅页面同源；
+          #header-actions 另加 pl-4，使顶栏标题与阶段头内文字左对齐（32 / 40px）。 */}
+      <div className="flex min-h-0 min-w-0 flex-col">
+        <header className="relative flex h-12 shrink-0 items-center justify-between px-4 md:px-6">
           <div
             id="header-actions"
-            className="flex items-center gap-2 [&:not(:has(*))]:hidden"
+            className="flex items-center gap-2 pl-4 [&:not(:has(*))]:hidden"
           />
           <div
             id="header-center"
@@ -169,14 +170,14 @@ export function AppShell() {
             </Button>
           </div>
         </header>
-        <main className="min-h-0 flex-1 overflow-y-auto">
-          {/* CRM 看板及其商机页（/crm/deals/*）、报价单详情（/quotations/:id）均脱离 Container 做全宽（h-full 才能撑满）；
-              其余页面（含报价单列表）保持居中容器 */}
+        <main className="island-canvas mt-5 mb-5 mr-5 flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto rounded-2xl bg-canvas px-4 pt-6 pb-6 shadow-card md:px-6 md:pt-8 md:pb-8">
+          {/* 全幅页面（CRM 看板 / 商机详情 / 报价单详情）需要 h-full 撑满内容区高度，故不经 Container；
+              其余页面走 size="full" 容器（铺满、无居中限宽），水平 gutter 均由 main 统一提供。 */}
           {location.pathname.startsWith("/crm") ||
           /^\/quotations\/[^/]+$/.test(location.pathname) ? (
             <Outlet />
           ) : (
-            <Container size="lg">
+            <Container size="full">
               <Outlet />
             </Container>
           )}

@@ -208,8 +208,12 @@ export class CrmService {
     let firstProductId: string | undefined;
     for (const l of productLines) {
       let resolvedId: string | undefined;
-      if (l.productId) {
-        const base = await tx.product.findUnique({ where: { id: l.productId } });
+      // productId 指向的产品不存在（演示目录假 id / 数据悬空）→ 按「新产品」落库，
+      // 避免明细行悬挂无效引用（设计单拆解、需求收敛都会漏掉这行）。
+      const base = l.productId
+        ? await tx.product.findUnique({ where: { id: l.productId } })
+        : null;
+      if (base) {
         const desc = l.description?.trim() ?? "";
         // 已选产品但描述被改 → 以原产品为模板生成一条变体(SKU)入库，便于复用。
         // 例外：需求产品(isRequirement)本身即「需求阶段描述」载体——有 productId 时改描述
@@ -243,7 +247,7 @@ export class CrmService {
           l.productId = variant.id; // 回填 → 幂等，后续保存不再重复建
           resolvedId = variant.id;
         } else {
-          resolvedId = l.productId; // 描述未改：维持原产品关联，不碰产品库
+          resolvedId = base.id; // 描述未改：维持原产品关联，不碰产品库
         }
       } else {
         // 新产品：优先按外部商品编号(sourceProductId)去重（来自 MCP 引流的店铺商品，稳定且唯一）；
@@ -301,9 +305,9 @@ export class CrmService {
 
     // 内联产品带单价时，按 单价×数量 派生商机金额（未显式传 amount 时）
     let amount = dto.amount;
-    if (amount == null && dto.product?.price != null) {
+    if (amount == null && dto.product?.price != null && dto.product.quantity != null) {
       amount = new Prisma.Decimal(dto.product.price)
-        .mul(dto.product.quantity ?? 0)
+        .mul(dto.product.quantity)
         .toNumber();
     }
 
@@ -616,10 +620,14 @@ export class CrmService {
       data.position = (agg._max.position ?? -1) + 1;
     }
 
-    // 内联产品改单价时，按 单价×数量 重新派生金额（未显式传 amount）
-    if (dto.product?.price != null && dto.amount === undefined) {
+    // 内联产品改单价时，按 单价×数量 重新派生金额（未显式传 amount 时）
+    if (
+      dto.product?.price != null &&
+      dto.product.quantity != null &&
+      dto.amount === undefined
+    ) {
       data.amount = new Prisma.Decimal(dto.product.price)
-        .mul(dto.product.quantity ?? 0)
+        .mul(dto.product.quantity)
         .toNumber();
     }
 

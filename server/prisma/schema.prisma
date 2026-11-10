@@ -283,12 +283,12 @@ model DesignOrder {
   productType     String // 新品3D开发（设计） | 新品开发（设计）
   responsibleId   String?  @map("responsible_id") // 负责人=商机负责人（继承快照）
   responsible     Contact? @relation("DesignOrderResponsible", fields: [responsibleId], references: [id])
-  assistantId     String?  @map("assistant_id") // 协助负责人=职位「设计」
+  assistantId     String?  @map("assistant_id") // 协助负责人=系统用户（Contact.type=user）
   assistant       Contact? @relation("DesignOrderAssistant", fields: [assistantId], references: [id])
   status          String   @default("draft") // draft|designing|pending_review|approved|rejected
   mainImage       Json? // 产品主图 [{name,url}]
   threeViews      Json? // 三视图+上色位 [{name,url}]
-  designFeeAmount Decimal? @db.Decimal(12, 2) @map("design_fee_amount") // 勾稽「设计费」
+  sampleFee       Boolean  @default(false) @map("sample_fee") // 是否收取样品费
   dueDate         DateTime? @map("due_date")
   approvedAt      DateTime? @map("approved_at")
   createdBy       String?  @map("created_by")

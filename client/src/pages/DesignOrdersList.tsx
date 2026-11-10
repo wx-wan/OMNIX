@@ -14,7 +14,7 @@ interface DesignOrderListItem {
   productName: string;
   productType: string;
   status: string;
-  designFeeAmount: number | null;
+  sampleFee: boolean;
   dueDate: string | null;
   assistant?: { id: string; name: string } | null;
 }
@@ -65,16 +65,16 @@ export default function DesignOrdersList() {
       api.get<DesignOrderListItem[]>("/design-orders", {
         params: dealId ? { dealId } : undefined,
       }),
-      api.get<unknown>("/crm/deals"),
+      // 商机标题映射：后端无 GET /crm/deals 列表端点，用看板数据（阶段→商机）扁平化
+      api.get<{ id: string; deals?: { id: string; title?: string }[] }[]>(
+        "/crm/board",
+      ),
     ])
-      .then(([listRes, dealsRes]) => {
+      .then(([listRes, boardRes]) => {
         if (!alive) return;
-        const raw = (dealsRes as { data?: unknown }).data;
-        const arr = Array.isArray(raw)
-          ? raw
-          : ((raw as { data?: unknown[] })?.data ?? []);
+        const arr = (boardRes.data ?? []).flatMap((s) => s.deals ?? []);
         const m: Record<string, string> = {};
-        for (const d of arr as { id: string; title?: string }[]) {
+        for (const d of arr) {
           m[d.id] = d.title ?? d.id;
         }
         setRows(listRes.data ?? []);
@@ -185,8 +185,10 @@ export default function DesignOrdersList() {
                   <span className="hidden text-xs text-muted-foreground sm:inline">
                     {t("crm.designOrders.dueDate")} {formatDate(r.dueDate)}
                   </span>
-                  <span className="font-heading text-sm font-semibold tabular-nums text-foreground">
-                    {formatMoney(r.designFeeAmount)}
+                  <span
+                    className={`text-sm font-medium ${r.sampleFee ? "text-foreground" : "text-muted-foreground"}`}
+                  >
+                    {r.sampleFee ? t("crm.designOrders.sampleFeeYes") : "—"}
                   </span>
                 </div>
               </div>
