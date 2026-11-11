@@ -2,7 +2,24 @@ import { useState, type DragEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "cn";
 import { Badge } from "@/components/ui/badge";
-import { Building2, User, Layers, MoreHorizontal, ChevronRight, type LucideIcon } from "lucide-react";
+import {
+  Building2,
+  User,
+  Layers,
+  MoreHorizontal,
+  Sparkle,
+  type LucideIcon,
+} from "lucide-react";
+
+// 头卡右上凹口：素材坐落的圆弧缺口（radial mask 挖洞，圆心对准 size-28 素材中心）
+const STAGE_NOTCH_MASK =
+  "radial-gradient(circle 72px at calc(100% - 52px) 28px, transparent 71px, #000 72px)";
+
+// 头卡背景菱形纹理（白色低透明度，45° 双向交叉）
+const STAGE_TEXTURE = [
+  "repeating-linear-gradient(45deg, rgba(255,255,255,0.14) 0 22px, transparent 22px 44px)",
+  "repeating-linear-gradient(-45deg, rgba(255,255,255,0.14) 0 22px, transparent 22px 44px)",
+].join(", ");
 
 export type KanbanPriority = "low" | "medium" | "high";
 
@@ -30,7 +47,7 @@ export interface KanbanItem {
   tag?: string;
   priority?: KanbanPriority;
   assignee?: KanbanAssignee;
-  /** 紧凑展示负责人：仅显示头像（卡片底部居右），名称悬停显示。用于线索到达阶段。 */
+  /** 紧凑展示负责人：头像与名称左右并排，位于卡片底部右侧。用于线索到达阶段。 */
   assigneeCompact?: boolean;
   /** 金额（如 "¥86,000"），CRM 交易卡展示用，可选。 */
   amount?: string;
@@ -59,6 +76,12 @@ export interface KanbanStage {
   accent?: string;
   /** 阶段图标，由调用方按业务阶段传入；缺省用通用 Layers。 */
   icon?: LucideIcon;
+  /** 纵向头卡片渐变背景（tailwind 渐变类，如 "from-pink-200 to-purple-400"）。 */
+  gradient?: string;
+  /** 纵向头卡片右上角 3D 素材图 URL。 */
+  art?: string;
+  /** 纵向头卡片右下操作按钮配色（tailwind 背景类，如 "bg-pink-500"）。 */
+  actionClass?: string;
   items: KanbanItem[];
 }
 
@@ -152,12 +175,12 @@ function FieldBlock({ field, item }: { field: CardField; item: KanbanItem }) {
       ) : null;
     case "assignee":
       return item.assignee ? (
-        <div className="flex items-center gap-1.5">
-          <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[11px] font-medium text-primary">
-            {item.assignee.initials}
-          </span>
-          <span className="text-xs text-muted-foreground">{item.assignee.name}</span>
-        </div>
+        <span
+          className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[11px] font-medium text-primary"
+          title={item.assignee.name}
+        >
+          {item.assignee.initials}
+        </span>
       ) : null;
     case "tag":
       return item.tag ? <Badge variant="secondary">{item.tag}</Badge> : null;
@@ -216,35 +239,71 @@ function StageHeader({ stage, vertical }: { stage: KanbanStage; vertical: boolea
   );
 
   if (vertical) {
-    // 参考阶段导航卡：紫描线图标 + 名称，第二行「N 个商机 ｜ 金额」，右侧圆形箭头；
-    // 淡底仍与白卡区分。图标/数量/金额纵向独用，横向胶囊沿用上方 glyph/count/amount。
+    // 1:1 复刻移动端认证卡：渐变+菱形纹理底、右上凹口嵌大 3D 素材（溢出顶部）、
+    // 艺术字标题（白描边+星饰）、副标题、右下阶段色操作按钮。
     const StageIcon = stage.icon ?? Layers;
     return (
-      <div className="flex h-full flex-col gap-2 rounded-xl border border-border/60 bg-card/60 p-3 shadow-card">
-        <div className="flex items-center gap-2">
-          <StageIcon className="size-5 shrink-0 text-primary" strokeWidth={1.75} />
-          {title}
-          <span
-            className="ml-auto flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground"
-            aria-hidden
-          >
-            <ChevronRight className="size-3.5" />
-          </span>
+      <div className="relative h-full overflow-visible">
+        {/* 背景层：渐变 + 纹理 + 右上凹口（mask 挖洞，不裁切素材与内容） */}
+        <div
+          className={cn(
+            "absolute inset-0 overflow-hidden rounded-2xl bg-gradient-to-br shadow-card",
+            stage.gradient ?? "from-amber-200 to-orange-400",
+          )}
+          style={{
+            WebkitMaskImage: STAGE_NOTCH_MASK,
+            maskImage: STAGE_NOTCH_MASK,
+          }}
+        >
+          <div className="absolute inset-0" style={{ backgroundImage: STAGE_TEXTURE }} />
         </div>
-        <p className="flex items-baseline gap-1.5 text-xs text-muted-foreground">
-          <span className="shrink-0 tabular-nums">
-            {stage.items.length} {t("kanban.stageDealUnit")}
-          </span>
-          <span aria-hidden className="text-border">
-            |
-          </span>
-          <span
-            className="min-w-0 truncate font-semibold tabular-nums text-foreground/80"
-            title={t("kanban.stageAmount")}
+        {/* 大号 3D 素材：右上溢出卡片顶部，锯齿徽章点缀；无素材时回退阶段图标 */}
+        {stage.art ? (
+          <div className="pointer-events-none absolute -right-1 -top-7 z-10">
+            <img
+              src={stage.art}
+              alt=""
+              aria-hidden
+              className="size-28 object-contain drop-shadow-xl"
+            />
+            {/* 数量徽章：中心落在凹口圆（r=72）左下 45° 圆周点上，贴弧摆放 */}
+            <span
+              className="absolute left-[-13px] top-[89px] flex h-9 min-w-9 items-center justify-center rounded-full border-2 border-white bg-lime-500 px-1 text-sm font-bold tabular-nums text-white shadow-md"
+              aria-hidden
+            >
+              {stage.items.length}
+            </span>
+          </div>
+        ) : (
+          <StageIcon className="absolute right-4 top-4 size-8 text-white/80" aria-hidden />
+        )}
+        {/* 艺术字标题 + 副标题（左侧，避开右上素材区） */}
+        <div className="absolute left-4 top-4 z-10 w-[calc(100%-118px)]">
+          <h3
+            className="relative w-fit text-2xl font-black italic tracking-wide text-foreground/80"
+            style={{
+              WebkitTextStroke: "4px rgba(255,255,255,0.85)",
+              paintOrder: "stroke",
+            }}
           >
-            {formatAmount(sumStageAmount(stage.items))}
-          </span>
-        </p>
+            <span className="block">{stage.title}</span>
+            <Sparkle
+              className="absolute -right-6 -top-2 size-4 fill-white text-white drop-shadow"
+              aria-hidden
+            />
+          </h3>
+
+        </div>
+        {/* 右下：阶段主色胶囊展示该阶段成交金额（白字，无箭头） */}
+        <span
+          className={cn(
+            "absolute bottom-4 right-4 z-10 flex items-center rounded-full px-4 py-1.5 text-sm font-bold tabular-nums text-white shadow-md",
+            stage.actionClass ?? "bg-primary",
+          )}
+          title={t("kanban.stageAmount")}
+        >
+          {formatAmount(sumStageAmount(stage.items))}
+        </span>
       </div>
     );
   }
@@ -263,6 +322,9 @@ function StageHeader({ stage, vertical }: { stage: KanbanStage; vertical: boolea
     </div>
   );
 }
+
+// 阶段行内所有卡片统一高度（头部卡 / 商机卡 / 空态），改一处即可整体调整
+const STAGE_CARD_HEIGHT = "h-40";
 
 function KanbanCard({
   item,
@@ -292,36 +354,40 @@ function KanbanCard({
       onDragStart={onDragStart}
       onClick={onClick}
     >
-      <div className="flex flex-col gap-1">
-        <p className="text-sm font-medium text-foreground">{item.title}</p>
-        <ContactLine contact={item.contact} />
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex min-w-0 flex-col gap-1">
+          <p className="text-sm font-medium text-foreground">{item.title}</p>
+          <ContactLine contact={item.contact} />
+        </div>
+        {/* 线索到达阶段：负责人浮动在标题右侧，仅头像（名称由 title 提示） */}
+        {item.assignee && item.assigneeCompact && (
+          <span
+            className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[11px] font-medium text-primary ring-2 ring-card shadow-sm"
+            title={item.assignee.name}
+          >
+            {item.assignee.initials}
+          </span>
+        )}
       </div>
       {fields ? (
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-1 flex-col gap-2">
           {fields
-            .filter((f) => f !== "title")
+            .filter(
+              (f) =>
+                f !== "title" &&
+                f !== "meta" &&
+                f !== "description" &&
+                !(f === "assignee" && item.assigneeCompact),
+            )
             .map((f) => (
               <FieldBlock key={f} field={f} item={item} />
             ))}
-          {/* 线索到达阶段：负责人仅头像，居右；名称悬停显示 */}
-          {item.assignee && item.assigneeCompact && (
-            <div className="flex justify-end">
-              <span
-                className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[11px] font-medium text-primary"
-                title={item.assignee.name}
-              >
-                {item.assignee.initials}
-              </span>
-            </div>
-          )}
+
         </div>
       ) : (
         <>
           {item.amount && (
             <p className="text-sm font-semibold tabular-nums text-foreground">{item.amount}</p>
-          )}
-          {item.description && (
-            <p className="line-clamp-2 text-xs text-muted-foreground">{item.description}</p>
           )}
           <div className="mt-1 flex items-center justify-between gap-2">
             <div className="flex items-center gap-1.5">
@@ -336,9 +402,6 @@ function KanbanCard({
               </span>
             )}
           </div>
-          {item.meta && (
-            <p className="text-[11px] text-muted-foreground">{item.meta}</p>
-          )}
           {item.source && <SourceLine source={item.source} meta={item.meta} />}
         </>
       )}
@@ -417,7 +480,7 @@ export function KanbanBoard({
           {/* 纵向：阶段头做成卡片固定在该行最前面（不随卡片横向滚动）；横向：独立窄胶囊置于卡片区上方 */}
           {vertical ? (
             // pb-2 与滚动区一致，抵消滚动条预留高度，保证头部卡片与内容卡片精确等高
-            <div className="w-72 shrink-0 pb-2">
+            <div className={cn("relative z-10 w-72 shrink-0", STAGE_CARD_HEIGHT)}>
               <StageHeader stage={stage} vertical />
             </div>
           ) : (
@@ -437,7 +500,7 @@ export function KanbanBoard({
               <p
                 className={cn(
                   "text-center text-xs text-muted-foreground",
-                  vertical ? "w-full h-56 flex items-center justify-center" : "py-8",
+                  vertical ? `w-full ${STAGE_CARD_HEIGHT} flex items-center justify-center` : "py-8",
                 )}
               >
                 {t("kanban.empty")}
@@ -447,7 +510,7 @@ export function KanbanBoard({
                 <KanbanCard
                   key={item.id}
                   item={item}
-                  className={cn(vertical && "w-72 shrink-0 h-56")}
+                  className={cn(vertical && `w-72 shrink-0 ${STAGE_CARD_HEIGHT}`)}
                   draggable={draggable}
                   onClick={onDealClick ? () => onDealClick(item.id) : undefined}
                   onDragStart={

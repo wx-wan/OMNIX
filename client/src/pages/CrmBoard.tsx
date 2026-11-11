@@ -75,16 +75,67 @@ const STAGE_ICONS: Record<string, LucideIcon> = {
   quote: FileText,
   sample: Box,
   order: ClipboardCheck,
-  payment: CreditCard,
-  production: Factory,
-  shipping: Truck,
-  balance: Banknote,
-  delivery: PackageCheck,
-  service: CircleCheck,
+  pay: CreditCard,
+  produce: Factory,
+  ship: Truck,
+  finalpay: Banknote,
+  receive: PackageCheck,
+  aftersale: CircleCheck,
 };
 
-function withStageIcon(stage: Omit<KanbanStage, "icon">, key: string): KanbanStage {
-  return { ...stage, icon: STAGE_ICONS[key] };
+// 阶段头卡片渐变背景（移动端营销卡风格，糖果色渐变）。
+const STAGE_GRADIENTS: Record<string, string> = {
+  lead: "from-pink-200 to-purple-400",
+  qualify: "from-lime-200 to-green-400",
+  quote: "from-amber-200 to-yellow-400",
+  sample: "from-sky-200 to-blue-400",
+  order: "from-purple-200 to-violet-500",
+  pay: "from-cyan-200 to-sky-500",
+  produce: "from-orange-200 to-amber-500",
+  ship: "from-rose-200 to-red-400",
+  finalpay: "from-teal-200 to-emerald-400",
+  receive: "from-emerald-200 to-green-500",
+  aftersale: "from-indigo-200 to-blue-500",
+};
+
+// 阶段头卡片 3D 素材图（AI 生成，位于 public/art/stages，按 stage.key 命名）。
+const STAGE_ART: Record<string, string> = {
+  lead: "/art/stages/lead.png",
+  qualify: "/art/stages/qualify.png",
+  quote: "/art/stages/quote.png",
+  sample: "/art/stages/sample.png",
+  order: "/art/stages/order.png",
+  pay: "/art/stages/pay.png",
+  produce: "/art/stages/produce.png",
+  ship: "/art/stages/ship.png",
+  finalpay: "/art/stages/finalpay.png",
+  receive: "/art/stages/receive.png",
+  aftersale: "/art/stages/aftersale.png",
+};
+
+// 阶段头卡片右下操作按钮配色（与渐变主色呼应）
+const STAGE_ACTIONS: Record<string, string> = {
+  lead: "bg-pink-500",
+  qualify: "bg-green-500",
+  quote: "bg-amber-500",
+  sample: "bg-blue-500",
+  order: "bg-violet-500",
+  pay: "bg-sky-500",
+  produce: "bg-orange-500",
+  ship: "bg-red-500",
+  finalpay: "bg-emerald-500",
+  receive: "bg-green-600",
+  aftersale: "bg-blue-600",
+};
+
+function withStageMeta(stage: Omit<KanbanStage, "icon">, key: string): KanbanStage {
+  return {
+    ...stage,
+    icon: STAGE_ICONS[key],
+    gradient: STAGE_GRADIENTS[key],
+    art: STAGE_ART[key],
+    actionClass: STAGE_ACTIONS[key],
+  };
 }
 
 // 兜底阶段：接口无数据 / 失败时也完整展示 11 个阶段（加载成功后替换为服务端数据）
@@ -94,13 +145,13 @@ const FALLBACK_STAGES: KanbanStage[] = [
   { id: "quote", title: "报价阶段", accent: "bg-indigo-500", items: [] },
   { id: "sample", title: "样品流程", accent: "bg-violet-500", items: [] },
   { id: "order", title: "正式订单", accent: "bg-blue-600", items: [] },
-  { id: "payment", title: "订单支付", accent: "bg-cyan-500", items: [] },
-  { id: "production", title: "生产阶段", accent: "bg-amber-500", items: [] },
-  { id: "shipping", title: "物流运输", accent: "bg-orange-500", items: [] },
-  { id: "balance", title: "尾款支付", accent: "bg-teal-500", items: [] },
-  { id: "delivery", title: "客户收货", accent: "bg-emerald-500", items: [] },
-  { id: "service", title: "售后服务", accent: "bg-rose-500", items: [] },
-].map((s) => withStageIcon(s, s.id));
+  { id: "pay", title: "订单支付", accent: "bg-cyan-500", items: [] },
+  { id: "produce", title: "生产阶段", accent: "bg-amber-500", items: [] },
+  { id: "ship", title: "物流运输", accent: "bg-orange-500", items: [] },
+  { id: "finalpay", title: "尾款支付", accent: "bg-teal-500", items: [] },
+  { id: "receive", title: "客户收货", accent: "bg-emerald-500", items: [] },
+  { id: "aftersale", title: "售后服务", accent: "bg-rose-500", items: [] },
+].map((s) => withStageMeta(s, s.id));
 
 function formatAmount(n: number) {
   return `¥${n.toLocaleString("zh-CN")}`;
@@ -141,7 +192,7 @@ export default function CrmBoard() {
         setStages(
           r.data.length
             ? r.data.map((s) =>
-                withStageIcon(
+                withStageMeta(
                   {
                     id: s.id,
                     title: s.title,
