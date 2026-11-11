@@ -160,9 +160,11 @@ function sumStageAmount(items: KanbanItem[]): number {
 function FieldBlock({ field, item }: { field: CardField; item: KanbanItem }) {
   switch (field) {
     case "amount":
-      return item.amount ? (
-        <p className="text-sm font-semibold tabular-nums text-foreground">{item.amount}</p>
-      ) : null;
+      return (
+        <p className="text-sm font-semibold tabular-nums text-foreground">
+          {item.amount ?? "¥0"}
+        </p>
+      );
     case "description":
       return item.description ? (
         <p className="line-clamp-2 text-xs text-muted-foreground">{item.description}</p>
