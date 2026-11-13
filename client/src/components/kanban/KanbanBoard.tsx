@@ -7,19 +7,8 @@ import {
   User,
   Layers,
   MoreHorizontal,
-  Sparkle,
   type LucideIcon,
 } from "lucide-react";
-
-// 头卡右上凹口：素材坐落的圆弧缺口（radial mask 挖洞，圆心对准 size-28 素材中心）
-const STAGE_NOTCH_MASK =
-  "radial-gradient(circle 72px at calc(100% - 52px) 28px, transparent 71px, #000 72px)";
-
-// 头卡背景菱形纹理（白色低透明度，45° 双向交叉）
-const STAGE_TEXTURE = [
-  "repeating-linear-gradient(45deg, rgba(255,255,255,0.14) 0 22px, transparent 22px 44px)",
-  "repeating-linear-gradient(-45deg, rgba(255,255,255,0.14) 0 22px, transparent 22px 44px)",
-].join(", ");
 
 export type KanbanPriority = "low" | "medium" | "high";
 
@@ -241,71 +230,35 @@ function StageHeader({ stage, vertical }: { stage: KanbanStage; vertical: boolea
   );
 
   if (vertical) {
-    // 1:1 复刻移动端认证卡：渐变+菱形纹理底、右上凹口嵌大 3D 素材（溢出顶部）、
-    // 艺术字标题（白描边+星饰）、副标题、右下阶段色操作按钮。
+    // 后端风格阶段头卡：白底卡片 + 左侧阶段色条 + 阶段图标 + 名称，数量/金额作为 KPI 指标。
     const StageIcon = stage.icon ?? Layers;
     return (
-      <div className="relative h-full overflow-visible">
-        {/* 背景层：渐变 + 纹理 + 右上凹口（mask 挖洞，不裁切素材与内容） */}
-        <div
-          className={cn(
-            "absolute inset-0 overflow-hidden rounded-2xl bg-gradient-to-br shadow-card",
-            stage.gradient ?? "from-amber-200 to-orange-400",
-          )}
-          style={{
-            WebkitMaskImage: STAGE_NOTCH_MASK,
-            maskImage: STAGE_NOTCH_MASK,
-          }}
-        >
-          <div className="absolute inset-0" style={{ backgroundImage: STAGE_TEXTURE }} />
-        </div>
-        {/* 大号 3D 素材：右上溢出卡片顶部，锯齿徽章点缀；无素材时回退阶段图标 */}
-        {stage.art ? (
-          <div className="pointer-events-none absolute -right-1 -top-7 z-10">
-            <img
-              src={stage.art}
-              alt=""
-              aria-hidden
-              className="size-28 object-contain drop-shadow-xl"
-            />
-            {/* 数量徽章：中心落在凹口圆（r=72）左下 45° 圆周点上，贴弧摆放 */}
-            <span
-              className="absolute left-[-13px] top-[89px] flex h-9 min-w-9 items-center justify-center rounded-full border-2 border-white bg-lime-500 px-1 text-sm font-bold tabular-nums text-white shadow-md"
-              aria-hidden
-            >
-              {stage.items.length}
-            </span>
-          </div>
-        ) : (
-          <StageIcon className="absolute right-4 top-4 size-8 text-white/80" aria-hidden />
-        )}
-        {/* 艺术字标题 + 副标题（左侧，避开右上素材区） */}
-        <div className="absolute left-4 top-4 z-10 w-[calc(100%-118px)]">
-          <h3
-            className="relative w-fit text-2xl font-black italic tracking-wide text-foreground/80"
-            style={{
-              WebkitTextStroke: "4px rgba(255,255,255,0.85)",
-              paintOrder: "stroke",
-            }}
-          >
-            <span className="block">{stage.title}</span>
-            <Sparkle
-              className="absolute -right-6 -top-2 size-4 fill-white text-white drop-shadow"
-              aria-hidden
-            />
-          </h3>
-
-        </div>
-        {/* 右下：阶段主色胶囊展示该阶段成交金额（白字，无箭头） */}
+      <div className="relative flex h-full flex-col justify-between overflow-hidden rounded-xl border border-border/60 bg-card p-3.5 shadow-card">
+        {/* 左侧阶段色条，轻量区分阶段 */}
         <span
-          className={cn(
-            "absolute bottom-4 right-4 z-10 flex items-center rounded-full px-4 py-1.5 text-sm font-bold tabular-nums text-white shadow-md",
-            stage.actionClass ?? "bg-primary",
-          )}
-          title={t("kanban.stageAmount")}
-        >
-          {formatAmount(sumStageAmount(stage.items))}
-        </span>
+          className={cn("absolute inset-y-0 left-0 w-1", stage.actionClass ?? "bg-primary")}
+          aria-hidden
+        />
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+              <StageIcon className="size-4" aria-hidden />
+            </span>
+            <h3 className="truncate text-sm font-semibold text-foreground">{stage.title}</h3>
+          </div>
+          <span className="shrink-0 text-2xl font-bold leading-none tabular-nums text-foreground">
+            {stage.items.length}
+          </span>
+        </div>
+        <div className="flex items-end justify-between gap-2">
+          <span className="text-xs text-muted-foreground">{t("kanban.stageDealUnit")}</span>
+          <span
+            className="text-sm font-semibold tabular-nums text-foreground"
+            title={t("kanban.stageAmount")}
+          >
+            {formatAmount(sumStageAmount(stage.items))}
+          </span>
+        </div>
       </div>
     );
   }
@@ -358,7 +311,7 @@ function KanbanCard({
     >
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 flex-col gap-1">
-          <p className="text-sm font-medium text-foreground">{item.title}</p>
+          <p className="line-clamp-2 min-h-[2.5rem] text-sm font-medium text-foreground">{item.title}</p>
           <ContactLine contact={item.contact} />
         </div>
         {/* 线索到达阶段：负责人浮动在标题右侧，仅头像（名称由 title 提示） */}
