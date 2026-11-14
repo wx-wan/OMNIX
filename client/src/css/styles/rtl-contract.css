@@ -1,0 +1,21 @@
+/* L4 · RTL 细节镜像
+ *
+ * 线上 CSS 有 13 条 rtl: Tailwind 变体。取证确认本地免费版模板已自带
+ * 大部分镜像能力：calendar.tsx 的 rtl:** 日历箭头、FullLogo 的
+ * rtl:scale-x-[-1]、add-notes.tsx 的 dialog-close rtl 定位、
+ * sidebar.tsx 的 logical 定位；?dir=rtl 时侧栏 left=1184 / direction=rtl
+ * 与线上完全一致，chevron 等方向图标线上也不做翻转。
+ *
+ * 因此这里只补线上有而本地缺的两条全局规则。纯增量：dir=ltr 时全部不生效。
+ */
+
+/* 图表条从右向左生长（线上 [dir=rtl] .chart-bar-grow-x{transform-origin:100%}） */
+[dir="rtl"] .chart-bar-grow-x {
+  transform-origin: 100% 50%;
+}
+
+/* 对话框关闭按钮移到左侧（线上 [dir=rtl] [data-slot=dialog-close]{right:auto;left:...}） */
+[dir="rtl"] [data-slot="dialog-close"] {
+  right: auto;
+  left: 0.5rem;
+}

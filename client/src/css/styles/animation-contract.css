@@ -1,0 +1,114 @@
+/**
+ * 动画契约 · 取证自官网公开渲染页
+ *   https://shadcndashboard.dev/block/*\/preview?style=vega
+ *   https://shadcndashboard.dev/ui-blocks/chart（页面初始 DOM 中公开的 11 份 chart TSX）
+ *
+ * 结论：图表动画不是自写动画，而是 Recharts 默认逐帧行为（源码里零 isAnimationActive /
+ * @keyframes / framer-motion）。本项目 recharts ^3.10.1 与线上同源，只要不关闭
+ * isAnimationActive 就自动获得饼图展开 / 柱图长高 / 面积图描边入场。
+ *
+ * 本文件只补两块纯 CSS：
+ *   1) 官网全局动画规则（fadeIn / marquee / spin-gradient / shimmer / view-transition）
+ *   2) 接通 style-vega.css 里已声明但未使用的 chart-* / page-enter keyframes
+ */
+
+/* ── 1. 官网全局动画 ─────────────────────────────────────────────── */
+@keyframes fadeIn {
+  0% { opacity: 0; transform: translateY(4px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes marquee {
+  0% { transform: translate(0%); }
+  100% { transform: translate(-100%); }
+}
+.animate-marquee {
+  animation: marquee 30s linear 0s infinite normal none running;
+}
+
+@keyframes spin-gradient {
+  0% { background-position: 0% center; }
+  100% { background-position: 360% center; }
+}
+.animate-gradient-border {
+  background-size: 300% 300%;
+  animation: spin-gradient 4s linear 0s infinite normal none running;
+}
+
+@property --shimmer-angle {
+  syntax: "<angle>";
+  inherits: true;
+  initial-value: 20deg;
+}
+.shimmer {
+  background: linear-gradient(var(--shimmer-angle), currentcolor 0%, transparent 42%, currentcolor 84%) no-repeat;
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shimmer-angle-rotate 3s linear infinite;
+}
+@property --shimmer-image { syntax: "*"; inherits: false; }
+@property --shimmer-text-fill { syntax: "*"; inherits: false; }
+@keyframes shimmer-angle-rotate {
+  to { --shimmer-angle: 380deg; }
+}
+
+/* View Transitions API：页面切换不做交叉淡化，保持线上契约 */
+::view-transition-old(root) {
+  mix-blend-mode: normal;
+  animation: none;
+}
+::view-transition-new(root) {
+  mix-blend-mode: normal;
+  animation: none;
+}
+
+/* ── 2. 接通 vega 已声明的 keyframes ───────────────────────────── */
+/* style-vega.css 里的 page-enter 含无效 blur()，这里用等价且合法的 fadeIn */
+.page-transition {
+  animation: fadeIn 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.chart-bar-grow {
+  animation: chart-bar-grow 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  transform-origin: bottom center;
+}
+.chart-bar-grow-x {
+  animation: chart-bar-grow-x 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  transform-origin: left center;
+}
+.chart-tick-in {
+  animation: chart-tick-in 480ms ease-out both;
+}
+.icon-draw {
+  animation: icon-draw 1100ms ease-out both;
+}
+
+/* 图表数据切换：线上 SVG line/path 上是 transition: all .3s */
+.recharts-wrapper path,
+.recharts-wrapper line,
+.recharts-wrapper rect {
+  transition: all 300ms ease;
+}
+
+/* ── 3. 无障碍：与线上 prefers-reduced-motion 一致 ─────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .animate-marquee,
+  .animate-gradient-border,
+  .shimmer,
+  .page-transition,
+  .chart-bar-grow,
+  .chart-bar-grow-x,
+  .chart-tick-in,
+  .icon-draw {
+    animation: none !important;
+    -webkit-text-fill-color: currentcolor;
+    background-image: none;
+  }
+  .recharts-wrapper path,
+  .recharts-wrapper line,
+  .recharts-wrapper rect {
+    transition: none;
+  }
+}

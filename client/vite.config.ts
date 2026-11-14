@@ -9,6 +9,8 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
+      // React 版 demo 的源码使用 src/* 绝对别名，保留以便源码保持 1:1 不改写
+      src: fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
   server: {

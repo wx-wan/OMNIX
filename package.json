@@ -21,5 +21,10 @@
   },
   "devDependencies": {
     "shadcn": "^4.23.0"
+  },
+  "dependencies": {
+    "@tiptap/core": "^3.28.0",
+    "@tiptap/extension-bold": "file:3.28.0 @tiptap/extension-bubble-menu@3.28.0 @tiptap/extension-code@3.28.0 @tiptap/extension-code-block@3.28.0 @tiptap/extension-document@3.28.0 @tiptap/extension-dropcursor@3.28.0 @tiptap/extension-floating-menu@3.28.0 @tiptap/extension-gapcursor@3.28.0 @tiptap/extension-hard-break@3.28.0 @tiptap/extension-heading@3.28.0 @tiptap/extension-horizontal-rule@3.28.0 @tiptap/extension-image@3.28.0 @tiptap/extension-italic@3.28.0 @tiptap/extension-list-keymap@3.28.0 @tiptap/extension-paragraph@3.28.0 @tiptap/extension-strike@3.28.0 @tiptap/extension-text@3.28.0 @tiptap/extension-text-align@3.28.0 @tiptap/extensions@3.28.0",
+    "@tiptap/pm": "^3.28.0"
   }
 }

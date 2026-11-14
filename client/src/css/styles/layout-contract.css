@@ -1,0 +1,63 @@
+/* C3 · 根属性契约 CSS
+ *
+ * 取证依据：线上 demo（Next.js 商业版）四态几何 + 本地 FullLayout DOM。
+ * 线上 CSS 并不含 [data-layout] / [data-boxed-layout] 选择器，布局切换由
+ * 组件条件渲染 + Tailwind 工具类产生；本文件把等效的几何契约改写为
+ * 属性驱动，让 C2 的 URL 覆盖层在本地也能产生真实视觉变化。
+ *
+ * 纯增量：默认 boxed / vertical / ltr 时下列规则全部不生效，
+ * 因此不影响已验证的 vega 默认态与 lyra 基准。
+ *
+ * 水平导航菜单由 L1 的 HorizontalNav 组件渲染；本层负责让顶栏贴边。
+ * 不在本层：mini-sidebar 状态联动（L2）、全站 RTL 细节镜像（L4）。
+ * 线上 RTL 本身也不改变布局几何，仅由 dir=rtl → direction: rtl
+ * 让文本与 flex 自动镜像。 */
+
+/* ---- full 容器 ----------------------------------------------------------
+   线上组件层契约（rea_c4_js_28.js）：
+     cn("full" === isLayout ? "w-full" : "w-full mx-auto container")
+   boxed → .container（线上 CSS: max-width:1367px; margin-inline:auto）；full → 撑满。
+   FullLayout 已按此条件渲染；本规则作为 V2 AppShell 内自带 .container 的兜底。 */
+html[data-boxed-layout="full"] .container {
+  max-width: none;
+}
+
+/* ---- boxed 容器收窄 ----------------------------------------------------
+   线上 demo 截图（默认 boxed vs /container=full）：boxed 的内容区居中收窄，
+   full 撑满。仅靠 1367px 绝对上限时，内容宽 = vw - 296，要到 vw > 1663 才触发，
+   1440 下点击完全看不出变化，故补一条相对留白：
+     max-width = min(1367px, 内容区宽 - 2 * --boxed-gutter)
+   只作用于 [data-container-surface] > .container 本身；页面底、侧栏、主体
+   背景与圆角一律不改，收窄后的两侧留白保持页面原色，不产生灰边。
+   --boxed-gutter 是唯一调节量：设为 0px 即回到纯线上 1367px 契约。 */
+html[data-boxed-layout="boxed"] {
+  --boxed-gutter: 48px;
+}
+
+html[data-boxed-layout="boxed"] [data-container-surface] > .container {
+  max-width: min(1367px, calc(100% - 2 * var(--boxed-gutter)));
+}
+
+/* ---- horizontal 布局 ---------------------------------------------------
+   线上 horizontal 时侧栏宽度归 0、main 全宽、顶栏改水平条。
+   本层只让侧栏让位并撑满内容；水平菜单属 L1 组件改造。 */
+html[data-layout="horizontal"] [data-slot="sidebar"],
+html[data-layout="horizontal"] [data-slot="sidebar-gap"] {
+  display: none !important;
+}
+
+/* 线上 horizontal 顶栏是贴边两行，没有侧栏外框与外边距 */
+html[data-layout="horizontal"] [data-slot="sidebar-inset"] {
+  margin: 0;
+  outline: none;
+  border-radius: 0;
+}
+
+html[data-layout="horizontal"] .container {
+  max-width: none;
+}
+
+/* horizontal 为贴边通栏，boxed 收窄不适用于通栏态。 */
+html[data-layout="horizontal"] [data-container-surface] > .container {
+  max-width: none;
+}

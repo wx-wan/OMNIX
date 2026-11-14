@@ -53,6 +53,31 @@ export class AuthService {
     return user ? this.toPublic(user) : null;
   }
 
+  async updateProfile(id: string, name: string): Promise<PublicUser> {
+    const user = await this.prisma.contact.update({
+      where: { id },
+      data: { name },
+    });
+    return this.toPublic(user);
+  }
+
+  async changePassword(
+    id: string,
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<void> {
+    const user = await this.prisma.contact.findUnique({ where: { id } });
+    if (!user || user.type !== ContactType.user || !user.password) {
+      throw new UnauthorizedException("Invalid credentials");
+    }
+    const ok = await bcrypt.compare(currentPassword, user.password);
+    if (!ok) throw new UnauthorizedException("Invalid credentials");
+    await this.prisma.contact.update({
+      where: { id },
+      data: { password: await bcrypt.hash(newPassword, 10) },
+    });
+  }
+
   private toPublic(user: {
     id: string;
     email: string | null;

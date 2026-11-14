@@ -1,25 +1,95 @@
-<!doctype html>
-<html lang="zh-CN" class="">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/png" href="/logo.png" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>OMNIX</title>
-    <script>
-      // 首帧前设置主题 class，避免暗色模式闪白（React 渲染的 script 不会执行，所以放这里）
-      ;(function () {
-        try {
-          var t = localStorage.getItem("theme");
-          var dark = t === "dark" || (t !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);
-          var el = document.documentElement;
-          el.classList.toggle("dark", dark);
-          el.style.colorScheme = dark ? "dark" : "light";
-        } catch (e) {}
-      })();
-    </script>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
+<!DOCTYPE html>
+<html lang="en" dir="ltr" data-color-theme="CUSTOM_THEME" data-layout="vertical" data-boxed-layout="boxed" class="style-vega light" data-sidebar-type="false" data-card-shadow="false">
+
+<head>
+  <meta charset="UTF-8" />
+  <script>
+    /* C2: 与线上 demo 一致的 URL 覆盖层，在 React hydrate 前写入偏好并同步根属性，避免闪烁。
+       任一 ?dir/layout/container/mode 出现时，整组参数视为完整指定，未给出的项重置为默认值，
+       防止上一次访问的参数串味。C4 起额外接受 ?style / ?theme / ?primary / ?secondary。
+       style-* 由本脚本与 CustomizerContext 共同管理，light/dark 由 ThemeProvider 管理。 */
+    (function () {
+      try {
+        var config = {
+          activeDir: "ltr", activeMode: "light", activeTheme: "CUSTOM_THEME",
+          activeStyle: "vega", activeLayout: "vertical", isLayout: "boxed",
+          isCollapse: false, isCardShadow: false, isBorderRadius: 12
+        };
+        function put(key, value, fallback) {
+          localStorage.setItem(key, JSON.stringify(value));
+          localStorage.setItem(key + "_default", JSON.stringify(fallback));
+        }
+        function read(key, fallback) {
+          var raw = localStorage.getItem(key);
+          if (raw === null || raw === "") return fallback;
+          try { return JSON.parse(raw); } catch (e) { return raw; }
+        }
+        var params = new URLSearchParams(window.location.search);
+        var recognized = ["dir", "layout", "container", "mode", "style", "theme", "primary", "secondary"];
+        var hasAny = recognized.some(function (k) { return params.has(k); });
+        var styles = ["luma", "lyra", "maia", "mira", "nova", "rhea", "vega"];
+        var colorKeys = { primary: "customPrimary", secondary: "customSecondary" };
+        function override(param, key, allowed) {
+          var v = params.get(param);
+          if (v && allowed.indexOf(v) !== -1) put(key, v, config[key]);
+          else if (hasAny) put(key, config[key], config[key]);
+        }
+        override("dir", "activeDir", ["ltr", "rtl"]);
+        override("container", "isLayout", ["boxed", "full"]);
+        override("style", "activeStyle", styles);
+        var layout = params.get("layout");
+        if (layout === "vertical" || layout === "horizontal") {
+          put("activeLayout", layout, config.activeLayout);
+          put("isCollapse", false, config.isCollapse);
+        } else if (layout === "mini-sidebar") {
+          put("activeLayout", "vertical", config.activeLayout);
+          put("isCollapse", true, config.isCollapse);
+        } else if (hasAny) {
+          put("activeLayout", config.activeLayout, config.activeLayout);
+          put("isCollapse", config.isCollapse, config.isCollapse);
+        }
+        var mode = params.get("mode");
+        if (mode === "light" || mode === "dark") localStorage.setItem("theme", mode);
+        else if (hasAny) localStorage.setItem("theme", config.activeMode);
+        var themeName = params.get("theme");
+        if (themeName) put("activeTheme", themeName, config.activeTheme);
+        else if (hasAny) put("activeTheme", config.activeTheme, config.activeTheme);
+        Object.keys(colorKeys).forEach(function (kind) {
+          var v = params.get(kind);
+          if (v && /^#[0-9a-fA-F]{6}$/.test(v)) localStorage.setItem(colorKeys[kind], v);
+          else if (hasAny) localStorage.removeItem(colorKeys[kind]);
+        });
+
+        var root = document.documentElement;
+        root.setAttribute("dir", read("activeDir", config.activeDir));
+        root.setAttribute("data-color-theme", read("activeTheme", config.activeTheme));
+        root.setAttribute("data-layout", read("activeLayout", config.activeLayout));
+        root.setAttribute("data-boxed-layout", read("isLayout", config.isLayout));
+        root.setAttribute("data-card-shadow", String(read("isCardShadow", config.isCardShadow)));
+        var collapse = read("isCollapse", config.isCollapse);
+        root.setAttribute("data-sidebar-type", String(collapse === true || collapse === "true"));
+        var activeStyle = read("activeStyle", config.activeStyle);
+        styles.forEach(function (n) { root.classList.remove("style-" + n); });
+        root.classList.add("style-" + (styles.indexOf(activeStyle) !== -1 ? activeStyle : config.activeStyle));
+        Object.keys(colorKeys).forEach(function (kind) {
+          var saved = localStorage.getItem(colorKeys[kind]);
+          if (saved) root.style.setProperty("--" + kind, saved);
+          else root.style.removeProperty("--" + kind);
+        });
+        var theme = localStorage.getItem("theme") || config.activeMode;
+        root.classList.remove("light", "dark");
+        root.classList.add(theme === "dark" ? "dark" : "light");
+      } catch (e) { /* 配置读取失败时保持 index.html 的静态默认值 */ }
+    })();
+  </script>
+  <link rel="icon" type="image/svg+xml" href="/favicon.ico" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ShadcnDashboard - Tailwind + Shadcn ReactJS </title>
+</head>
+
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+
 </html>
