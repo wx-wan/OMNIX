@@ -7,23 +7,26 @@ import {
   PanelLeft,
   PanelTop,
   Pen,
-  Settings,
   Square,
   Sun,
-  X,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { cn } from "src/lib/utils";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useCustomizer } from "../../context/CustomizerContext";
 import { useTheme } from "../../context/shadcntheme/ThemeContext";
 
 /**
- * C5 · 自定义器面板
- * 依据线上 demo（Next.js 商业版）Sheet 取证：右侧滑出、6 个分组，
- * 标题 "Customizer" / "Make changes to your customizer here."。
- * 线上没有 Reset / Share 按钮，故按 1:1 只实现这 6 组。
+ * 自定义器控件：原右下角 Sheet 的 6 个分组（Theme Style / Theme Option /
+ * Theme Direction / Choose Your Theme Colors / Layout Type / Container Option）。
+ *
+ * 2026-11-15 按用户要求迁入 /settings/layout：去掉浮标与 Sheet 外壳，
+ * 分组改用设置页既有 Card / CardHeader / CardTitle / CardContent 结构；
+ * 控件本体（OptionButton、style 按钮、color picker）沿用线上取证件，
+ * 状态仍全部走 CustomizerContext + ThemeContext，样式契约文件一律不变。
  */
 
-const STYLE_ORDER: { key: string; label: string; shape: string }[] = [
+export const STYLE_ORDER: { key: string; label: string; shape: string }[] = [
   { key: "vega", label: "Vega", shape: "rounded-[5px]" },
   { key: "nova", label: "Nova", shape: "rounded-[2px]" },
   { key: "maia", label: "Maia", shape: "rounded-full" },
@@ -36,16 +39,19 @@ const STYLE_ORDER: { key: string; label: string; shape: string }[] = [
 const DEFAULT_PRIMARY = "#171717";
 const DEFAULT_SECONDARY = "#f5f5f5";
 
+/** 分组外壳：与原 Section 同名同语义，但按设置页规范用官方 Card 承载。 */
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="mb-7">
-      <h4 className="text-base mb-2 font-semibold">{title}</h4>
-      {children}
-    </div>
+    <Card>
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
+      </CardHeader>
+      <CardContent>{children}</CardContent>
+    </Card>
   );
 }
 
-function OptionButton({
+export function OptionButton({
   active,
   onClick,
   icon,
@@ -74,8 +80,8 @@ function OptionButton({
   );
 }
 
-const Customizer = () => {
-  const [open, setOpen] = useState(false);
+export default function CustomizerControls() {
+  const { t } = useTranslation();
   const { state, set, setPrimaryColor, setSecondaryColor } = useCustomizer();
   const { theme, setTheme } = useTheme();
   const [primary, setPrimary] = useState(
@@ -97,190 +103,147 @@ const Customizer = () => {
   };
 
   return (
-    <>
-      <button
-        type="button"
-        data-customizer-trigger
-        aria-label="Open customizer"
-        onClick={() => setOpen(true)}
-        className="fixed bottom-6 end-6 z-20 flex h-14 w-14 animate-spin items-center justify-center rounded-full bg-primary text-primary-foreground cursor-pointer hover:bg-primary/80"
-      >
-        <Settings className="size-5" />
-      </button>
+    <div className="space-y-4" data-settings-layout-controls>
+      <Section title={t("Theme Style")}>
+        <div className="grid grid-cols-4 gap-2">
+          {STYLE_ORDER.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              data-style-option={item.key}
+              aria-pressed={state.activeStyle === item.key}
+              onClick={() => set("activeStyle", item.key)}
+              className={cn(
+                "flex h-16 flex-col items-center justify-center gap-1.5 rounded-md border text-xs cursor-pointer transition-all hover:scale-105",
+                state.activeStyle === item.key
+                  ? "text-primary bg-primary/5 border-primary/20"
+                  : "border-border"
+              )}
+            >
+              <span className={cn("h-4 w-4 border border-current", item.shape)} />
+              {item.label}
+            </button>
+          ))}
+        </div>
+      </Section>
 
-      {open && (
-        <>
-          <div
-            className="cn-sheet-overlay fixed inset-0 z-40 bg-black/30"
-            onClick={() => setOpen(false)}
-            aria-hidden="true"
-          />
-          <aside
-            role="dialog"
-            aria-label="Customizer"
-            data-customizer-panel
-            className="cn-sheet-content fixed inset-y-0 end-0 z-50 w-sm max-w-full overflow-y-auto border-s border-border bg-background p-6 shadow-xl"
+      <Section title={t("Theme Option")}>
+        <div className="flex flex-wrap gap-4">
+          <OptionButton
+            active={!isDark}
+            onClick={() => setTheme("light")}
+            icon={<Sun className="size-4" />}
           >
-            <header className="flex items-start justify-between gap-4 border-b border-border pb-4">
-              <div>
-                <h3 className="cn-sheet-title text-lg font-semibold">Customizer</h3>
-                <p className="cn-sheet-description text-sm text-muted-foreground">
-                  Make changes to your customizer here.
-                </p>
+            {t("Light")}
+          </OptionButton>
+          <OptionButton
+            active={isDark}
+            onClick={() => setTheme("dark")}
+            icon={<Moon className="size-4" />}
+          >
+            {t("Dark")}
+          </OptionButton>
+        </div>
+      </Section>
+
+      <Section title={t("Theme Direction")}>
+        <div className="flex flex-wrap gap-4">
+          <OptionButton
+            active={state.activeDir === "ltr"}
+            onClick={() => set("activeDir", "ltr")}
+            icon={<AlignLeft className="size-4" />}
+          >
+            LTR
+          </OptionButton>
+          <OptionButton
+            active={state.activeDir === "rtl"}
+            onClick={() => set("activeDir", "rtl")}
+            icon={<AlignRight className="size-4" />}
+          >
+            RTL
+          </OptionButton>
+        </div>
+      </Section>
+
+      <Section title={t("Choose Your Theme Colors")}>
+        <div className="flex flex-wrap gap-4">
+          {(
+            [
+              {
+                id: "primaryColorPicker",
+                label: t("Primary color"),
+                value: primary,
+                onChange: onPrimary,
+              },
+              {
+                id: "secondaryColorPicker",
+                label: t("Secondary color"),
+                value: secondary,
+                onChange: onSecondary,
+              },
+            ] as const
+          ).map((picker) => (
+            <div
+              key={picker.id}
+              className="relative border border-border py-5 px-6 rounded-md cursor-pointer"
+            >
+              <div className="flex items-center gap-2">
+                <span
+                  className="h-6 w-6 rounded-full"
+                  style={{ backgroundColor: picker.value }}
+                />
+                <Pen className="size-4" />
               </div>
-              <button
-                type="button"
-                aria-label="Close customizer"
-                data-customizer-close
-                onClick={() => setOpen(false)}
-                className="flex size-8 shrink-0 items-center justify-center rounded-full border border-border cursor-pointer hover:bg-primary/5"
-              >
-                <X className="size-4" />
-              </button>
-            </header>
-
-            <div className="pt-6">
-              <Section title="Theme Style">
-                <div className="grid grid-cols-4 gap-2">
-                  {STYLE_ORDER.map((item) => (
-                    <button
-                      key={item.key}
-                      type="button"
-                      data-style-option={item.key}
-                      aria-pressed={state.activeStyle === item.key}
-                      onClick={() => set("activeStyle", item.key)}
-                      className={cn(
-                        "flex h-16 flex-col items-center justify-center gap-1.5 rounded-md border text-xs cursor-pointer transition-all hover:scale-105",
-                        state.activeStyle === item.key
-                          ? "text-primary bg-primary/5 border-primary/20"
-                          : "border-border"
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          "h-4 w-4 border border-current",
-                          item.shape
-                        )}
-                      />
-                      {item.label}
-                    </button>
-                  ))}
-                </div>
-              </Section>
-
-              <Section title="Theme Option">
-                <div className="flex flex-wrap gap-4">
-                  <OptionButton
-                    active={!isDark}
-                    onClick={() => setTheme("light")}
-                    icon={<Sun className="size-4" />}
-                  >
-                    Light
-                  </OptionButton>
-                  <OptionButton
-                    active={isDark}
-                    onClick={() => setTheme("dark")}
-                    icon={<Moon className="size-4" />}
-                  >
-                    Dark
-                  </OptionButton>
-                </div>
-              </Section>
-
-              <Section title="Theme Direction">
-                <div className="flex flex-wrap gap-4">
-                  <OptionButton
-                    active={state.activeDir === "ltr"}
-                    onClick={() => set("activeDir", "ltr")}
-                    icon={<AlignLeft className="size-4" />}
-                  >
-                    LTR
-                  </OptionButton>
-                  <OptionButton
-                    active={state.activeDir === "rtl"}
-                    onClick={() => set("activeDir", "rtl")}
-                    icon={<AlignRight className="size-4" />}
-                  >
-                    RTL
-                  </OptionButton>
-                </div>
-              </Section>
-
-              <Section title="Choose Your Theme Colors">
-                <div className="flex flex-wrap gap-4">
-                  {(
-                    [
-                      { id: "primaryColorPicker", label: "Primary color", value: primary, onChange: onPrimary },
-                      { id: "secondaryColorPicker", label: "Secondary color", value: secondary, onChange: onSecondary },
-                    ] as const
-                  ).map((picker) => (
-                    <div
-                      key={picker.id}
-                      className="relative border border-border py-5 px-6 rounded-md cursor-pointer"
-                    >
-                      <div className="flex items-center gap-2">
-                        <span
-                          className="h-6 w-6 rounded-full"
-                          style={{ backgroundColor: picker.value }}
-                        />
-                        <Pen className="size-4" />
-                      </div>
-                      <input
-                        type="color"
-                        id={picker.id}
-                        aria-label={picker.label}
-                        value={picker.value}
-                        onChange={(e) => picker.onChange(e.target.value)}
-                        className="absolute inset-0 h-full w-full opacity-0 cursor-pointer"
-                      />
-                    </div>
-                  ))}
-                </div>
-              </Section>
-
-              <Section title="Layout Type">
-                <div className="flex flex-wrap gap-4">
-                  <OptionButton
-                    active={state.activeLayout === "vertical"}
-                    onClick={() => set("activeLayout", "vertical")}
-                    icon={<PanelLeft className="size-4" />}
-                  >
-                    Vertical
-                  </OptionButton>
-                  <OptionButton
-                    active={state.activeLayout === "horizontal"}
-                    onClick={() => set("activeLayout", "horizontal")}
-                    icon={<PanelTop className="size-4" />}
-                  >
-                    Horizontal
-                  </OptionButton>
-                </div>
-              </Section>
-
-              <Section title="Container Option">
-                <div className="flex flex-wrap gap-4">
-                  <OptionButton
-                    active={state.isLayout === "boxed"}
-                    onClick={() => set("isLayout", "boxed")}
-                    icon={<Square className="size-4" />}
-                  >
-                    Boxed
-                  </OptionButton>
-                  <OptionButton
-                    active={state.isLayout === "full"}
-                    onClick={() => set("isLayout", "full")}
-                    icon={<Maximize2 className="size-4" />}
-                  >
-                    Full
-                  </OptionButton>
-                </div>
-              </Section>
+              <input
+                type="color"
+                id={picker.id}
+                aria-label={picker.label}
+                value={picker.value}
+                onChange={(e) => picker.onChange(e.target.value)}
+                className="absolute inset-0 h-full w-full opacity-0 cursor-pointer"
+              />
             </div>
-          </aside>
-        </>
-      )}
-    </>
-  );
-};
+          ))}
+        </div>
+      </Section>
 
-export default Customizer;
+      <Section title={t("Layout Type")}>
+        <div className="flex flex-wrap gap-4">
+          <OptionButton
+            active={state.activeLayout === "vertical"}
+            onClick={() => set("activeLayout", "vertical")}
+            icon={<PanelLeft className="size-4" />}
+          >
+            {t("Vertical")}
+          </OptionButton>
+          <OptionButton
+            active={state.activeLayout === "horizontal"}
+            onClick={() => set("activeLayout", "horizontal")}
+            icon={<PanelTop className="size-4" />}
+          >
+            {t("Horizontal")}
+          </OptionButton>
+        </div>
+      </Section>
+
+      <Section title={t("Container Option")}>
+        <div className="flex flex-wrap gap-4">
+          <OptionButton
+            active={state.isLayout === "boxed"}
+            onClick={() => set("isLayout", "boxed")}
+            icon={<Square className="size-4" />}
+          >
+            {t("Boxed")}
+          </OptionButton>
+          <OptionButton
+            active={state.isLayout === "full"}
+            onClick={() => set("isLayout", "full")}
+            icon={<Maximize2 className="size-4" />}
+          >
+            {t("Full")}
+          </OptionButton>
+        </div>
+      </Section>
+    </div>
+  );
+}

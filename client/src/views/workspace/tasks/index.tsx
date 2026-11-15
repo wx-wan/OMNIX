@@ -19,11 +19,11 @@ import {
   useWorkspace,
 } from "src/api/workspace/use-workspace";
 import { addTask, getActiveProject } from "src/api/workspace/project-stages";
+import { NewTaskDialog, type NewTaskValues } from "../create-dialogs";
 import type { WsTask } from "src/types/apps/workspace";
 import {
   PmsAvatar,
   PmsCard,
-  PmsCreateForm,
   PmsField,
   PmsIconButton,
   PmsLabelChip,
@@ -75,7 +75,6 @@ export default function TasksPage() {
   const [collapsed, setCollapsed] = useState<string[]>([]);
   const [selected, setSelected] = useState<WsTask | null>(null);
   const [creating, setCreating] = useState(false);
-  const [draft, setDraft] = useState({ title: "", description: "" });
   const all = useMemo(() => snap?.tasks ?? [], [snap]);
 
   const list = useMemo(() => {
@@ -106,18 +105,15 @@ export default function TasksPage() {
       color: label(id)?.color,
     }));
 
-  const create = () => {
-    const title = draft.title.trim();
-    if (!title) return;
-    addTask(getActiveProject(), {
-      title,
-      description: draft.description.trim(),
-      status: "todo",
-      priority: "medium",
-      assigneeId: CURRENT_USER_ID,
-      estimate: 4,
+  const create = (values: NewTaskValues) => {
+    addTask(values.projectId || getActiveProject(), {
+      title: values.title,
+      description: values.description,
+      status: values.status,
+      priority: values.priority,
+      assigneeId: values.assigneeId || null,
+      dueDate: values.dueDate,
     });
-    setDraft({ title: "", description: "" });
     setCreating(false);
   };
 
@@ -396,27 +392,13 @@ export default function TasksPage() {
         ) : null}
       </PmsSheet>
 
-      <PmsSheet open={creating} onOpenChange={setCreating} title={t("New Task")}>
-        <PmsCreateForm
-          submitLabel={t("Create")}
-          onSubmit={create}
-          fields={[
-            {
-              name: t("Title"),
-              value: draft.title,
-              onChange: (value) => setDraft((prev) => ({ ...prev, title: value })),
-              placeholder: t("Task title"),
-            },
-            {
-              name: t("Description"),
-              value: draft.description,
-              onChange: (value) => setDraft((prev) => ({ ...prev, description: value })),
-              placeholder: t("Describe the task"),
-              multiline: true,
-            },
-          ]}
-        />
-      </PmsSheet>
+      <NewTaskDialog
+        open={creating}
+        onOpenChange={setCreating}
+        onSubmit={create}
+        projects={snap.projects}
+        users={snap.users}
+      />
     </PmsPage>
   );
 }

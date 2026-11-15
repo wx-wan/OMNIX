@@ -1,19 +1,14 @@
 import {
-  IsEnum,
   IsEmail,
   IsOptional,
   IsString,
   IsNotEmpty,
   MaxLength,
 } from "class-validator";
-import { ContactType } from "@prisma/client";
 
 // 统一往来单位 / 联系人 编辑字段（均可选）
+// type / password / role 不在其中：账号管理走 /api/auth/users，避免联系人接口提权。
 export class UpdateContactDto {
-  @IsOptional()
-  @IsEnum(ContactType)
-  type?: ContactType;
-
   @IsOptional()
   @IsString()
   @MaxLength(60)
@@ -55,17 +50,12 @@ export class UpdateContactDto {
   @IsOptional()
   @IsString()
   @MaxLength(200)
+  avatarUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
   website?: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(100)
-  password?: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(20)
-  role?: string;
 
   @IsOptional()
   archived?: boolean; // 归档 / 取消归档（关联了商机的往来单位不允许删除，用归档隐藏代替）

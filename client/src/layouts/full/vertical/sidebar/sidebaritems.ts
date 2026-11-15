@@ -37,15 +37,15 @@ export interface MenuItem {
 import { uniqueId } from "lodash";
 
 import {
+  Bell,
   BookOpen,
-  Calendar,
-  CircleDot,
+  CalendarDays,
+  CircleAlert,
   Contact,
-  Flag,
-  FolderKanban,
-  House,
+  Layers,
+  LayoutGrid,
   List,
-  ListChecks,
+  ListTodo,
   LucideIcon,
   Mail,
   MessageCircle,
@@ -56,7 +56,9 @@ import {
   Sparkles,
   Ticket,
   UserCircle,
+  UserRound,
   Users,
+  Zap,
 } from "lucide-react"
 
 /**
@@ -73,18 +75,18 @@ const SidebarContent: MenuItem[] = [
       {
         id: uniqueId(),
         name: "Dashboard",
-        icon: House,
+        icon: LayoutGrid,
         url: "/",
       },
       {
         id: uniqueId(),
         name: "Inbox",
-        icon: Mail,
+        icon: Bell,
         url: "/inbox",
       },
       {
         id: uniqueId(),
-        name: "Chats",
+        name: "Chat",
         icon: MessageCircle,
         url: "/apps/chats",
       },
@@ -96,37 +98,37 @@ const SidebarContent: MenuItem[] = [
       {
         id: uniqueId(),
         name: "Projects",
-        icon: FolderKanban,
+        icon: Layers,
         url: "/projects",
       },
       {
         id: uniqueId(),
         name: "Issues",
-        icon: CircleDot,
+        icon: CircleAlert,
         url: "/issues",
       },
       {
         id: uniqueId(),
         name: "Tasks",
-        icon: ListChecks,
+        icon: ListTodo,
         url: "/tasks",
       },
       {
         id: uniqueId(),
         name: "Sprints",
-        icon: Flag,
+        icon: Zap,
         url: "/sprints",
       },
       {
         id: uniqueId(),
         name: "Calendar",
-        icon: Calendar,
+        icon: CalendarDays,
         url: "/calendar",
       },
       {
         id: uniqueId(),
         name: "Team",
-        icon: Users,
+        icon: UserRound,
         url: "/team",
       },
     ],
@@ -314,4 +316,14 @@ const SidebarContent: MenuItem[] = [
   },
 ];
 
-export default SidebarContent;
+/** 应用模块后续再盘点：按用户要求仅放开 Contacts 入口，其余 Apps 项继续隐藏。 */
+export default SidebarContent.map((section) =>
+  section.heading === "Apps"
+    ? {
+        ...section,
+        items: (section.items ?? [])
+          .filter((item) => item.name === "Contacts")
+          .map((item) => ({ ...item, isPro: false })),
+      }
+    : section,
+);

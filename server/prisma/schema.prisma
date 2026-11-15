@@ -69,6 +69,9 @@ model Contact {
   avatarUrl String? @map("avatar_url") // 头像 URL（如 MCP 代理用户 Accio work 用 web 头像）
   aiGenerated Boolean @default(false) @map("ai_generated") // 是否由 Accio AI 抓取生成（信息不保真，待核实）
   archived  Boolean @default(false) @map("archived") // 归档：关联了商机的往来单位不允许删除，只能归档隐藏
+  // 在线状态（后端状态机维护）：online 登录态 | away 长时间无操作 | busy 用户手动「请勿打扰」| offline 离线
+  presence  String  @default("offline") @map("presence")
+  lastActiveAt DateTime? @map("last_active_at") // 最近一次前端活动上报，用于自动判定 away
   deals     Deal[]
   quotations Quotation[]
   designResponsible DesignOrder[] @relation("DesignOrderResponsible")

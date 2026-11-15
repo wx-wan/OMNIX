@@ -1,8 +1,10 @@
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
 import { lazy } from 'react';
-import { Navigate, createBrowserRouter } from 'react-router';
+import { Navigate, Outlet, createBrowserRouter } from 'react-router';
 import Loadable from '../layouts/full/shared/loadable/Loadable';
+import ProtectedRoute from './ProtectedRoute';
+import GuestRoute from './GuestRoute';
 
 /* ***Layouts**** */
 const FullLayout = Loadable(lazy(() => import('../layouts/full/FullLayout')));
@@ -44,6 +46,8 @@ const TicketCreate = Loadable(lazy(() => import('../views/apps/tickets/create'))
 const TablesPage = Loadable(lazy(() => import('../views/pages/tables')));
 const FormPage = Loadable(lazy(() => import('../views/pages/form')));
 const UserProfilePage = Loadable(lazy(() => import('../views/pages/user-profile')));
+// FAQ：用户提供的 UI 逐项复刻，作为侧栏「使用文档」入口
+const FaqPage = Loadable(lazy(() => import('../views/pages/faq')));
 
 //V2 apps 群 1（逐项 1:1）
 const EmailApp = Loadable(lazy(() => import('../views/apps/email')));
@@ -64,6 +68,16 @@ const TasksPage = Loadable(lazy(() => import('../views/workspace/tasks')));
 const SprintsPage = Loadable(lazy(() => import('../views/workspace/sprints')));
 const CalendarWorkspacePage = Loadable(lazy(() => import('../views/workspace/calendar')));
 const TeamPage = Loadable(lazy(() => import('../views/workspace/team')));
+// PMS 设置页：5 个子页逐项 1:1 复刻自 pms-audit/dom/23-settings-*.html
+const SettingsGeneralPage = Loadable(lazy(() => import('../views/workspace/settings/general')));
+const SettingsMembersPage = Loadable(lazy(() => import('../views/workspace/settings/members')));
+const SettingsBillingPage = Loadable(lazy(() => import('../views/workspace/settings/billing')));
+const SettingsIntegrationsPage = Loadable(lazy(() => import('../views/workspace/settings/integrations')));
+const SettingsApiKeysPage = Loadable(lazy(() => import('../views/workspace/settings/api-keys')));
+// 布局页：右下角 Customizer 收口进设置模块（用户 2026-11-15 要求）
+const SettingsLayoutPage = Loadable(lazy(() => import('../views/workspace/settings/layout')));
+// PMS 个人设置页：1:1 复刻自 pms-audit/dom/11-profile.*
+const ProfilePage = Loadable(lazy(() => import('../views/workspace/profile')));
 // 业务需求模块：九阶段空白表单占位 + 复刻 demo 的发票编辑页
 const RequirementStagePage = Loadable(lazy(() => import('../views/apps/requirements/stage')));
 const RequirementEditPage = Loadable(lazy(() => import('../views/apps/requirements/edit')));
@@ -98,11 +112,10 @@ const TABLE_VARIANT_PATHS = [
   '/react-tables/order-datatable',
 ];
 
-// authentication
-
-const Login2 = Loadable(lazy(() => import('../views/auth/auth2/login')));
-
-const Register2 = Loadable(lazy(() => import('../views/auth/auth2/register')));
+// authentication：PMS 登录/注册 1:1 复刻 + 真实会话；旧模板地址保留重定向
+const PmsLogin = Loadable(lazy(() => import('../views/auth/pms/login')));
+const PmsRegister = Loadable(lazy(() => import('../views/auth/pms/register')));
+const PmsForgotPassword = Loadable(lazy(() => import('../views/auth/pms/forgot-password')));
 
 const ForgotPassword2 = Loadable(lazy(() => import('../views/auth/auth2/forgot-password')));
 
@@ -113,7 +126,11 @@ const Maintainance = Loadable(lazy(() => import('../views/auth/maintenance')));
 const Router = [
   {
     path: '/',
-    element: <FullLayout />,
+    element: (
+      <ProtectedRoute>
+        <FullLayout />
+      </ProtectedRoute>
+    ),
     children: [
       { path: '/', element: <ModernDashboard /> },
 
@@ -136,7 +153,6 @@ const Router = [
       { path: '/apps/chat-ai', element: <ChatAI /> },
       { path: '/apps/image-ai', element: <ImageAI /> },
       { path: '/apps/calendar', element: <CalendarApp /> },
-      { path: '/apps/contacts', element: <ContactsApp /> },
 
       { path: '/apps/tickets', element: <Tickets /> },
       { path: '/apps/tickets/create', element: <TicketCreate /> },
@@ -151,19 +167,35 @@ const Router = [
 
       ...TABLE_VARIANT_PATHS.map((path) => ({ path, element: <TablesVariantPage /> })),
 
-      { path: '/inbox', element: <InboxApp /> },
-      { path: '/projects', element: <ProjectsPage /> },
-      { path: '/projects/:id', element: <ProjectDetailPage /> },
-      { path: '/apps/requirements/:stage', element: <RequirementStagePage /> },
-      { path: '/apps/invoice/edit', element: <RequirementEditPage /> },
-      { path: '/apps/invoice/edit/:projectNo', element: <RequirementEditPage /> },
-      { path: '/issues', element: <IssuesPage /> },
-      { path: '/tasks', element: <TasksPage /> },
-      { path: '/sprints', element: <SprintsPage /> },
-      { path: '/calendar', element: <CalendarWorkspacePage /> },
-      { path: '/team', element: <TeamPage /> },
+      // PMS 业务模块（整组已由外层登录墙保护，此处保留 Outlet 分组以维持路由结构）。
+      {
+        element: <Outlet />,
+        children: [
+          { path: '/inbox', element: <InboxApp /> },
+          { path: '/projects', element: <ProjectsPage /> },
+          { path: '/projects/:id', element: <ProjectDetailPage /> },
+          { path: '/apps/requirements/:stage', element: <RequirementStagePage /> },
+          { path: '/apps/invoice/edit', element: <RequirementEditPage /> },
+          { path: '/apps/invoice/edit/:projectNo', element: <RequirementEditPage /> },
+          { path: '/issues', element: <IssuesPage /> },
+          { path: '/tasks', element: <TasksPage /> },
+          { path: '/sprints', element: <SprintsPage /> },
+          { path: '/calendar', element: <CalendarWorkspacePage /> },
+          { path: '/team', element: <TeamPage /> },
 
-    
+          { path: '/settings', element: <Navigate to="/settings/general" replace /> },
+          { path: '/settings/general', element: <SettingsGeneralPage /> },
+          { path: '/settings/members', element: <SettingsMembersPage /> },
+          { path: '/settings/billing', element: <SettingsBillingPage /> },
+          { path: '/settings/integrations', element: <SettingsIntegrationsPage /> },
+          { path: '/settings/api-keys', element: <SettingsApiKeysPage /> },
+          { path: '/settings/layout', element: <SettingsLayoutPage /> },
+          { path: '/profile', element: <ProfilePage /> },
+          { path: '/faq', element: <FaqPage /> },
+          { path: '/apps/contacts', element: <ContactsApp /> },
+        ],
+      },
+
       { path: '*', element: <Navigate to="/auth/404" /> },
     ],
   },
@@ -171,9 +203,16 @@ const Router = [
     path: '/',
     element: <BlankLayout />,
     children: [
-      { path: '/auth/auth2/login', element: <Login2 /> },
-
-      { path: '/auth/auth2/register', element: <Register2 /> },
+      {
+        element: <GuestRoute />,
+        children: [
+          { path: '/login', element: <PmsLogin /> },
+          { path: '/register', element: <PmsRegister /> },
+          { path: '/forgot-password', element: <PmsForgotPassword /> },
+        ],
+      },
+      { path: '/auth/auth2/login', element: <Navigate to="/login" replace /> },
+      { path: '/auth/auth2/register', element: <Navigate to="/register" replace /> },
 
       { path: '/auth/auth2/forgot-password', element: <ForgotPassword2 /> },
 

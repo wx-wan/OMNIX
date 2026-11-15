@@ -91,6 +91,9 @@ type OverlayTables = {
   teams: WsTeam[];
 };
 
+/** 迭代视图：卡片显示顺序 + 已隐藏的阶段卡片。 */
+export type StageView = { order: string[]; hidden: string[] };
+
 export type WorkspaceState = OverlayTables & {
   projects: WsProject[];
   stages: Record<string, StageKey>;
@@ -99,6 +102,7 @@ export type WorkspaceState = OverlayTables & {
   projectEdits: Record<string, Partial<WsProject>>;
   recordEdits: Partial<Record<OverlayTable, Record<string, Record<string, unknown>>>>;
   removed: Partial<Record<OverlayTable | "projects", string[]>>;
+  stageViews: Record<string, StageView>;
 };
 
 const STORAGE_KEY = "omnix-workspace-project-stages-v1";
@@ -110,6 +114,7 @@ const EMPTY_STATE: WorkspaceState = {
   projectEdits: {},
   recordEdits: {},
   removed: {},
+  stageViews: {},
   issues: [],
   tasks: [],
   sprints: [],
@@ -138,6 +143,7 @@ const readState = (): WorkspaceState => {
       projectEdits: parsed.projectEdits ?? {},
       recordEdits: parsed.recordEdits ?? {},
       removed: parsed.removed ?? {},
+      stageViews: parsed.stageViews ?? {},
       issues: list("issues"),
       tasks: list("tasks"),
       sprints: list("sprints"),
@@ -155,13 +161,21 @@ const readState = (): WorkspaceState => {
 let state: WorkspaceState = readState();
 const listeners = new Set<() => void>();
 
-const commit = (next: WorkspaceState) => {
-  state = next;
+let persistTimer: ReturnType<typeof setTimeout> | null = null;
+const persistNow = () => {
+  persistTimer = null;
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch {
     /* 隐私模式下不持久化，仅保留内存态 */
   }
+};
+
+const commit = (next: WorkspaceState) => {
+  state = next;
+  // 持久化改为空闲时合并写入，避免每次写入同步序列化整个（持续增大的）state 阻塞主线程导致点击卡顿。
+  if (persistTimer) clearTimeout(persistTimer);
+  persistTimer = setTimeout(persistNow, 200);
   listeners.forEach((listener) => listener());
 };
 
@@ -171,6 +185,12 @@ if (typeof window !== "undefined") {
     if (event.key !== STORAGE_KEY || event.newValue === null) return;
     state = readState();
     listeners.forEach((listener) => listener());
+  });
+  window.addEventListener("beforeunload", () => {
+    if (persistTimer) {
+      clearTimeout(persistTimer);
+      persistNow();
+    }
   });
 }
 
@@ -475,6 +495,7 @@ export const addIssue = (
     description?: string;
     status?: string;
     priority?: string;
+    severity?: string;
     assigneeId?: string | null;
     number?: number;
   }
@@ -488,7 +509,7 @@ export const addIssue = (
     description: input.description ?? "",
     status: input.status ?? "todo",
     priority: input.priority ?? "medium",
-    severity: "minor",
+    severity: input.severity ?? "minor",
     reporterId: CURRENT_USER_ID,
     assigneeId: input.assigneeId ?? null,
     sprintId: null,
@@ -531,7 +552,7 @@ export const addTask = (
     priority: input.priority ?? "medium",
     labelIds: [],
     assigneeId: input.assigneeId ?? null,
-    dueDate: input.dueDate ?? "RELATIVE_DAYS_PLUS7",
+    dueDate: input.dueDate || "RELATIVE_DAYS_PLUS7",
     sprintId: null,
     estimate: input.estimate ?? null,
     projectId,
@@ -624,7 +645,15 @@ export const addMilestone = (
 
 export const addEvent = (
   projectId: string | null,
-  input: { title: string; description?: string; date?: string; type?: string }
+  input: {
+    title: string;
+    description?: string;
+    date?: string;
+    type?: string;
+    assigneeId?: string | null;
+    allDay?: boolean;
+    endDate?: string | null;
+  }
 ) => {
   const id = `e-new-${uid()}`;
   const record: WsEvent = {
@@ -632,11 +661,11 @@ export const addEvent = (
     title: input.title,
     description: input.description ?? "",
     date: input.date ?? "RELATIVE_DAYS_PLUS0",
-    endDate: null,
+    endDate: input.endDate ?? null,
     type: input.type ?? "meeting",
     projectId,
-    assigneeId: CURRENT_USER_ID,
-    allDay: true,
+    assigneeId: input.assigneeId ?? null,
+    allDay: input.allDay ?? false,
   };
   commit({
     ...state,
@@ -651,14 +680,20 @@ export const addEvent = (
   return record;
 };
 
-export const addTeam = (input: { name: string; description?: string }) => {
+export const addTeam = (input: {
+  name: string;
+  description?: string;
+  leadId?: string;
+  memberIds?: string[];
+}) => {
   const id = `t-new-${uid()}`;
+  const leadId = input.leadId || CURRENT_USER_ID;
   const record: WsTeam = {
     id,
     name: input.name,
     description: input.description ?? "",
-    memberIds: [CURRENT_USER_ID],
-    leadId: CURRENT_USER_ID,
+    memberIds: input.memberIds ?? [leadId],
+    leadId,
     createdAt: nowIso(),
   };
   commit({ ...state, teams: [...state.teams, record] });
@@ -738,7 +773,7 @@ export const saveStageForm = (
 
 /**
  * 阶段表单确认后自动把项目推进到下一阶段：
- * 用户填完一个阶段不必再回到详情页点「Advance stage」，手动流转按钮仍保留。
+ * 用户填完一个阶段无需再手动流转；项目列表看板卡片仍保留快速流转入口。
  */
 export const completeStageForm = (key: string, form: StageForm, projectId?: string) => {
   saveStageForm(key, form, projectId);
@@ -755,6 +790,33 @@ export const completeStageForm = (key: string, form: StageForm, projectId?: stri
     target,
     `auto-advanced to ${stageLabel(target, false)} after ${key} form`
   );
+};
+
+/* ------------------------------ 迭代卡片视图 ------------------------------ */
+
+export const getStageView = (projectId: string): StageView =>
+  state.stageViews[projectId] ?? { order: [], hidden: [] };
+
+/** 拖动阶段卡片后固化顺序；未出现在顺序里的新卡片自动排在末尾。 */
+export const saveStageOrder = (projectId: string, order: string[]) => {
+  const view = getStageView(projectId);
+  commit({
+    ...state,
+    stageViews: { ...state.stageViews, [projectId]: { ...view, order } },
+  });
+};
+
+/** 从迭代视图隐藏某个阶段卡片，流程阶段本身保持不变。 */
+export const hideStageCard = (projectId: string, key: string) => {
+  const view = getStageView(projectId);
+  if (view.hidden.includes(key)) return;
+  commit({
+    ...state,
+    stageViews: {
+      ...state.stageViews,
+      [projectId]: { ...view, hidden: [...view.hidden, key] },
+    },
+  });
 };
 
 /** 审计/演示用：清空全部本地写入，回到线上快照基线。 */

@@ -1,5 +1,4 @@
-
-
+import { useState } from "react";
 import {
   Sheet,
   SheetTrigger,
@@ -7,28 +6,57 @@ import {
   SheetFooter,
   SheetClose,
 } from "src/components/ui/sheet";
-import { Avatar, AvatarImage, AvatarFallback } from "src/components/ui/avatar";
+import { Avatar, AvatarImage, AvatarFallback, AvatarBadge } from "src/components/ui/avatar";
 import { Button } from "src/components/ui/button";
+import { Check } from "lucide-react";
 import { Icon } from "@iconify/react";
+import { toast } from "sonner";
 
 import { cn } from "src/lib/utils";
 import { Mailbox } from 'lucide-react';
 
 import { profileDD } from "./data";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
-import avatar from '@/assets/images/profile/avtar.webp';
+import { useAuth } from "@/context/AuthContext";
+import { avatarSrc } from "@/views/apps/shared";
+import type { PresenceStatus } from "@/api/auth";
+import { presenceStyles, PRESENCE_STATUSES } from "@/lib/presence";
 import Buynow from '@/assets/images/backgrounds/sidebarbuynow.svg';
+
 export default function ProfileSheet() {
   const { t } = useTranslation();
+  const { user, logout, myPresence, setMyPresence } = useAuth();
+  const navigate = useNavigate();
+  const avatar = avatarSrc(user?.avatarUrl);
+  const initials = user?.name?.[0]?.toUpperCase() || "?";
+  const [statusMenuOpen, setStatusMenuOpen] = useState(false);
+
+  async function changeStatus(next: PresenceStatus) {
+    setStatusMenuOpen(false);
+    try {
+      await setMyPresence(next);
+    } catch {
+      toast.error(t("Operation failed"));
+    }
+  }
+
+  const handleLogout = () => {
+    logout()
+      .catch(() => undefined)
+      .finally(() => navigate('/login', { replace: true }));
+  };
 
   return (
     <Sheet>
       {/* Trigger Button */}
       <SheetTrigger className="cursor-pointer hover:bg-primary/5 flex items-center justify-center rounded-full h-10 w-10">
         <Avatar className="h-8 w-8">
-          <AvatarImage src={avatar} alt="profile" />
-          <AvatarFallback>CM</AvatarFallback>
+          <AvatarImage src={avatar} alt={user?.name ?? "profile"} />
+          <AvatarFallback>{initials}</AvatarFallback>
+          <AvatarBadge className={presenceStyles[myPresence].className}>
+            <span className="sr-only">{t(presenceStyles[myPresence].label)}</span>
+          </AvatarBadge>
         </Avatar>
       </SheetTrigger>
 
@@ -44,24 +72,63 @@ export default function ProfileSheet() {
         {/* Top Profile Section */}
         <div className="p-6 py-6">
           <div className="flex flex-col gap-4 justify-center items-center pt-10">
-            <Avatar className="h-16 w-16">
-              <AvatarImage
-                src={avatar}
-                alt="Profile"
-                width={30}
-                height={30}
-              />
-              <AvatarFallback>CM</AvatarFallback>
-            </Avatar>
+            <div className="relative">
+              <button
+                type="button"
+                aria-label={t("Status")}
+                aria-expanded={statusMenuOpen}
+                onClick={() => setStatusMenuOpen((open) => !open)}
+                className="relative rounded-full cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <Avatar className="h-16 w-16">
+                  <AvatarImage
+                    src={avatar}
+                    alt={user?.name ?? "Profile"}
+                    width={30}
+                    height={30}
+                  />
+                  <AvatarFallback>{initials}</AvatarFallback>
+                  <AvatarBadge className={cn(presenceStyles[myPresence].className, "size-4 ring-[3px]")} />
+                </Avatar>
+              </button>
+              {statusMenuOpen && (
+                <div
+                  role="menu"
+                  aria-label={t("Status")}
+                  className="absolute left-1/2 top-full z-50 mt-2 w-44 -translate-x-1/2 rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg"
+                >
+                  <p className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
+                    {t("Status")}
+                  </p>
+                  {PRESENCE_STATUSES.map((key) => (
+                    <button
+                      key={key}
+                      type="button"
+                      role="menuitemradio"
+                      aria-checked={myPresence === key}
+                      onClick={() => void changeStatus(key)}
+                      className={cn(
+                        "flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent focus:bg-accent",
+                        myPresence === key && "bg-accent/60",
+                      )}
+                    >
+                      <span className={cn("size-2 rounded-full", presenceStyles[key].className)} aria-hidden="true" />
+                      <span className="flex-1 text-start">{t(presenceStyles[key].label)}</span>
+                      {myPresence === key && <Check className="size-3.5" />}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
 
             <div className="text-center">
-              <h6 className="text-lg font-semibold">Cameron</h6>
+              <h6 className="text-lg font-semibold">{user?.name ?? "--"}</h6>
               <div className="flex items-center gap-2 justify-center">
                 <Mailbox
                   size={18} className="text-muted-foreground"
                 />
                 <span className="text-sm font-normal text-muted-foreground">
-                  info@shadcndashboard.com
+                  {user?.email ?? "--"}
                 </span>
               </div>
             </div>
@@ -102,7 +169,7 @@ export default function ProfileSheet() {
           </ul>
         </div>
 
-        {/* Footer */}
+        {/* Footer：仅保留插画与登出（推广文案已按用户要求删除） */}
         <SheetFooter className="px-0 pb-6">
           <div className="border-t border-border w-full">
             <div className="rounded-sm pt-6 flex flex-col justify-center items-center gap-3">
@@ -113,18 +180,9 @@ export default function ProfileSheet() {
                 />
               </div>
 
-              <div className="text-center">
-                <h5 className="text-xl font-semibold">
-                  {t("Grab ShadcnDashboard Admin")}
-                </h5>
-                <p className="text-sm text-muted-foreground">
-                  {t("Customize your dashboard")}
-                </p>
-              </div>
-
               <Button
                 variant="secondary"
-                render={<Link to="/auth/auth2/login" />}
+                onClick={handleLogout}
                 className="text-primary"
               >
                 {t("Log Out")}

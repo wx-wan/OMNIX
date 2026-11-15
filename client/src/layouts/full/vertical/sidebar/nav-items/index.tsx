@@ -24,17 +24,17 @@ export default function NavItem({
 
   return (
 
-    <motion.div className={cn("flex items-center gap-2 w-full group relative group-data-[state=collapsed]:px-2.5 px-3 py-2 my-0 h-9 transition-all duration-200 rounded-md",
-      isActive && "bg-primary text-background font-medium", className)}
+    <motion.div className={cn("flex items-center gap-2 w-full group relative group-data-[state=collapsed]:px-2.5 px-3 py-2 my-0 h-9 transition-all duration-200 rounded-full",
+      isActive && "bg-sidebar-accent text-foreground", className)}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
       <AnimatePresence>
 
-        {isHovered && (
+        {isHovered && !isActive && (
           <motion.div
             layoutId="nav-hover-bg"
-            className="absolute inset-0 bg-primary/5  rounded-lg"
+            className="absolute inset-0 bg-sidebar-accent/60 rounded-full"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -43,14 +43,14 @@ export default function NavItem({
         )}
       </AnimatePresence>
 
-      <span className={"relative flex items-center gap-2 w-full  rounded-md "}>
+      <span className={"relative flex items-center gap-2 w-full rounded-full"}>
         {/* Icon */}
         {item.icon && (
           <item.icon className={`h-4 w-4 ${item.color ?? ""}`} />
         )}
 
         {/* Name */}
-        <span className="font-medium hide-menu">{t(item.name)}</span>
+        <span className="text-sm font-medium hide-menu">{t(item.name)}</span>
 
         {/* Badge */}
         {item.badge && (

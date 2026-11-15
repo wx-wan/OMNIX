@@ -9,12 +9,15 @@ import {
   Query,
   HttpCode,
   Req,
+  UseGuards,
 } from "@nestjs/common";
 import { Request } from "express";
 import { ContactType } from "@prisma/client";
+import { MemberGuard } from "../auth/member.guard";
 import { ContactsService } from "./contacts.service";
 import { CreateContactDto } from "./dto/create-contact.dto";
 import { UpdateContactDto } from "./dto/update-contact.dto";
+import { UpdateContactUiMetaDto } from "./dto/update-contact-ui-meta.dto";
 
 @Controller("contacts")
 export class ContactsController {
@@ -62,6 +65,18 @@ export class ContactsController {
     return this.svc.getBotForUser((req.session as { userId?: string }).userId!);
   }
 
+  /** 联系人页展示元数据（starred / notes，存 Setting KV）。静态路由必须在 :id 之前。 */
+  @Get("ui-meta")
+  getUiMeta() {
+    return this.svc.getUiMeta();
+  }
+
+  @Patch("ui-meta/:id")
+  @UseGuards(MemberGuard)
+  updateUiMeta(@Param("id") id: string, @Body() dto: UpdateContactUiMetaDto) {
+    return this.svc.updateUiMeta(id, dto);
+  }
+
   @Get(":id")
   getOne(@Param("id") id: string) {
     return this.svc.getOne(id);
@@ -69,6 +84,7 @@ export class ContactsController {
 
   @Post()
   @HttpCode(201)
+  @UseGuards(MemberGuard)
   create(@Body() dto: CreateContactDto) {
     return this.svc.create(dto);
   }
@@ -79,12 +95,14 @@ export class ContactsController {
   }
 
   @Patch(":id")
+  @UseGuards(MemberGuard)
   update(@Param("id") id: string, @Body() dto: UpdateContactDto) {
     return this.svc.update(id, dto);
   }
 
   @Delete(":id")
   @HttpCode(204)
+  @UseGuards(MemberGuard)
   remove(@Param("id") id: string) {
     return this.svc.remove(id);
   }

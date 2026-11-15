@@ -4,8 +4,9 @@ import { Link, useNavigate } from "react-router";
 import {
   ArrowRight,
   CircleDot,
+  Columns3,
+  List,
   ListFilter,
-  MoreHorizontal,
   Search,
   SlidersHorizontal,
   UserRound,
@@ -20,11 +21,9 @@ import {
 import {
   STAGES,
   advanceStage,
-  archiveProject,
   createProject as createStageProject,
   projectNo,
   projectStage,
-  restoreProject,
   stageLabel,
   useProjectStageStore,
   type StageKey,
@@ -36,7 +35,6 @@ import {
   PmsCard,
   PmsCell,
   PmsDate,
-  PmsField,
   PmsGroup,
   PmsHeader,
   PmsIconButton,
@@ -48,10 +46,16 @@ import {
   PmsProgress,
   PmsRow,
   PmsSegmented,
-  PmsSheet,
   type PmsColumn,
 } from "../pms";
+import {
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuLabel,
+} from "@/components/ui/dropdown-menu";
 import { NewProjectDialog, type NewProjectValues } from "./new-project-dialog";
+import { ProjectRowActions } from "./project-row-actions";
 
 const COLUMNS: PmsColumn[] = [
   { label: "Project", w: "w-56" },
@@ -68,6 +72,8 @@ const PRIORITY_RANK: Record<string, number> = {
   medium: 2,
   low: 1,
 };
+/** 线上 PMS 表头加号展开的 Columns 菜单顺序；Completed 为锁定项。 */
+const COLUMN_MENU = ["Lead", "Members", "Progress", "Priority", "Due date"];
 const GROUP_BY = ["Stage", "Team", "Lead", "Status", "None"];
 const SORT_BY = ["Recently updated", "Name (A–Z)", "Due date", "Progress", "Priority"];
 /** 看板列配色沿用 /apps/kanban 的四套浅色，九阶段循环取值。 */
@@ -80,7 +86,6 @@ const BOARD_TONES = [
 
 export default function ProjectsPage() {
   const { t } = useTranslation();
-  const navigate = useNavigate();
   const { snap, zh, user, firstName, isLoading } = useWorkspace();
   const [view, setView] = useState("List");
   const [query, setQuery] = useState("");
@@ -92,10 +97,20 @@ export default function ProjectsPage() {
   const [showArchived, setShowArchived] = useState(false);
   const [collapsed, setCollapsed] = useState<string[]>([]);
   const [hidden, setHidden] = useState<string[]>([]);
-  const [selected, setSelected] = useState<WsProject | null>(null);
-  const [creating, setCreating] = useState(false);
-  const [creatingStage, setCreatingStage] = useState<StageKey>("requirement");
   const store = useProjectStageStore();
+  const navigate = useNavigate();
+  const [creatingStage, setCreatingStage] = useState<StageKey | null>(null);
+
+  /** 弹窗里填写项目基本信息后创建并进详情；客户与产品信息在迭代 → 需求阶段 → 需求详情表单里补录。 */
+  const create = (values: NewProjectValues, stage: StageKey) => {
+    const created = createStageProject(values.name, values.description, stage, {
+      status: values.status,
+      priority: values.priority,
+      ...(values.dueDate ? { dueDate: values.dueDate } : {}),
+    });
+    setCreatingStage(null);
+    navigate(`/projects/${created.id}`);
+  };
 
   const all = useMemo(
     () => (snap?.projects ?? []).filter((p) => showArchived || !p.archived),
@@ -171,29 +186,48 @@ export default function ProjectsPage() {
     return formatDate(project.dueDate, "ch", "full");
   };
 
-  const create = (values: NewProjectValues) => {
-    const name = values.name.trim();
-    if (!name) return;
-    const created = createStageProject(name, values.description, creatingStage, {
-      status: values.status,
-      priority: values.priority,
-      dueDate: values.dueDate || undefined,
-    });
-    setCreating(false);
-    navigate(`/projects/${created.id}`);
-  };
 
   if (isLoading || !snap) return <div className="p-10 text-sm text-muted-foreground">…</div>;
 
   const visible = (label: string) => !hidden.includes(label);
   const columns = COLUMNS.filter((c) => c.label === "Project" || visible(c.label));
+  const columnsMenu = (
+    <DropdownMenuContent align="end" className="min-w-40">
+      <DropdownMenuGroup>
+        <DropdownMenuLabel>{t("Columns")}</DropdownMenuLabel>
+        {COLUMN_MENU.map((label) => (
+          <DropdownMenuCheckboxItem
+            key={label}
+            checked={!hidden.includes(label)}
+            onCheckedChange={(checked) =>
+              setHidden((prev) =>
+                checked
+                  ? prev.filter((item) => item !== label)
+                  : [...prev, label]
+              )
+            }
+          >
+            {t(label)}
+          </DropdownMenuCheckboxItem>
+        ))}
+        <DropdownMenuCheckboxItem checked={false} disabled>
+          {t("Completed")}
+        </DropdownMenuCheckboxItem>
+      </DropdownMenuGroup>
+    </DropdownMenuContent>
+  );
 
   return (
     <PmsPage
       title={t("Projects")}
       count={t("N projects", { n: all.length })}
       segmented={
-        <PmsSegmented options={["Board", "List"]} value={view} onChange={setView} />
+        <PmsSegmented
+          options={["Board", "List"]}
+          value={view}
+          onChange={setView}
+          icons={{ Board: Columns3, List }}
+        />
       }
     >
       <PmsCard
@@ -270,22 +304,14 @@ export default function ProjectsPage() {
             </div>
             <PmsNewButton
               label={t("New Project")}
-              onClick={() => {
-                setCreatingStage("requirement");
-                setCreating(true);
-              }}
+              onClick={() => setCreatingStage("requirement")}
             />
           </>
         }
       >
         {view === "List" ? (
           <>
-            <PmsHeader
-              columns={columns}
-              onColumnsClick={() =>
-                setHidden((prev) => (prev.length ? [] : ["Progress"]))
-              }
-            />
+            <PmsHeader columns={columns} columnsMenu={columnsMenu} />
             {groups.map((group) => (
               <PmsGroup
                 key={group.label}
@@ -308,14 +334,11 @@ export default function ProjectsPage() {
                     description={`${noOf(project)} · ${project.description}`}
                     href={`/projects/${project.id}`}
                     actions={
-                      <button
-                        type="button"
-                        aria-label={`Actions for ${project.name}`}
-                        onClick={() => setSelected(project)}
-                        className="inline-flex size-7 cursor-pointer items-center justify-center rounded-[min(var(--radius-md),12px)] text-muted-foreground hover:bg-muted hover:text-foreground"
-                      >
-                        <MoreHorizontal className="size-4" />
-                      </button>
+                      <ProjectRowActions
+                        project={project}
+                        currentStage={stageOf(project)}
+                        zh={zh}
+                      />
                     }
                     cells={
                       <Fragment>
@@ -421,10 +444,7 @@ export default function ProjectsPage() {
                   ))}
                   <button
                     type="button"
-                    onClick={() => {
-                      setCreatingStage(stage.key);
-                      setCreating(true);
-                    }}
+                    onClick={() => setCreatingStage(stage.key)}
                     className="flex h-8 w-full cursor-pointer items-center gap-2 px-2 text-xs text-muted-foreground hover:bg-muted"
                   >
                     + {t("Add Task")}
@@ -436,87 +456,12 @@ export default function ProjectsPage() {
         )}
       </PmsCard>
 
-      <PmsSheet
-        open={Boolean(selected)}
-        onOpenChange={(open) => !open && setSelected(null)}
-        title={selected?.name ?? ""}
-        description={selected?.description}
-      >
-        {selected ? (
-          <>
-            <PmsField label={t("Project No.")}>{noOf(selected)}</PmsField>
-            <PmsField label={t("Stage")}>
-              <div className="flex items-center gap-2">
-                <span className="inline-flex h-5 items-center rounded-4xl bg-blue-500/10 px-2 text-[11px] font-medium text-blue-500">
-                  {stageName(selected)}
-                </span>
-                {stageOf(selected) !== "after_sales" ? (
-                  <button
-                    type="button"
-                    onClick={() => advance(selected)}
-                    className="inline-flex h-6 items-center gap-1 rounded-md bg-blue-500 px-2 text-[11px] font-medium text-white"
-                  >
-                    <ArrowRight className="size-3" />
-                    {zh ? "推进" : "Advance"}
-                  </button>
-                ) : null}
-              </div>
-            </PmsField>
-            <PmsField label={t("Lead")}>
-              <div className="flex items-center gap-2">
-                <PmsAvatar name={user(selected.leadId)?.name} avatar={user(selected.leadId)?.avatar} />
-                {user(selected.leadId)?.name}
-              </div>
-            </PmsField>
-            <PmsField label={t("Members")}>
-              <PmsAvatarGroup people={membersOf(selected)} max={8} />
-            </PmsField>
-            <PmsField label={t("Progress")}>
-              <PmsProgress value={selected.progress} status={selected.status} />
-            </PmsField>
-            <PmsField label={t("Priority")}>
-              <PmsPriority
-                value={selected.priority}
-                label={t(selected.priority.charAt(0).toUpperCase() + selected.priority.slice(1))}
-              />
-            </PmsField>
-            <PmsField label={t("Due date")}>{dueText(selected)}</PmsField>
-            <PmsField label={t("Team")}>
-              {snap.teams.find((team) => team.id === selected.teamId)?.name ?? "—"}
-            </PmsField>
-            <PmsField label={t("Issues")}>
-              {snap.issues.filter((issue) => issue.projectId === selected.id).length}
-            </PmsField>
-            <PmsField label={t("Tasks")}>
-              {snap.tasks.filter((task) => task.projectId === selected.id).length}
-            </PmsField>
-            <div className="flex gap-2">
-              <Link
-                to={`/projects/${selected.id}`}
-                className="inline-flex h-8 flex-1 items-center justify-center rounded-md bg-primary px-2.5 text-sm font-medium text-primary-foreground"
-              >
-                {t("Details")}
-              </Link>
-              <button
-                type="button"
-                onClick={() =>
-                  selected.archived
-                    ? restoreProject(selected.id)
-                    : archiveProject(selected.id)
-                }
-                className="inline-flex h-8 flex-1 items-center justify-center rounded-md bg-destructive/10 px-2.5 text-sm font-medium text-destructive hover:bg-destructive/20"
-              >
-                {selected.archived ? t("Restore") : t("Archive")}
-              </button>
-            </div>
-          </>
-        ) : null}
-      </PmsSheet>
-
       <NewProjectDialog
-        open={creating}
-        onOpenChange={setCreating}
-        onSubmit={create}
+        open={creatingStage !== null}
+        onOpenChange={(open) => {
+          if (!open) setCreatingStage(null);
+        }}
+        onSubmit={(values) => create(values, creatingStage ?? "requirement")}
       />
     </PmsPage>
   );

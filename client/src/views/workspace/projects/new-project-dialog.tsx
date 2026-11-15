@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "src/components/ui/select";
 import { Textarea } from "src/components/ui/textarea";
+import { DatePicker } from "src/components/ui/date-picker";
 
 export type NewProjectValues = {
   name: string;
@@ -123,7 +124,14 @@ export function NewProjectDialog({
                   onValueChange={(value) => value && set("status", value)}
                 >
                   <SelectTrigger id="project-status" className="w-full">
-                    <SelectValue />
+                    <SelectValue>
+                      {(value) =>
+                        t(
+                          STATUS_OPTIONS.find((o) => o.value === value)?.label ??
+                            (value as string) ??
+                            ""
+                        )}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {STATUS_OPTIONS.map((option) => (
@@ -142,7 +150,14 @@ export function NewProjectDialog({
                   onValueChange={(value) => value && set("priority", value)}
                 >
                   <SelectTrigger id="project-priority" className="w-full">
-                    <SelectValue />
+                    <SelectValue>
+                      {(value) =>
+                        t(
+                          PRIORITY_OPTIONS.find((o) => o.value === value)?.label ??
+                            (value as string) ??
+                            ""
+                        )}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {PRIORITY_OPTIONS.map((option) => (
@@ -157,12 +172,11 @@ export function NewProjectDialog({
 
             <Field>
               <FieldLabel htmlFor="project-due-date">{t("Due Date")}</FieldLabel>
-              <Input
+              <DatePicker
                 id="project-due-date"
-                type="date"
-                name="dueDate"
                 value={values.dueDate}
-                onChange={(event) => set("dueDate", event.target.value)}
+                placeholder={t("Select a date")}
+                onChange={(value) => set("dueDate", value ?? "")}
               />
             </Field>
           </FieldGroup>

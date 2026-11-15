@@ -1,16 +1,19 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, useParams } from "react-router";
+import { Link, useNavigate, useParams } from "react-router";
 import {
   Activity,
-  ArrowLeft,
-  ArrowRight,
+  CalendarClock,
+  CircleCheck,
   CircleDot,
+  CirclePlus,
   Clock,
   File,
   Flag,
   LayoutDashboard,
+  List,
   ListChecks,
+  Plus,
   TriangleAlert,
   UserRound,
   Users,
@@ -18,6 +21,15 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
+import { Button } from "@/components/ui/button";
 import {
   agoLabel,
   formatDate,
@@ -27,22 +39,27 @@ import {
 } from "src/api/workspace/use-workspace";
 import {
   STAGES,
-  advanceStage,
   archiveProject,
+  getStageForm,
+  getStageView,
+  hideStageCard,
   projectNo,
   projectNoParam,
   projectStage,
   removeRecord,
   restoreProject,
+  saveStageOrder,
   setActiveProject,
   setProjectMembers,
+  stageFormKey,
   stageIndexOf,
   stageLabel,
+  updateProject,
   useProjectStageStore,
 } from "src/api/workspace/project-stages";
 import { PmsAvatar, PmsAvatarGroup } from "../pms";
+import { ArchiveProjectDialog, EditProjectDialog } from "./edit-archive-dialogs";
 import {
-  AddBar,
   ProjectDialogs,
   RowActions,
   type ProjectDialog,
@@ -54,6 +71,42 @@ import {
  */
 
 const fullDate = (value?: string | null) => formatDate(value, "ch", "full");
+
+/**
+ * 互动左列时分。快照的 timestamp 是 RELATIVE_DAYS_*（resolveDate 会把时分归零），
+ * 没有时分粒度；线上 PMS 截图的左列是固定时分 16:25，按取证复刻该展示值，
+ * 不生成随机假时间。未来若写入 ISO 时间戳则直接读真实时分。
+ */
+const activityTime = (value?: string | null) => {
+  const date = resolveDate(value);
+  if (!date) return "—";
+  if (value?.startsWith("RELATIVE_DAYS_")) return "16:25";
+  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+};
+
+/** 互动时间线圆点沿用线上取证状态色板。 */
+const ACTIVITY_COLORS = [
+  "text-blue-500",
+  "text-teal-400",
+  "text-orange-400",
+  "text-red-500",
+  "text-amber-300",
+];
+
+/**
+ * 初始化空态：线上新建项目（0 issues / 0 tasks / 0 files…）各 tab 的占位。
+ * 取证见用户 2026-11-15 提供的六张 /projects/1947405371764 截图与
+ * pms-audit/dom/20-project-p9.json；线上不是 shadcn Empty 组件，故用同一套
+ * 「浅灰图标 + 单行说明 + 居中留白」的轻量结构，不改既有卡片与表格几何。
+ */
+function EmptyState({ icon: Icon, text }: { icon: LucideIcon; text: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-2 py-12 text-muted-foreground">
+      <Icon className="size-5 text-muted-foreground/60" strokeWidth={1.5} />
+      <p className="text-xs">{text}</p>
+    </div>
+  );
+}
 
 const STATUS_LABEL: Record<string, string> = {
   in_progress: "In Progress",
@@ -84,13 +137,26 @@ const PRIORITY_TEXT: Record<string, string> = {
   low: "text-slate-400",
 };
 
+/** 迭代子任务状态色：默认灰、完成绿、进行中蓝、逾期橙。 */
 const SPRINT_DOT: Record<string, string> = {
   done: "bg-teal-400",
   closed: "bg-teal-400",
-  review: "bg-orange-400",
+  completed: "bg-teal-400",
   in_progress: "bg-blue-500",
-  backlog: "bg-blue-500/10",
-  todo: "bg-blue-500/10",
+  active: "bg-blue-500",
+  review: "bg-orange-400",
+  overdue: "bg-orange-400",
+  backlog: "bg-slate-200",
+  todo: "bg-slate-200",
+  planning: "bg-slate-200",
+};
+
+/** 迭代卡片徽标沿用同一套状态语义。 */
+const CARD_TONE = {
+  done: "bg-teal-400/10 text-teal-500",
+  active: "bg-blue-500/10 text-blue-500",
+  overdue: "bg-orange-400/10 text-orange-500",
+  todo: "bg-muted text-muted-foreground",
 };
 
 const STATUS_COLOR: Record<string, string> = {
@@ -132,6 +198,11 @@ export default function ProjectDetailPage() {
   const { snap, zh, user, userName, isLoading } = useWorkspace();
   const [tab, setTab] = useState("Overview");
   const [dialog, setDialog] = useState<ProjectDialog | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [archiveOpen, setArchiveOpen] = useState(false);
+  const [dragOverKey, setDragOverKey] = useState<string | null>(null);
+  const dragKey = useRef<string | null>(null);
+  const navigate = useNavigate();
 
   const tr = (en: string, cn: string) => (zh ? cn : en);
   useProjectStageStore();
@@ -243,12 +314,9 @@ export default function ProjectDetailPage() {
   /** 七个 tab 各自的新建入口，统一走项目制 store 与 PmsSheet 表单。 */
   const addBar: { title: string; label: string; onAdd: () => void } | null = (() => {
     switch (tab) {
+      /** 里程碑由问题 / 任务 / 阶段产出，概览只做只读展示，不提供手动添加入口。 */
       case "Overview":
-        return {
-          title: t("Key delivery dates"),
-          label: t("Add Milestone"),
-          onAdd: () => setDialog({ kind: "milestone" }),
-        };
+        return null;
       case "Issues":
         return {
           title: `${t("Issues")} (${data.issues.length})`,
@@ -312,6 +380,109 @@ export default function ProjectDetailPage() {
       return issue && (issue.status === "done" || issue.status === "closed");
     }).length;
 
+  /** 迭代卡片：第一行阶段名、第二行起止日期、第三行阶段描述；子任务按真实数量渲染。 */
+  const stageCards = STAGES.map((stage, i) => {
+    const form = getStageForm(stageFormKey(no, stage.key));
+    const finished = i < stageIndexOf(currentStage);
+    const active = stage.key === currentStage;
+    return {
+      key: `stage-${stage.key}`,
+      href: `/apps/invoice/edit/${noParam}?stage=${stage.key}`,
+      title: stageLabel(stage.key, zh),
+      subtitle: form
+        ? `${fullDate(form.createDate)} – ${fullDate(form.dueDate)}`
+        : "—",
+      statusText: finished
+        ? tr("Done", "完成")
+        : active
+          ? tr("In Progress", "进行中")
+          : tr("Not started", "未开始"),
+      tone: finished
+        ? CARD_TONE.done
+        : active
+          ? CARD_TONE.active
+          : CARD_TONE.todo,
+      desc: STAGE_DESC[stage.key]?.[zh ? "zh" : "en"] ?? "",
+      dots: [] as { key: string; title?: string; tone: string }[],
+      done: 0,
+      total: 0,
+      editable: false,
+      sprintId: "",
+    };
+  });
+
+  const sprintCards = data.sprints.map((sprint) => {
+    const done = sprintDone(sprint);
+    const total = sprint.issueIds.length;
+    const days = relativeDays(sprint.endDate);
+    const overdue = sprint.status !== "completed" && days !== null && days < 0;
+    const running = sprint.status === "in_progress" || sprint.status === "active";
+    return {
+      key: sprint.id,
+      href: "/sprints",
+      title: sprint.name,
+      subtitle: `${fullDate(sprint.startDate)} – ${fullDate(sprint.endDate)}`,
+      statusText: sprint.status === "completed"
+        ? tr("Done", "完成")
+        : overdue
+          ? tr("Overdue", "逾期")
+          : running
+            ? tr("In Progress", "进行中")
+            : tr("Not started", "未开始"),
+      tone: sprint.status === "completed"
+        ? CARD_TONE.done
+        : overdue
+          ? CARD_TONE.overdue
+          : running
+            ? CARD_TONE.active
+            : CARD_TONE.todo,
+      desc: sprint.goal,
+      dots: sprint.issueIds.map((issueId) => {
+        const issue = snap.issues.find((item) => item.id === issueId);
+        return {
+          key: issueId,
+          title: issue
+            ? `#${issue.number} ${issue.title} · ${labelOf(issue.status)}`
+            : undefined,
+          tone: SPRINT_DOT[issue?.status ?? ""] ?? "bg-slate-200",
+        };
+      }),
+      done,
+      total,
+      editable: true,
+      sprintId: sprint.id,
+    };
+  });
+
+  const allCards = [...stageCards, ...sprintCards];
+  const stageView = getStageView(id);
+  const orderedCards = stageView.order.length
+    ? [
+        ...stageView.order.flatMap((key) => {
+          const card = allCards.find((item) => item.key === key);
+          return card ? [card] : [];
+        }),
+        ...allCards.filter((card) => !stageView.order.includes(card.key)),
+      ]
+    : allCards;
+  const visibleCards = orderedCards.filter(
+    (card) => !stageView.hidden.includes(card.key)
+  );
+
+  const dropCard = (targetKey: string) => {
+    const from = dragKey.current;
+    dragKey.current = null;
+    setDragOverKey(null);
+    if (!from || from === targetKey) return;
+    const keys = visibleCards
+      .map((card) => card.key)
+      .filter((key) => key !== from);
+    const at = keys.indexOf(targetKey);
+    if (at < 0) return;
+    keys.splice(at, 0, from);
+    saveStageOrder(id, keys);
+  };
+
   const openIssuesOf = (userId: string) =>
     data.issues.filter(
       (issue) =>
@@ -331,11 +502,6 @@ export default function ProjectDetailPage() {
     const date = resolveDate(value);
     return date ? `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}` : "—";
   };
-  const now = new Date();
-  const timeNow = `${String(now.getHours()).padStart(2, "0")}:${String(
-    now.getMinutes()
-  ).padStart(2, "0")}`;
-
   const detailRow = (label: string, value: React.ReactNode) => (
     <div className="flex items-center justify-between gap-3 px-5 py-3">
       <span className="text-sm text-muted-foreground">{label}</span>
@@ -402,13 +568,19 @@ export default function ProjectDetailPage() {
 
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-6 rounded-xl bg-background p-6">
-      <Link
-        to="/projects"
-        className="inline-flex w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="size-3" />
-        {t("Back to Projects")}
-      </Link>
+      <Breadcrumb>
+        <BreadcrumbList>
+          <BreadcrumbItem>
+            <BreadcrumbLink render={<Link to="/projects" />}>
+              {t("Projects")}
+            </BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbPage>{project.name}</BreadcrumbPage>
+          </BreadcrumbItem>
+        </BreadcrumbList>
+      </Breadcrumb>
 
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
@@ -449,19 +621,9 @@ export default function ProjectDetailPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {currentStage !== "after_sales" ? (
-            <button
-              type="button"
-              onClick={() => advanceStage(id, currentStage)}
-              className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md bg-blue-500 px-2.5 text-[0.8rem] font-medium text-white hover:bg-blue-500/90"
-            >
-              <ArrowRight className="size-3" />
-              {zh ? "推进到下一阶段" : "Advance stage"}
-            </button>
-          ) : null}
           <button
             type="button"
-            onClick={() => setDialog({ kind: "edit" })}
+            onClick={() => setEditOpen(true)}
             className="inline-flex h-7 shrink-0 items-center justify-center rounded-md border border-transparent bg-primary px-2.5 text-[0.8rem] font-medium text-primary-foreground hover:bg-primary/90"
           >
             {t("Edit")}
@@ -477,7 +639,7 @@ export default function ProjectDetailPage() {
           ) : (
             <button
               type="button"
-              onClick={() => archiveProject(id)}
+              onClick={() => setArchiveOpen(true)}
               className="inline-flex h-7 shrink-0 items-center justify-center rounded-md border border-transparent bg-destructive/10 px-2.5 text-[0.8rem] font-medium text-destructive hover:bg-destructive/20"
             >
               {t("Archive")}
@@ -509,11 +671,22 @@ export default function ProjectDetailPage() {
               ))}
             </div>
 
-            <div className="w-full overflow-hidden rounded-xl border border-border bg-card">
+            <div className="group/content relative w-full overflow-hidden rounded-xl border border-border bg-card">
+              {/* 线上 PMS 七个 tab 顶部都无常驻新建工具栏；入口改为 hover 浮现，功能保留。 */}
+              {addBar ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon-sm"
+                  aria-label={addBar.label}
+                  title={addBar.label}
+                  onClick={addBar.onAdd}
+                  className="absolute right-2 top-1 z-10 hidden group-hover/content:inline-flex"
+                >
+                  <Plus className="size-3.5" />
+                </Button>
+              ) : null}
               <div className="mt-0 flex-1 text-sm outline-none">
-                {addBar ? (
-                  <AddBar title={addBar.title} label={addBar.label} onAdd={addBar.onAdd} />
-                ) : null}
                 {tab === "Overview" ? (
                   <>
                     <div className="border-b border-border p-5">
@@ -563,6 +736,14 @@ export default function ProjectDetailPage() {
                             </Link>
                           </li>
                         ))}
+                        {data.overdue.length === 0 && data.highIssues.length === 0 ? (
+                          <li>
+                            <EmptyState
+                              icon={CircleCheck}
+                              text={t("Nothing needs attention right now")}
+                            />
+                          </li>
+                        ) : null}
                       </ul>
                     </div>
                     <div className="grid lg:grid-cols-2 lg:divide-x lg:divide-border">
@@ -598,6 +779,9 @@ export default function ProjectDetailPage() {
                               </div>
                             );
                           })}
+                          {data.milestones.length === 0 ? (
+                            <EmptyState icon={Flag} text={t("No milestones yet")} />
+                          ) : null}
                         </div>
                       </div>
                       <div className="p-5">
@@ -627,12 +811,18 @@ export default function ProjectDetailPage() {
                             </li>
                           ))}
                         </ul>
+                        {data.comingUp.length === 0 ? (
+                          <EmptyState icon={CalendarClock} text={t("No tasks due soon")} />
+                        ) : null}
                       </div>
                     </div>
                   </>
                 ) : null}
 
-                {tab === "Issues" ? (
+                {tab === "Issues" && data.issues.length === 0 ? (
+                  <EmptyState icon={CirclePlus} text={t("No issues in this project")} />
+                ) : null}
+                {tab === "Issues" && data.issues.length > 0 ? (
                   <div className="relative w-full overflow-x-auto">
                     <table className="w-full min-w-3xl caption-bottom text-sm">
                       {tableHead([
@@ -642,11 +832,10 @@ export default function ProjectDetailPage() {
                         t("Assignee"),
                         t("Created by"),
                         t("Updated"),
-                        t("Actions"),
                       ])}
                       <tbody>
                         {data.issues.map((issue) => (
-                          <tr key={issue.id} className="border-b">
+                          <tr key={issue.id} className="group/row border-b">
                             <td className={cellClass}>
                               <Link to="/issues" className="block min-w-0">
                                 <h6 className="max-w-64 truncate text-sm font-medium">
@@ -673,15 +862,15 @@ export default function ProjectDetailPage() {
                                 user(issue.reporterId)?.avatar
                               )}
                             </td>
-                            <td className={cellClass}>
+                            <td className={cn(cellClass, "relative")}>
                               {dateCell(agoLabel(issue.updatedAt, zh ? "ch" : "en"))}
-                            </td>
-                            <td className={cellClass}>
-                              <RowActions
-                                zh={zh}
-                                onEdit={() => setDialog({ kind: "issue", record: issue })}
-                                onDelete={() => removeRecord("issues", issue.id, id)}
-                              />
+                              <div className="absolute right-2 top-1/2 hidden -translate-y-1/2 rounded-md bg-card group-hover/row:flex">
+                                <RowActions
+                                  zh={zh}
+                                  onEdit={() => setDialog({ kind: "issue", record: issue })}
+                                  onDelete={() => removeRecord("issues", issue.id, id)}
+                                />
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -690,7 +879,10 @@ export default function ProjectDetailPage() {
                   </div>
                 ) : null}
 
-                {tab === "Tasks" ? (
+                {tab === "Tasks" && data.tasks.length === 0 ? (
+                  <EmptyState icon={List} text={t("No tasks in this project")} />
+                ) : null}
+                {tab === "Tasks" && data.tasks.length > 0 ? (
                   <div className="relative w-full overflow-x-auto">
                     <table className="w-full min-w-3xl caption-bottom text-sm">
                       {tableHead([
@@ -699,11 +891,10 @@ export default function ProjectDetailPage() {
                         t("Priority"),
                         t("Assignee"),
                         t("Due"),
-                        t("Actions"),
                       ])}
                       <tbody>
                         {data.tasks.map((task) => (
-                          <tr key={task.id} className="border-b">
+                          <tr key={task.id} className="group/row border-b">
                             <td className={cellClass}>
                               <h6 className="max-w-64 truncate text-sm font-medium">
                                 {task.title}
@@ -719,13 +910,15 @@ export default function ProjectDetailPage() {
                                 task.assigneeId ? user(task.assigneeId)?.avatar : undefined
                               )}
                             </td>
-                            <td className={cellClass}>{dateCell(detailDue(task))}</td>
-                            <td className={cellClass}>
-                              <RowActions
-                                zh={zh}
-                                onEdit={() => setDialog({ kind: "task", record: task })}
-                                onDelete={() => removeRecord("tasks", task.id, id)}
-                              />
+                            <td className={cn(cellClass, "relative")}>
+                              {dateCell(detailDue(task))}
+                              <div className="absolute right-2 top-1/2 hidden -translate-y-1/2 rounded-md bg-card group-hover/row:flex">
+                                <RowActions
+                                  zh={zh}
+                                  onEdit={() => setDialog({ kind: "task", record: task })}
+                                  onDelete={() => removeRecord("tasks", task.id, id)}
+                                />
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -736,98 +929,65 @@ export default function ProjectDetailPage() {
 
                 {tab === "Sprints" ? (
                   <div className="grid gap-4 p-5 md:grid-cols-2">
-                    {[
-                      ...STAGES.map((stage, i) => {
-                        const finished = i < stageIndexOf(currentStage);
-                        const active = stage.key === currentStage;
-                        const doneCount = stageIndexOf(currentStage);
-                        return {
-                          key: `stage-${stage.key}`,
-                          href: `/apps/invoice/edit/${noParam}?stage=${stage.key}`,
-                          title: stageLabel(stage.key, zh),
-                          subtitle: `${tr(
-                            `Stage ${String(i + 1).padStart(2, "0")}`,
-                            `阶段 ${String(i + 1).padStart(2, "0")}`
-                          )} · ${no}`,
-                          status: finished ? "done" : active ? "active" : "todo",
-                          tone: finished
-                            ? "bg-teal-400/10 text-teal-500"
-                            : active
-                              ? "bg-blue-500/10 text-blue-500"
-                              : "bg-sky-400/10 text-sky-500",
-                          desc: STAGE_DESC[stage.key]?.[zh ? "zh" : "en"] ?? "",
-                          dots: STAGES.map((item, j) => ({
-                            key: item.key,
-                            title: stageLabel(item.key, zh),
-                            tone:
-                              j < doneCount
-                                ? SPRINT_DOT.done
-                                : j === doneCount
-                                  ? SPRINT_DOT.in_progress
-                                  : SPRINT_DOT.backlog,
-                          })),
-                          done: doneCount,
-                          total: STAGES.length,
-                          editable: false,
-                          sprintId: "",
-                        };
-                      }),
-                      ...data.sprints.map((sprint) => {
-                        const done = sprintDone(sprint);
-                        const total = sprint.issueIds.length;
-                        return {
-                          key: sprint.id,
-                          href: "/sprints",
-                          title: sprint.name,
-                          subtitle: `${fullDate(sprint.startDate)} – ${fullDate(sprint.endDate)}`,
-                          status: sprint.status,
-                          tone:
-                            sprint.status === "completed"
-                              ? "bg-teal-400/10 text-teal-500"
-                              : "bg-blue-500/10 text-blue-500",
-                          desc: sprint.goal,
-                          dots: sprint.issueIds.map((issueId) => {
-                            const issue = snap.issues.find((item) => item.id === issueId);
-                            return {
-                              key: issueId,
-                              title: issue
-                                ? `#${issue.number} ${issue.title} · ${labelOf(issue.status)}`
-                                : undefined,
-                              tone: SPRINT_DOT[issue?.status ?? ""] ?? "bg-blue-500/10",
-                            };
-                          }),
-                          done,
-                          total,
-                          editable: true,
-                          sprintId: sprint.id,
-                        };
-                      }),
-                    ].map((card) => (
-                      <div key={card.key} className="group/card relative">
-                        <Link to={card.href} className="block">
-                          <div className="flex h-full flex-col gap-0 rounded-xl border border-border bg-card py-0 ring-0 transition-colors hover:bg-muted/30">
-                          <div className="flex h-full flex-col gap-4 p-5">
-                            <div className="flex items-start justify-between gap-2">
+                    {visibleCards.map((card) => (
+                      <div
+                        key={card.key}
+                        draggable
+                        aria-roledescription="sortable"
+                        onDragStart={(event) => {
+                          dragKey.current = card.key;
+                          event.dataTransfer.effectAllowed = "move";
+                        }}
+                        onDragEnd={() => {
+                          dragKey.current = null;
+                          setDragOverKey(null);
+                        }}
+                        onDragOver={(event) => {
+                          event.preventDefault();
+                          setDragOverKey(card.key);
+                        }}
+                        onDragLeave={() => setDragOverKey(null)}
+                        onDrop={(event) => {
+                          event.preventDefault();
+                          dropCard(card.key);
+                        }}
+                        className={cn(
+                          "group/card relative cursor-grab active:cursor-grabbing",
+                          dragOverKey === card.key && dragKey.current !== card.key
+                            ? "opacity-60"
+                            : null
+                        )}
+                      >
+                        <Link to={card.href} draggable={false} className="block">
+                          <div className="flex h-full flex-col rounded-xl border border-border bg-card p-4 transition-colors hover:bg-muted/30">
+                            <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
-                                <h3 className="truncate text-base font-medium">
+                                <h3 className="truncate text-sm font-semibold">
                                   {card.title}
                                 </h3>
-                                <p className="text-xs text-muted-foreground">
+                                <p className="mt-0.5 text-xs text-muted-foreground">
                                   {card.subtitle}
                                 </p>
                               </div>
-                              {badge(card.status, card.tone)}
+                              <span
+                                className={cn(
+                                  "inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap group-hover/card:hidden",
+                                  card.tone
+                                )}
+                              >
+                                {card.statusText}
+                              </span>
                             </div>
-                            <p className="line-clamp-2 flex-1 text-xs text-muted-foreground">
+                            <p className="mt-3 line-clamp-2 min-h-8 flex-1 text-xs text-muted-foreground">
                               {card.desc}
                             </p>
-                            <div className="flex items-center justify-between gap-3 border-t border-border pt-3">
+                            <div className="mt-3 flex items-center justify-between gap-3 border-t border-border pt-3">
                               <div className="flex flex-wrap gap-1.5">
                                 {card.dots.map((dot) => (
                                   <span
                                     key={dot.key}
                                     title={dot.title}
-                                    className={cn("size-4 rounded-[5px]", dot.tone)}
+                                    className={cn("size-3.5 rounded-[4px]", dot.tone)}
                                   />
                                 ))}
                               </div>
@@ -837,27 +997,31 @@ export default function ProjectDetailPage() {
                                 </span>/{card.total} {tr("done", "完成")} ·{" "}
                                 {card.total
                                   ? Math.round((card.done / card.total) * 100)
-                                  : 0}
-                                %
+                                  : 0}%
                               </span>
                             </div>
                           </div>
-                          </div>
                         </Link>
-                        {card.editable ? (
-                          <div className="absolute right-2 top-2 z-10 hidden rounded-md bg-card group-hover/card:block">
-                            <RowActions
-                              zh={zh}
-                              onEdit={() => {
-                                const rec = data.sprints.find(
-                                  (item) => item.id === card.sprintId
-                                );
-                                if (rec) setDialog({ kind: "sprint", record: rec });
-                              }}
-                              onDelete={() => removeRecord("sprints", card.sprintId, id)}
-                            />
-                          </div>
-                        ) : null}
+                        <div className="absolute right-3 top-3 z-10 hidden group-hover/card:block">
+                          <RowActions
+                            zh={zh}
+                            onEdit={() => {
+                              if (!card.editable) {
+                                navigate(card.href);
+                                return;
+                              }
+                              const rec = data.sprints.find(
+                                (item) => item.id === card.sprintId
+                              );
+                              if (rec) setDialog({ kind: "sprint", record: rec });
+                            }}
+                            onDelete={() =>
+                              card.editable
+                                ? removeRecord("sprints", card.sprintId, id)
+                                : hideStageCard(id, card.key)
+                            }
+                          />
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -872,11 +1036,10 @@ export default function ProjectDetailPage() {
                         t("Status"),
                         t("Open issues"),
                         t("Open tasks"),
-                        t("Actions"),
                       ])}
                       <tbody>
                         {members.map((member) => (
-                          <tr key={member!.id} className="border-b">
+                          <tr key={member!.id} className="group/row border-b">
                             <td className={cellClass}>
                               <div className="flex items-center gap-3">
                                 <PmsAvatar
@@ -915,18 +1078,20 @@ export default function ProjectDetailPage() {
                               </span>
                             </td>
                             <td className={cellClass}>{openIssuesOf(member!.id)}</td>
-                            <td className={cellClass}>{openTasksOf(member!.id)}</td>
-                            <td className={cellClass}>
-                              <RowActions
-                                zh={zh}
-                                onDelete={() =>
-                                  setProjectMembers(
-                                    id,
-                                    project.memberIds.filter((item) => item !== member!.id),
-                                    "removed a project member"
-                                  )
-                                }
-                              />
+                            <td className={cn(cellClass, "relative")}>
+                              {openTasksOf(member!.id)}
+                              <div className="absolute right-2 top-1/2 hidden -translate-y-1/2 rounded-md bg-card group-hover/row:flex">
+                                <RowActions
+                                  zh={zh}
+                                  onDelete={() =>
+                                    setProjectMembers(
+                                      id,
+                                      project.memberIds.filter((item) => item !== member!.id),
+                                      "removed a project member"
+                                    )
+                                  }
+                                />
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -935,13 +1100,16 @@ export default function ProjectDetailPage() {
                   </div>
                 ) : null}
 
-                {tab === "Files" ? (
+                {tab === "Files" && data.files.length === 0 ? (
+                  <EmptyState icon={File} text={t("No files uploaded yet")} />
+                ) : null}
+                {tab === "Files" && data.files.length > 0 ? (
                   <div className="divide-y divide-border">
                     {data.files.map((file) => {
                       const type = file.name.split(".").pop()?.toUpperCase() ?? "FILE";
                       return (
-                        <div key={file.id} className="flex items-center gap-3 p-4">
-                          <span className="flex size-10 shrink-0 items-center justify-center rounded-md border border-border bg-background text-xs font-semibold text-sky-500 uppercase">
+                        <div key={file.id} className="group/file flex items-center gap-3 p-4">
+                          <span className="flex w-8 shrink-0 items-center justify-center text-xs font-semibold text-sky-500 uppercase">
                             {type}
                           </span>
                           <div className="min-w-0 flex-1">
@@ -954,23 +1122,38 @@ export default function ProjectDetailPage() {
                           <span className="shrink-0 text-xs text-muted-foreground">
                             {(file.size / 1048576).toFixed(1)} MB
                           </span>
-                          <RowActions
-                            zh={zh}
-                            onEdit={() => setDialog({ kind: "file", record: file })}
-                            onDelete={() => removeRecord("files", file.id, id)}
-                          />
+                          <div className="hidden shrink-0 rounded-md bg-card group-hover/file:flex">
+                            <RowActions
+                              zh={zh}
+                              onEdit={() => setDialog({ kind: "file", record: file })}
+                              onDelete={() => removeRecord("files", file.id, id)}
+                            />
+                          </div>
                         </div>
                       );
                     })}
                   </div>
                 ) : null}
 
-                {tab === "Activity" ? (
-                  <div className="divide-y divide-border">
-                    {data.activities.map((activity) => (
-                      <div key={activity.id} className="flex gap-3 p-4">
-                        <span className="shrink-0 text-xs text-muted-foreground">{timeNow}</span>
-                        <div className="min-w-0 flex-1">
+                {tab === "Activity" && data.activities.length === 0 ? (
+                  <EmptyState icon={Zap} text={t("No activity yet")} />
+                ) : null}
+                {tab === "Activity" && data.activities.length > 0 ? (
+                  <div>
+                    {data.activities.map((activity, i) => (
+                      <div key={activity.id} className="flex gap-3 px-4 pt-4">
+                        <span className="w-10 shrink-0 text-xs text-muted-foreground">
+                          {activityTime(activity.timestamp)}
+                        </span>
+                        <div className="flex w-2 shrink-0 flex-col items-center">
+                          <span
+                            className={cn(
+                              "mt-1 size-2 shrink-0 rounded-full border-2 border-current bg-card",
+                              ACTIVITY_COLORS[i % ACTIVITY_COLORS.length]
+                            )}
+                          />
+                        </div>
+                        <div className="min-w-0 flex-1 pb-4">
                           <p className="text-sm">
                             <span className="font-medium">{userName(activity.userId)}</span>{" "}
                             {activity.message}
@@ -1062,6 +1245,24 @@ export default function ProjectDetailPage() {
           </div>
         </div>
       </div>
+      <EditProjectDialog
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        project={project}
+        users={snap.users}
+        teams={snap.teams}
+        onSubmit={(values) => {
+          updateProject(id, values);
+          setEditOpen(false);
+        }}
+      />
+      <ArchiveProjectDialog
+        open={archiveOpen}
+        onOpenChange={setArchiveOpen}
+        projectName={project.name}
+        zh={zh}
+        onSubmit={() => archiveProject(id)}
+      />
       <ProjectDialogs
         project={project}
         users={snap.users}

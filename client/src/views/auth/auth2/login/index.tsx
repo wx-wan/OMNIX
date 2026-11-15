@@ -81,7 +81,7 @@ const BoxedLogin = () => {
           </form>
           {/* Footer */}
           <div className="flex gap-2 text-base font-medium mt-4 items-center justify-center">
-            <p className="text-muted-foreground">New to ShadcnDashboard ?</p>
+            <p className="text-muted-foreground">New to Omnix ?</p>
             <Link
               to={"/auth/auth2/register"}
               className="text-primary/80 hover:text-primary text-sm font-medium"

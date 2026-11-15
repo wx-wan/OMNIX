@@ -24,7 +24,6 @@ import {
   addActivityNote,
   addFile,
   addIssue,
-  addMilestone,
   addSprint,
   addTask,
   archiveProject,
@@ -46,8 +45,7 @@ export type ProjectDialog =
   | { kind: "sprint"; record?: WsSprint }
   | { kind: "file"; record?: WsFile }
   | { kind: "member" }
-  | { kind: "note" }
-  | { kind: "milestone" };
+  | { kind: "note" };
 
 type Draft = {
   name: string;
@@ -178,8 +176,6 @@ const dialogTitle = (dialog: ProjectDialog, t: (key: string) => string) => {
       return t("Add Member");
     case "note":
       return t("Add Note");
-    case "milestone":
-      return t("Add Milestone");
   }
 };
 
@@ -423,13 +419,6 @@ function DialogBody({
       case "note":
         addActivityNote(project.id, draft.message.trim());
         break;
-      case "milestone":
-        addMilestone(project.id, {
-          title: draft.name.trim(),
-          description: draft.description,
-          date: draft.dueDate,
-        });
-        break;
     }
     onClose();
   };
@@ -597,29 +586,14 @@ function DialogBody({
         </PmsField>
       ) : null}
 
-      {dialog.kind === "note" || dialog.kind === "milestone" ? (
-        <>
-          {dialog.kind === "milestone" ? field(t("Title"), "name") : null}
-          <PmsField label={dialog.kind === "note" ? t("Message") : t("Description")}>
-            <Textarea
-              value={dialog.kind === "note" ? draft.message : draft.description}
-              onChange={(event) =>
-                set(dialog.kind === "note" ? "message" : "description", event.target.value)
-              }
-              className="min-h-20 text-sm"
-            />
-          </PmsField>
-          {dialog.kind === "milestone" ? (
-            <PmsField label={t("Due date")}>
-              <Input
-                type="date"
-                value={draft.dueDate}
-                onChange={(event) => set("dueDate", event.target.value)}
-                className="h-9 text-sm"
-              />
-            </PmsField>
-          ) : null}
-        </>
+      {dialog.kind === "note" ? (
+        <PmsField label={t("Message")}>
+          <Textarea
+            value={draft.message}
+            onChange={(event) => set("message", event.target.value)}
+            className="min-h-20 text-sm"
+          />
+        </PmsField>
       ) : null}
 
       <Button type="button" className="w-full" onClick={submit}>

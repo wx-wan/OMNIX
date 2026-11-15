@@ -3,9 +3,7 @@ import Sidebar from './vertical/sidebar/Sidebar';
 import Header from './vertical/header/Header';
 import { SidebarInset, SidebarProvider } from 'src/components/ui/sidebar';
 import { cn } from 'src/lib/utils';
-import Footer from './shared/footer/Footer';
 import { Outlet } from 'react-router';
-import Customizer from 'src/components/shared/Customizer';
 import { useCustomizer } from 'src/context/CustomizerContext';
 
 const FullLayout: FC = () => {
@@ -33,16 +31,12 @@ const FullLayout: FC = () => {
           <div data-container-surface className="flex flex-1 flex-col gap-4 p-4">
           <div className={cn("w-full", state.isLayout === "full" ? "" : "mx-auto container")}>
             <div className=" min-h-[calc(100vh-140px)]"><Outlet /></div>
-            <div className="pt-6">
-              <Footer />
-            </div>
           </div>
         </div>
        
         
       </SidebarInset>
     </SidebarProvider>
-    <Customizer />
     </>
   );
 };

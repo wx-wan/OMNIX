@@ -9,12 +9,12 @@ export function NavUser() {
     const navItems = [
         {
             title: "Setting",
-            url: "https://demos.shadcndashboard.dev/theme-pages/faq",
+            url: "/settings/general",
             icon: Settings,
         },
         {
             title: "Documentation",
-            url: "https://shadcndashboard.dev/docs",
+            url: "/faq",
             icon: BookOpen,
         },
     ]

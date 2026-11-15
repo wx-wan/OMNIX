@@ -1,4 +1,4 @@
-# OMNIX
+# Omnix
 
 全栈应用脚手架：**前端 React 19 + shadcn/ui（Base UI + Tailwind v4），后端 NestJS + Prisma + PostgreSQL**。
 

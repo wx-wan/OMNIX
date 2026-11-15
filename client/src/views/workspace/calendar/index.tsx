@@ -2,12 +2,9 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { resolveDate, useWorkspace } from "src/api/workspace/use-workspace";
-import { addEvent, getActiveProject } from "src/api/workspace/project-stages";
-import {
-  PmsCreateForm,
-  PmsPage,
-  PmsSheet,
-} from "../pms";
+import { addEvent } from "src/api/workspace/project-stages";
+import { NewEventDialog, type NewEventValues } from "../create-dialogs";
+import { PmsPage } from "../pms";
 
 const WEEKDAYS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
 const EVENT_COLOR: Record<string, string> = {
@@ -28,7 +25,6 @@ export default function CalendarPage() {
   const [view, setView] = useState("Month");
   const [cursor, setCursor] = useState(() => new Date());
   const [creating, setCreating] = useState(false);
-  const [draft, setDraft] = useState({ title: "", description: "" });
   const [draftDate, setDraftDate] = useState(() => new Date().toISOString().slice(0, 10));
 
   const events = useMemo(
@@ -89,16 +85,18 @@ export default function CalendarPage() {
     </div>
   );
 
-  const create = () => {
-    const title = draft.title.trim();
-    if (!title) return;
-    addEvent(getActiveProject(), {
-      title,
-      description: draft.description.trim(),
-      date: draftDate,
-      type: "meeting",
+  const create = (values: NewEventValues) => {
+    const date = values.allDay
+      ? values.date
+      : `${values.date}T${values.time || "09:00"}:00`;
+    addEvent(values.projectId || null, {
+      title: values.title,
+      description: values.description,
+      date,
+      type: values.type,
+      assigneeId: values.assigneeId || null,
+      allDay: values.allDay,
     });
-    setDraft({ title: "", description: "" });
     setCreating(false);
   };
 
@@ -260,27 +258,14 @@ export default function CalendarPage() {
         </div>
       </div>
 
-      <PmsSheet open={creating} onOpenChange={setCreating} title={t("+ Add event")}>
-        <PmsCreateForm
-          submitLabel={t("Create")}
-          onSubmit={create}
-          fields={[
-            {
-              name: t("Title"),
-              value: draft.title,
-              onChange: (value) => setDraft((prev) => ({ ...prev, title: value })),
-              placeholder: t("Event title"),
-            },
-            {
-              name: t("Description"),
-              value: draft.description,
-              onChange: (value) => setDraft((prev) => ({ ...prev, description: value })),
-              placeholder: t("Event description"),
-              multiline: true,
-            },
-          ]}
-        />
-      </PmsSheet>
+      <NewEventDialog
+        open={creating}
+        onOpenChange={setCreating}
+        onSubmit={create}
+        defaultDate={draftDate}
+        projects={snap.projects}
+        users={snap.users}
+      />
     </PmsPage>
   );
 }

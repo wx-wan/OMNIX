@@ -11,18 +11,17 @@ import {
   removeRecord,
   updateRecord,
 } from "src/api/workspace/project-stages";
+import { NewTeamDialog, type NewTeamValues } from "../create-dialogs";
 import type { WsTeam } from "src/types/apps/workspace";
 import {
   PmsAvatar,
   PmsCard,
-  PmsCreateForm,
   PmsField,
   PmsIconButton,
   PmsNewButton,
   PmsOptionGroup,
   PmsPage,
   PmsPopover,
-  PmsSheet,
 } from "../pms";
 
 const CARD_STYLE: Record<string, string> = {
@@ -42,7 +41,6 @@ export default function TeamPage() {
   const [sortBy, setSortBy] = useState("Name");
   const [mineOnly, setMineOnly] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [draft, setDraft] = useState({ name: "", description: "" });
   const all = useMemo(() => snap?.teams ?? [], [snap]);
   const mineCount = all.filter((team) => team.memberIds.includes(CURRENT_USER_ID)).length;
 
@@ -68,11 +66,13 @@ export default function TeamPage() {
 
   const selected = all.find((team) => team.id === teamId) ?? null;
 
-  const create = () => {
-    const name = draft.name.trim();
-    if (!name) return;
-    addTeam({ name, description: draft.description.trim() });
-    setDraft({ name: "", description: "" });
+  const create = (values: NewTeamValues) => {
+    addTeam({
+      name: values.name,
+      description: values.description,
+      leadId: values.leadId,
+      memberIds: [values.leadId],
+    });
     setCreating(false);
   };
 
@@ -249,27 +249,12 @@ export default function TeamPage() {
         </div>
       </PmsCard>
 
-      <PmsSheet open={creating} onOpenChange={setCreating} title={t("New team")}>
-        <PmsCreateForm
-          submitLabel={t("Create")}
-          onSubmit={create}
-          fields={[
-            {
-              name: t("Name"),
-              value: draft.name,
-              onChange: (value) => setDraft((prev) => ({ ...prev, name: value })),
-              placeholder: t("Team name"),
-            },
-            {
-              name: t("Description"),
-              value: draft.description,
-              onChange: (value) => setDraft((prev) => ({ ...prev, description: value })),
-              placeholder: t("What does this team do?"),
-              multiline: true,
-            },
-          ]}
-        />
-      </PmsSheet>
+      <NewTeamDialog
+        open={creating}
+        onOpenChange={setCreating}
+        onSubmit={create}
+        users={snap.users}
+      />
     </PmsPage>
   );
 }

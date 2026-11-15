@@ -17,6 +17,10 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Sheet,
   SheetContent,
   SheetDescription,
@@ -196,10 +200,12 @@ export function PmsHeader({
   columns,
   showColumnsButton = true,
   onColumnsClick,
+  columnsMenu,
 }: {
   columns: PmsColumn[];
   showColumnsButton?: boolean;
   onColumnsClick?: () => void;
+  columnsMenu?: ReactNode;
 }) {
   const { t } = useTranslation();
   return (
@@ -219,15 +225,28 @@ export function PmsHeader({
       </div>
       {showColumnsButton ? (
         <div className="flex w-9 shrink-0 justify-end">
-          <button
-            type="button"
-            aria-label="Show or hide columns"
-            title={t("Show or hide columns")}
-            onClick={onColumnsClick}
-            className="inline-flex size-6 cursor-pointer items-center justify-center rounded-[min(var(--radius-md),10px)] text-muted-foreground hover:bg-muted hover:text-foreground"
-          >
-            <CirclePlus className="size-3" />
-          </button>
+          {columnsMenu ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                aria-label="Show or hide columns"
+                title={t("Show or hide columns")}
+                className="inline-flex size-6 cursor-pointer items-center justify-center rounded-[min(var(--radius-md),10px)] text-muted-foreground outline-none hover:bg-muted hover:text-foreground data-popup-open:bg-muted"
+              >
+                <CirclePlus className="size-3" />
+              </DropdownMenuTrigger>
+              {columnsMenu}
+            </DropdownMenu>
+          ) : (
+            <button
+              type="button"
+              aria-label="Show or hide columns"
+              title={t("Show or hide columns")}
+              onClick={onColumnsClick}
+              className="inline-flex size-6 cursor-pointer items-center justify-center rounded-[min(var(--radius-md),10px)] text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              <CirclePlus className="size-3" />
+            </button>
+          )}
         </div>
       ) : null}
     </div>

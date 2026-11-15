@@ -1,20 +1,14 @@
 import {
-  IsEnum,
   IsEmail,
   IsNotEmpty,
   IsOptional,
   IsString,
   MaxLength,
 } from "class-validator";
-import { ContactType } from "@prisma/client";
 
 // 统一往来单位 / 联系人 新建字段
+// 注意：type / password / role 不在这里开放，防止联系人接口被用于提权创建管理员。
 export class CreateContactDto {
-  /** 类型：客户 / 供应商 / 用户（默认 customer）。 */
-  @IsOptional()
-  @IsEnum(ContactType)
-  type?: ContactType;
-
   @IsOptional()
   @IsString()
   @MaxLength(60)
@@ -55,15 +49,10 @@ export class CreateContactDto {
   @IsOptional()
   @IsString()
   @MaxLength(200)
+  avatarUrl?: string; // 头像地址（联系人页用本地 /images/profile/user-N.png）
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
   website?: string; // 官网
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(100)
-  password?: string; // 仅 type=user 用于登录
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(20)
-  role?: string; // 仅 type=user：admin | user
 }

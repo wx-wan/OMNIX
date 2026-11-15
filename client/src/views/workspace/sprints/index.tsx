@@ -8,11 +8,11 @@ import {
   useWorkspace,
 } from "src/api/workspace/use-workspace";
 import { addSprint, getActiveProject } from "src/api/workspace/project-stages";
+import { NewStageDialog, type NewStageValues } from "../create-dialogs";
 import type { WsSprint } from "src/types/apps/workspace";
 import {
   PmsCard,
   PmsCell,
-  PmsCreateForm,
   PmsField,
   PmsGroup,
   PmsHeader,
@@ -52,7 +52,6 @@ export default function SprintsPage() {
   const [collapsed, setCollapsed] = useState<string[]>([]);
   const [selected, setSelected] = useState<WsSprint | null>(null);
   const [creating, setCreating] = useState(false);
-  const [draft, setDraft] = useState({ name: "", goal: "" });
   const all = useMemo(() => snap?.sprints ?? [], [snap]);
   const doneIssues = useMemo(
     () =>
@@ -109,17 +108,14 @@ export default function SprintsPage() {
     })).filter((group) => group.items.length);
   }, [all, query, groupBy, sortBy]);
 
-  const create = () => {
-    const name = draft.name.trim();
-    if (!name) return;
-    addSprint(getActiveProject(), {
-      name,
-      goal: draft.goal.trim(),
+  const create = (values: NewStageValues) => {
+    addSprint(values.projectId || getActiveProject(), {
+      name: values.name,
+      goal: values.goal,
       status: "planning",
-      startDate: "RELATIVE_DAYS_PLUS2",
-      endDate: "RELATIVE_DAYS_PLUS16",
+      startDate: values.startDate,
+      endDate: values.endDate,
     });
-    setDraft({ name: "", goal: "" });
     setCreating(false);
   };
 
@@ -256,27 +252,12 @@ export default function SprintsPage() {
         ) : null}
       </PmsSheet>
 
-      <PmsSheet open={creating} onOpenChange={setCreating} title={t("New sprint")}>
-        <PmsCreateForm
-          submitLabel={t("Create")}
-          onSubmit={create}
-          fields={[
-            {
-              name: t("Name"),
-              value: draft.name,
-              onChange: (value) => setDraft((prev) => ({ ...prev, name: value })),
-              placeholder: t("Sprint name"),
-            },
-            {
-              name: t("Goal"),
-              value: draft.goal,
-              onChange: (value) => setDraft((prev) => ({ ...prev, goal: value })),
-              placeholder: t("What should this sprint achieve?"),
-              multiline: true,
-            },
-          ]}
-        />
-      </PmsSheet>
+      <NewStageDialog
+        open={creating}
+        onOpenChange={setCreating}
+        onSubmit={create}
+        projects={snap.projects}
+      />
     </PmsPage>
   );
 }

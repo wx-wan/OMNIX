@@ -114,7 +114,7 @@ export default function NavCollapse({ menu, className }: NavCollapseProps) {
                           className,
                         )}
                       >
-                        <NavItem item={sub} hasChildren={false} className={cn("px-2! py-1! my-1!", pathname === sub.url && "bg-primary/5 text-primary")} isActive={pathname === sub.url} />
+                        <NavItem item={sub} hasChildren={false} className={cn("px-2! py-1! my-1!", pathname === sub.url && "bg-sidebar-accent text-foreground")} isActive={pathname === sub.url} />
                       </Link>
                     )
                   )}

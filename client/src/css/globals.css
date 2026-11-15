@@ -3,10 +3,13 @@
 @import "./pages/app.css";
 
 
-@import "./styles/style-lyra.css";
-@import "./styles/style-vega.css";
+/* 皮肤基类归入 components 层：官方线上的实例工具类（utilities）可覆盖它们
+   （取证实测：官方卡片 sm:gap-8 / sm:py-12 生效）。此前无层级引入导致
+   .style-* .cn-* 反向覆盖登录/注册页的 gap-6 sm:gap-8 与 px/py，间距全错。 */
+@import "./styles/style-lyra.css" layer(components);
+@import "./styles/style-vega.css" layer(components);
 @import "./styles/layout-contract.css";
-@import "./styles/style-variants.css";
+@import "./styles/style-variants.css" layer(components);
 @import "./styles/theme-tokens.css";
 @import "./styles/rtl-contract.css";
 @import "./styles/animation-contract.css";

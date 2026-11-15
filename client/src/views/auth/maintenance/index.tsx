@@ -1,8 +1,7 @@
 
 
 
-import { Button } from "@/components/ui/button";
-import { Link } from "react-router";
+import HomeLinkButton from "../HomeLinkButton";
 import maintenance from "@/assets/images/backgrounds/maintenance.svg"
 
 
@@ -26,9 +25,7 @@ const Maintenance = () => {
           <h6 className="text-xl text-foreground">
             Website is Under Construction. Check back later!
           </h6>
-          <Button className="mt-6 mx-auto">
-            <Link to="/">Go Back to Home</Link>
-          </Button>
+          <HomeLinkButton />
         </div>
       </div>
     </>

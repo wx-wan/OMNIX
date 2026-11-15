@@ -23,12 +23,12 @@ import {
   useWorkspace,
 } from "src/api/workspace/use-workspace";
 import { addIssue, getActiveProject } from "src/api/workspace/project-stages";
+import { NewIssueDialog, type NewIssueValues } from "../create-dialogs";
 import type { WsIssue } from "src/types/apps/workspace";
 import {
   PmsAvatar,
   PmsCard,
   PmsCell,
-  PmsCreateForm,
   PmsField,
   PmsGroup,
   PmsHeader,
@@ -96,7 +96,6 @@ export default function IssuesPage() {
   const [collapsed, setCollapsed] = useState<string[]>([]);
   const [selected, setSelected] = useState<WsIssue | null>(null);
   const [creating, setCreating] = useState(false);
-  const [draft, setDraft] = useState({ title: "", description: "" });
   const all = useMemo(() => snap?.issues ?? [], [snap]);
 
   const list = useMemo(() => {
@@ -138,18 +137,16 @@ export default function IssuesPage() {
       color: label(id)?.color,
     }));
 
-  const create = () => {
-    const title = draft.title.trim();
-    if (!title) return;
-    addIssue(getActiveProject(), {
-      title,
-      description: draft.description.trim(),
+  const create = (values: NewIssueValues) => {
+    addIssue(values.projectId || getActiveProject(), {
+      title: values.title,
+      description: values.description,
       status: "backlog",
-      priority: "medium",
-      assigneeId: CURRENT_USER_ID,
+      priority: values.priority,
+      severity: values.severity,
+      assigneeId: values.assigneeId || null,
       number: Math.max(500, ...all.map((item) => item.number)) + 1,
     });
-    setDraft({ title: "", description: "" });
     setCreating(false);
   };
 
@@ -433,27 +430,13 @@ export default function IssuesPage() {
         ) : null}
       </PmsSheet>
 
-      <PmsSheet open={creating} onOpenChange={setCreating} title={t("New Issue")}>
-        <PmsCreateForm
-          submitLabel={t("Create")}
-          onSubmit={create}
-          fields={[
-            {
-              name: t("Title"),
-              value: draft.title,
-              onChange: (value) => setDraft((prev) => ({ ...prev, title: value })),
-              placeholder: t("Issue title"),
-            },
-            {
-              name: t("Description"),
-              value: draft.description,
-              onChange: (value) => setDraft((prev) => ({ ...prev, description: value })),
-              placeholder: t("Describe the issue"),
-              multiline: true,
-            },
-          ]}
-        />
-      </PmsSheet>
+      <NewIssueDialog
+        open={creating}
+        onOpenChange={setCreating}
+        onSubmit={create}
+        projects={snap.projects}
+        users={snap.users}
+      />
     </PmsPage>
   );
 }

@@ -80,6 +80,37 @@ async function main() {
   });
   console.log("✓ ensured admin contact (admin@omnix.dev / admin123)");
 
+  // 成员页的 8 位成员落为真实可登录用户（原 mock 数据 → Contact type=user）。
+  // 密码统一 123456；alice@pms.com 为管理员，其余为 member / viewer。
+  // 幂等 upsert，重跑 seed 会同步密码与角色，不动其它业务数据。
+  const memberHash = await bcrypt.hash("123456", 10);
+  const members = [
+    { email: "alice@pms.com", name: "Alice Johnson", role: "admin", avatar: 1 },
+    { email: "bob@pms.com", name: "Bob Smith", role: "user", avatar: 2 },
+    { email: "carol@pms.com", name: "Carol Davis", role: "user", avatar: 3 },
+    { email: "david@pms.com", name: "David Lee", role: "user", avatar: 4 },
+    { email: "eve@pms.com", name: "Eve Wilson", role: "viewer", avatar: 5 },
+    { email: "frank@pms.com", name: "Frank Brown", role: "user", avatar: 6 },
+    { email: "grace@pms.com", name: "Grace Kim", role: "admin", avatar: 7 },
+    { email: "henry@pms.com", name: "Henry Chen", role: "user", avatar: 8 },
+  ];
+  for (const m of members) {
+    const avatarUrl = `/images/profile/user-${m.avatar}.png`;
+    await prisma.contact.upsert({
+      where: { email: m.email },
+      update: { name: m.name, type: ContactType.user, role: m.role, password: memberHash, avatarUrl },
+      create: {
+        email: m.email,
+        name: m.name,
+        type: ContactType.user,
+        role: m.role,
+        password: memberHash,
+        avatarUrl,
+      },
+    });
+  }
+  console.log(`✓ seeded ${members.length} members (password 123456, alice@pms.com = admin)`);
+
   // 系统级机器人 ominXBot：拥有最高权限（role=admin），负责把「创建 / 字段修改 / 阶段变更」
   // 等操作历史写入各单据的 Chatter。不可登录（password 为空），仅作系统操作记录作者身份。
   await prisma.contact.upsert({
@@ -154,6 +185,62 @@ async function main() {
     });
   }
   console.log(`✓ seeded ${customers.length} customer contacts`);
+
+  // 联系人应用（/apps/contacts）的 12 条 UI 数据：按现有 Contact 字段落库，不改表结构。
+  // dept→customerType，address→country，avatar 数字→avatarUrl 本地图片路径；
+  // starred/notes 存 Setting 键值表（contacts.ui.*），避免为展示字段加列。
+  const uiContacts = [
+    { name: "Georgeanna Ramero", email: "georgeanna.ramero@claimab.com", dept: "Sales", avatar: 1, starred: true },
+    { name: "Cami Macha", email: "cami.macha@claimab.com", dept: "Support", avatar: 2, starred: false },
+    { name: "Alda Ziemer", email: "alda.ziemer@claimab.com", dept: "Engineering", avatar: 3, starred: false },
+    { name: "Luciano Macpherson", email: "luciano.macpherson@claimab.com", dept: "Support", avatar: 4, starred: true },
+    { name: "Dalton Paden", email: "dalton.paden@claimab.com", dept: "Engineering", avatar: 5, starred: false },
+    { name: "Juan Granado", email: "juan.granado@claimab.com", dept: "Support", avatar: 6, starred: false },
+    { name: "Revan Allen", email: "revan.allen@claimab.com", dept: "Support", avatar: 7, starred: false },
+    { name: "Juley Huseman", email: "juley.huseman@claimab.com", dept: "Sales", avatar: 8, starred: true },
+    { name: "Bridgette Phung", email: "bridgette.phung@claimab.com", dept: "Engineering", avatar: 9, starred: false },
+    { name: "Ernest Cousins", email: "ernest.cousins@claimab.com", dept: "Support", avatar: 10, starred: false },
+    { name: "Nicolette Trapani", email: "nicolette.trapani@claimab.com", dept: "Engineering", avatar: 2, starred: false },
+    { name: "Virginia Bourdeau", email: "virginia.bourdeau@claimab.com", dept: "Support", avatar: 3, starred: false },
+  ];
+  const UI_NOTES =
+    "Obat le hel me vitgafoz aragac jejeh ef pusca rudfi umetoos pefkazo sukcif tokkiar omemij. Holi jivel mu mutecet zur lerta mujji dagip tija de rot pa nicsas hetnejo wud.";
+  for (const c of uiContacts) {
+    const row = await prisma.contact.upsert({
+      where: { email: c.email },
+      update: {
+        name: c.name,
+        type: ContactType.customer,
+        customerType: c.dept,
+        phone: "456-485-5623",
+        country: "19214 110th Rd, Saint Albans, NY, 1141",
+        company: "Muller Inc",
+        avatarUrl: `/images/profile/user-${c.avatar}.png`,
+      },
+      create: {
+        email: c.email,
+        name: c.name,
+        type: ContactType.customer,
+        customerType: c.dept,
+        phone: "456-485-5623",
+        country: "19214 110th Rd, Saint Albans, NY, 1141",
+        company: "Muller Inc",
+        avatarUrl: `/images/profile/user-${c.avatar}.png`,
+      },
+    });
+    // 空 update 保留用户后续在页面上改过的收藏/备注（seed 幂等且不覆盖业务修改）。
+    await prisma.setting.upsert({
+      where: { key: `contacts.ui.starred.${row.id}` },
+      create: { key: `contacts.ui.starred.${row.id}`, value: String(c.starred) },
+      update: {},
+    });
+    await prisma.setting.upsert({
+      where: { key: `contacts.ui.notes.${row.id}` },
+      create: { key: `contacts.ui.notes.${row.id}`, value: UI_NOTES },
+      update: {},
+    });
+  }
+  console.log(`✓ seeded ${uiContacts.length} contacts-app UI contacts`);
 
   // 演示用产品：清掉历史 description 为空的脏数据后，仅在无产品时写入
   await prisma.product.deleteMany({ where: { description: null } });

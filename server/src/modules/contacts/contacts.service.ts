@@ -1,5 +1,4 @@
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from "@nestjs/common";
-import bcrypt from "bcryptjs";
 import { ContactType, Prisma } from "@prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
 import { CreateContactDto } from "./dto/create-contact.dto";
@@ -118,7 +117,6 @@ export class ContactsService {
 
   async create(dto: CreateContactDto) {
     const data: Prisma.ContactCreateInput = { ...dto };
-    if (dto.password) data.password = await bcrypt.hash(dto.password, 10);
     // 新建默认带「待完善」标签；若必填字段（姓名/邮箱/电话/客户类型/国家地区，
     // 个人还需关联公司 parentId）已全部满足，则走完善逻辑立即清除 aiGenerated。
     data.aiGenerated = isContactComplete(data) ? false : true;
@@ -130,7 +128,6 @@ export class ContactsService {
     if (!existing) throw new NotFoundException(`Contact ${id} not found`);
     if (existing.isSystem) throw new ForbiddenException("系统机器人不可编辑");
     const data: Prisma.ContactUpdateInput = { ...dto };
-    if (dto.password) data.password = await bcrypt.hash(dto.password, 10);
     // 信息完善（除官网外核心字段齐全）→ 标记「已核实」，清除 aiGenerated 并持久化
     if (isContactComplete({ ...existing, ...dto })) data.aiGenerated = false;
     return this.prisma.contact.update({ where: { id }, data });
@@ -204,5 +201,46 @@ export class ContactsService {
       });
     }
     return this.getBotForUser(userId);
+  }
+
+  /** 联系人页展示元数据：starred / notes 无对应列，统一存 Setting KV。
+   *  key 形如 contacts.ui.starred.<contactId> / contacts.ui.notes.<contactId>，
+   *  一次性全量返回给前端，避免列表逐条查询。 */
+  async getUiMeta() {
+    const rows = await this.prisma.setting.findMany({
+      where: { key: { startsWith: "contacts.ui." } },
+    });
+    const starred: Record<string, boolean> = {};
+    const notes: Record<string, string> = {};
+    const starPrefix = "contacts.ui.starred.";
+    const notePrefix = "contacts.ui.notes.";
+    for (const row of rows) {
+      if (row.key.startsWith(starPrefix)) {
+        starred[row.key.slice(starPrefix.length)] = row.value === "true";
+      } else if (row.key.startsWith(notePrefix)) {
+        notes[row.key.slice(notePrefix.length)] = row.value;
+      }
+    }
+    return { starred, notes };
+  }
+
+  async updateUiMeta(id: string, dto: { starred?: boolean; notes?: string }) {
+    const existing = await this.prisma.contact.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException(`Contact ${id} not found`);
+    if (dto.starred !== undefined) {
+      await this.prisma.setting.upsert({
+        where: { key: `contacts.ui.starred.${id}` },
+        create: { key: `contacts.ui.starred.${id}`, value: String(dto.starred) },
+        update: { value: String(dto.starred) },
+      });
+    }
+    if (dto.notes !== undefined) {
+      await this.prisma.setting.upsert({
+        where: { key: `contacts.ui.notes.${id}` },
+        create: { key: `contacts.ui.notes.${id}`, value: dto.notes },
+        update: { value: dto.notes },
+      });
+    }
+    return this.getUiMeta();
   }
 }
