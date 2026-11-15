@@ -16,8 +16,8 @@ import SidebarContent, { ChildItem, MenuItem } from "../vertical/sidebar/sidebar
  */
 
 const GROUPS: { label: string; headings: string[] }[] = [
-  { label: "Dashboard", headings: ["Dashboard"] },
-  { label: "Apps", headings: ["Apps", "Home"] },
+  { label: "Dashboard", headings: ["Home"] },
+  { label: "Apps", headings: ["Apps", "Workspace"] },
   { label: "Ui", headings: ["UI ELEMENTS"] },
   { label: "Widgets", headings: ["Widgets"] },
   { label: "Pages", headings: ["Pages", "PRO Pages", "Icons", "Auth"] },

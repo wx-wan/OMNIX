@@ -1,0 +1,282 @@
+import { Fragment, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { ListFilter, Search, SlidersHorizontal } from "lucide-react";
+import {
+  formatDate,
+  formatRange,
+  resolveDate,
+  useWorkspace,
+} from "src/api/workspace/use-workspace";
+import { addSprint, getActiveProject } from "src/api/workspace/project-stages";
+import type { WsSprint } from "src/types/apps/workspace";
+import {
+  PmsCard,
+  PmsCell,
+  PmsCreateForm,
+  PmsField,
+  PmsGroup,
+  PmsHeader,
+  PmsIconButton,
+  PmsNewButton,
+  PmsOptionGroup,
+  PmsPage,
+  PmsPopover,
+  PmsProgress,
+  PmsRow,
+  PmsSheet,
+  PmsDate,
+  type PmsColumn,
+} from "../pms";
+
+const COLUMNS: PmsColumn[] = [
+  { label: "Sprint", w: "w-56" },
+  { label: "Project", w: "w-40" },
+  { label: "Progress", w: "w-40" },
+  { label: "Dates", w: "w-40" },
+  { label: "Issues", w: "w-20" },
+  { label: "Timing", w: "w-56" },
+];
+const GROUPS: { label: string; values: string[] }[] = [
+  { label: "Active", values: ["active"] },
+  { label: "Upcoming", values: ["planning"] },
+  { label: "Completed", values: ["completed"] },
+];
+
+export default function SprintsPage() {
+  const { t } = useTranslation();
+  const { snap, projectName, isLoading } = useWorkspace();
+  const [query, setQuery] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [groupBy, setGroupBy] = useState("Status");
+  const [sortBy, setSortBy] = useState("Start date");
+  const [collapsed, setCollapsed] = useState<string[]>([]);
+  const [selected, setSelected] = useState<WsSprint | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [draft, setDraft] = useState({ name: "", goal: "" });
+  const all = useMemo(() => snap?.sprints ?? [], [snap]);
+  const doneIssues = useMemo(
+    () =>
+      new Set(
+        (snap?.issues ?? [])
+          .filter((issue) => issue.status === "done" || issue.status === "closed")
+          .map((issue) => issue.id)
+      ),
+    [snap]
+  );
+
+  const progressOf = (sprint: WsSprint) => {
+    if (sprint.status === "completed") return 100;
+    if (!sprint.issueIds.length) return 0;
+    return Math.round(
+      (sprint.issueIds.filter((id) => doneIssues.has(id)).length / sprint.issueIds.length) * 100
+    );
+  };
+
+  const timingOf = (sprint: WsSprint) => {
+    const start = resolveDate(sprint.startDate);
+    const end = resolveDate(sprint.endDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (!start || !end) return "—";
+    const day = Math.round((today.getTime() - start.getTime()) / 86400000) + 1;
+    const left = Math.round((end.getTime() - today.getTime()) / 86400000);
+    if (sprint.status === "completed")
+      return t("Finished {{date}} · 15 days long", {
+        date: formatDate(sprint.endDate, "ch"),
+      });
+    if (sprint.status === "planning")
+      return t("Starts in {{d}} days · 15 days long", { d: -day + 1 });
+    return t("Day {{d}} of 15 · {{left}} days left", { d: day, left });
+  };
+
+  const groups = useMemo(() => {
+    const filtered = all.filter((sprint) =>
+      `${sprint.name} ${sprint.goal}`.toLowerCase().includes(query.toLowerCase())
+    );
+    const sorted = (items: WsSprint[]) =>
+      [...items].sort((a, b) => {
+        if (sortBy === "Name (A–Z)") return a.name.localeCompare(b.name);
+        if (sortBy === "Progress") return progressOf(b) - progressOf(a);
+        return (
+          (resolveDate(b.startDate)?.getTime() ?? 0) -
+          (resolveDate(a.startDate)?.getTime() ?? 0)
+        );
+      });
+    if (groupBy === "None") return [{ label: "All", items: sorted(filtered) }];
+    return GROUPS.map((group) => ({
+      label: group.label,
+      items: sorted(filtered.filter((s) => group.values.includes(s.status))),
+    })).filter((group) => group.items.length);
+  }, [all, query, groupBy, sortBy]);
+
+  const create = () => {
+    const name = draft.name.trim();
+    if (!name) return;
+    addSprint(getActiveProject(), {
+      name,
+      goal: draft.goal.trim(),
+      status: "planning",
+      startDate: "RELATIVE_DAYS_PLUS2",
+      endDate: "RELATIVE_DAYS_PLUS16",
+    });
+    setDraft({ name: "", goal: "" });
+    setCreating(false);
+  };
+
+  if (isLoading || !snap) return <div className="p-10 text-sm text-muted-foreground">…</div>;
+
+  return (
+    <PmsPage title={t("Sprints")} count={t("N sprints", { n: all.length })}>
+      <PmsCard
+        toolbar={
+          <>
+            <div className="flex flex-wrap items-center gap-2.5">
+              <div className="flex items-center gap-1">
+                <PmsPopover icon={ListFilter} label="Filters">
+                  <p className="text-xs text-muted-foreground">{t("Filters")}</p>
+                </PmsPopover>
+                <PmsIconButton
+                  icon={Search}
+                  label="Search"
+                  active={searchOpen}
+                  onClick={() => setSearchOpen((v) => !v)}
+                />
+                <PmsPopover icon={SlidersHorizontal} label="View options">
+                  <div className="space-y-4">
+                    <PmsOptionGroup
+                      title="GROUP BY"
+                      options={["Status", "None"]}
+                      value={groupBy}
+                      onPick={setGroupBy}
+                    />
+                    <PmsOptionGroup
+                      title="SORT BY"
+                      options={["Start date", "Name (A–Z)", "Progress"]}
+                      value={sortBy}
+                      onPick={setSortBy}
+                    />
+                  </div>
+                </PmsPopover>
+              </div>
+              {searchOpen ? (
+                <input
+                  autoFocus
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder={t("Search sprints...")}
+                  className="h-8 w-44 rounded-lg border border-border bg-background px-2 text-xs outline-none"
+                />
+              ) : null}
+            </div>
+            <PmsNewButton label={t("New sprint")} onClick={() => setCreating(true)} />
+          </>
+        }
+      >
+        <PmsHeader columns={COLUMNS} showColumnsButton />
+        {groups.map((group) => (
+          <PmsGroup
+            key={group.label}
+            label={group.label}
+            count={group.items.length}
+            collapsed={collapsed.includes(group.label)}
+            onToggle={() =>
+              setCollapsed((prev) =>
+                prev.includes(group.label)
+                  ? prev.filter((x) => x !== group.label)
+                  : [...prev, group.label]
+              )
+            }
+          >
+            {group.items.map((sprint) => (
+              <PmsRow
+                key={sprint.id}
+                title={sprint.name}
+                description={sprint.goal}
+                onClick={() => setSelected(sprint)}
+                cells={
+                  <Fragment>
+                    <PmsCell w="w-40">
+                      <span className="block truncate text-sm">
+                        {projectName(sprint.projectId)}
+                      </span>
+                    </PmsCell>
+                    <PmsCell w="w-40">
+                      <PmsProgress value={progressOf(sprint)} />
+                    </PmsCell>
+                    <PmsCell w="w-40">
+                      <span className="text-sm whitespace-nowrap text-muted-foreground">
+                        {formatRange(sprint.startDate, sprint.endDate, "ch")}
+                      </span>
+                    </PmsCell>
+                    <PmsCell w="w-20">
+                      <span className="text-sm text-muted-foreground">
+                        {sprint.issueIds.length}
+                      </span>
+                    </PmsCell>
+                    <PmsCell w="w-56">
+                      <PmsDate text={timingOf(sprint)} />
+                    </PmsCell>
+                  </Fragment>
+                }
+              />
+            ))}
+          </PmsGroup>
+        ))}
+      </PmsCard>
+
+      <PmsSheet
+        open={Boolean(selected)}
+        onOpenChange={(open) => !open && setSelected(null)}
+        title={selected?.name ?? ""}
+        description={selected?.goal}
+      >
+        {selected ? (
+          <>
+            <PmsField label={t("Project")}>{projectName(selected.projectId)}</PmsField>
+            <PmsField label={t("Dates")}>
+              {formatRange(selected.startDate, selected.endDate, "ch")}
+            </PmsField>
+            <PmsField label={t("Progress")}>
+              <PmsProgress value={progressOf(selected)} />
+            </PmsField>
+            <PmsField label={t("Timing")}>{timingOf(selected)}</PmsField>
+            <div className="space-y-2 border-t border-border pt-4">
+              <h3 className="text-xs font-semibold">
+                {t("Issues")} ({selected.issueIds.length})
+              </h3>
+              {snap.issues
+                .filter((issue) => selected.issueIds.includes(issue.id))
+                .map((issue) => (
+                  <div key={issue.id} className="text-[11px] text-muted-foreground">
+                    #{issue.number} {issue.title}
+                  </div>
+                ))}
+            </div>
+          </>
+        ) : null}
+      </PmsSheet>
+
+      <PmsSheet open={creating} onOpenChange={setCreating} title={t("New sprint")}>
+        <PmsCreateForm
+          submitLabel={t("Create")}
+          onSubmit={create}
+          fields={[
+            {
+              name: t("Name"),
+              value: draft.name,
+              onChange: (value) => setDraft((prev) => ({ ...prev, name: value })),
+              placeholder: t("Sprint name"),
+            },
+            {
+              name: t("Goal"),
+              value: draft.goal,
+              onChange: (value) => setDraft((prev) => ({ ...prev, goal: value })),
+              placeholder: t("What should this sprint achieve?"),
+              multiline: true,
+            },
+          ]}
+        />
+      </PmsSheet>
+    </PmsPage>
+  );
+}

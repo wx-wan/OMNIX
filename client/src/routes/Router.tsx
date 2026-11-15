@@ -55,6 +55,19 @@ const ContactsApp = Loadable(lazy(() => import('../views/apps/contacts')));
 // 官网 kanban-application-02 看板
 const KanbanApp = Loadable(lazy(() => import('../views/apps/kanban')));
 
+// PMS Workspace：六个模块 + Inbox，共用 /api/workspace/snapshot 真实数据快照
+const InboxApp = Loadable(lazy(() => import('../views/inbox')));
+const ProjectsPage = Loadable(lazy(() => import('../views/workspace/projects')));
+const ProjectDetailPage = Loadable(lazy(() => import('../views/workspace/projects/detail')));
+const IssuesPage = Loadable(lazy(() => import('../views/workspace/issues')));
+const TasksPage = Loadable(lazy(() => import('../views/workspace/tasks')));
+const SprintsPage = Loadable(lazy(() => import('../views/workspace/sprints')));
+const CalendarWorkspacePage = Loadable(lazy(() => import('../views/workspace/calendar')));
+const TeamPage = Loadable(lazy(() => import('../views/workspace/team')));
+// 业务需求模块：九阶段空白表单占位 + 复刻 demo 的发票编辑页
+const RequirementStagePage = Loadable(lazy(() => import('../views/apps/requirements/stage')));
+const RequirementEditPage = Loadable(lazy(() => import('../views/apps/requirements/edit')));
+
 //icons
 const SolarIcon = Loadable(lazy(() => import('../views/icons/iconify')));
 
@@ -137,6 +150,18 @@ const Router = [
       { path: '/charts', element: <ChartsPage /> },
 
       ...TABLE_VARIANT_PATHS.map((path) => ({ path, element: <TablesVariantPage /> })),
+
+      { path: '/inbox', element: <InboxApp /> },
+      { path: '/projects', element: <ProjectsPage /> },
+      { path: '/projects/:id', element: <ProjectDetailPage /> },
+      { path: '/apps/requirements/:stage', element: <RequirementStagePage /> },
+      { path: '/apps/invoice/edit', element: <RequirementEditPage /> },
+      { path: '/apps/invoice/edit/:projectNo', element: <RequirementEditPage /> },
+      { path: '/issues', element: <IssuesPage /> },
+      { path: '/tasks', element: <TasksPage /> },
+      { path: '/sprints', element: <SprintsPage /> },
+      { path: '/calendar', element: <CalendarWorkspacePage /> },
+      { path: '/team', element: <TeamPage /> },
 
     
       { path: '*', element: <Navigate to="/auth/404" /> },

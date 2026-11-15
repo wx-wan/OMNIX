@@ -39,10 +39,13 @@ import { uniqueId } from "lodash";
 import {
   BookOpen,
   Calendar,
-  ChartBar,
+  CircleDot,
   Contact,
+  Flag,
+  FolderKanban,
   House,
   List,
+  ListChecks,
   LucideIcon,
   Mail,
   MessageCircle,
@@ -57,31 +60,74 @@ import {
 } from "lucide-react"
 
 /**
- * 侧栏只保留业务导航：Dashboard（分析 / 现代 / Logistics）+ 合并后的 Apps。
- * 原两个 Apps 分组已合并为一个；Pages、UI ELEMENTS、FORM ELEMENTS、
- * Widgets、Icons、Auth、Home、TABLES、Charts、PRO Pages 等模板演示板块已移除。
+ * 导航结构（参考 PMS Workspace 复刻）：
+ * - Home：Dashboard / Inbox / Chats（Inbox 在聊天上方，PMS Home 组口径）
+ * - Workspace：Projects / Issues / Tasks / Sprints / Calendar / Team
+ * - Apps：保留既有 Apps 模块（已移除 Chats、Calendar）
+ * heading 使用英文 key，走导航层 i18n，英文界面不再硬显示中文。
  */
 const SidebarContent: MenuItem[] = [
   {
-    heading: "Dashboard",
+    heading: "Home",
     items: [
       {
         id: uniqueId(),
-        name: "Analytics",
-        icon: ChartBar,
-        url: "/dashboards/analytics",
-      },
-      {
-        id: uniqueId(),
-        name: "Modern",
+        name: "Dashboard",
         icon: House,
         url: "/",
       },
       {
         id: uniqueId(),
-        name: "Logistics",
-        icon: Package,
-        url: "/dashboards/logistics",
+        name: "Inbox",
+        icon: Mail,
+        url: "/inbox",
+      },
+      {
+        id: uniqueId(),
+        name: "Chats",
+        icon: MessageCircle,
+        url: "/apps/chats",
+      },
+    ],
+  },
+  {
+    heading: "Workspace",
+    items: [
+      {
+        id: uniqueId(),
+        name: "Projects",
+        icon: FolderKanban,
+        url: "/projects",
+      },
+      {
+        id: uniqueId(),
+        name: "Issues",
+        icon: CircleDot,
+        url: "/issues",
+      },
+      {
+        id: uniqueId(),
+        name: "Tasks",
+        icon: ListChecks,
+        url: "/tasks",
+      },
+      {
+        id: uniqueId(),
+        name: "Sprints",
+        icon: Flag,
+        url: "/sprints",
+      },
+      {
+        id: uniqueId(),
+        name: "Calendar",
+        icon: Calendar,
+        url: "/calendar",
+      },
+      {
+        id: uniqueId(),
+        name: "Team",
+        icon: Users,
+        url: "/team",
       },
     ],
   },
@@ -105,31 +151,15 @@ const SidebarContent: MenuItem[] = [
         id: uniqueId(),
         icon: BookOpen,
         items: [
-          {
-            id: uniqueId(),
-            name: "Blog Listing",
-            url: "/apps/blog/post",
-          },
+          { id: uniqueId(), name: "Blog Listing", url: "/apps/blog/post" },
           {
             id: uniqueId(),
             name: "Blog Detail",
             url: "/apps/blog/detail/streaming-video-way-before-it-was-cool-go-dark-tomorrow",
           },
-          {
-            id: uniqueId(),
-            name: "Blog Edit",
-            url: "/apps/blog/edit",
-          },
-          {
-            id: uniqueId(),
-            name: "Blog Create",
-            url: "/apps/blog/create",
-          },
-          {
-            id: uniqueId(),
-            name: "Manage Blog",
-            url: "/apps/blog/manage-blog",
-          },
+          { id: uniqueId(), name: "Blog Edit", url: "/apps/blog/edit" },
+          { id: uniqueId(), name: "Blog Create", url: "/apps/blog/create" },
+          { id: uniqueId(), name: "Manage Blog", url: "/apps/blog/manage-blog" },
         ],
       },
       {
@@ -143,81 +173,43 @@ const SidebarContent: MenuItem[] = [
         icon: Sparkles,
         id: uniqueId(),
         items: [
-          {
-            id: uniqueId(),
-            name: "Chat",
-            url: "/apps/chat-ai",
-            isPro: true
-          },
-          {
-            id: uniqueId(),
-            name: "Image",
-            url: "/apps/image-ai",
-            isPro: true
-          },
+          { id: uniqueId(), name: "Chat", url: "/apps/chat-ai", isPro: true },
+          { id: uniqueId(), name: "Image", url: "/apps/image-ai", isPro: true },
         ],
-      },
-      {
-        id: uniqueId(),
-        name: "Calendar",
-        icon: Calendar,
-        url: "/apps/calendar",
-        isPro: true
-      },
-      {
-        id: uniqueId(),
-        name: "Chats",
-        icon: MessageCircle,
-        url: "/apps/chats",
-        isPro: true
       },
       {
         id: uniqueId(),
         name: "Email",
         icon: Mail,
         url: "/apps/email",
-        isPro: true
+        isPro: true,
       },
       {
         id: uniqueId(),
         name: "Contacts",
         icon: Contact,
         url: "/apps/contacts",
-        isPro: true
+        isPro: true,
       },
       {
-        name: "Invoice",
+        name: "Requirements",
         id: uniqueId(),
         icon: Receipt,
         items: [
           {
             id: uniqueId(),
-            name: "List",
-            url: "https://demos.shadcndashboard.dev/apps/invoice/list",
-            external: true,
-            isPro: true
+            name: "Requirement Edit",
+            url: "/apps/invoice/edit/2611001",
           },
-          {
-            id: uniqueId(),
-            name: "Details",
-            url: "https://demos.shadcndashboard.dev/apps/invoice/detail/PineappleInc",
-            external: true,
-            isPro: true
-          },
-          {
-            id: uniqueId(),
-            name: "Create",
-            url: "https://demos.shadcndashboard.dev/apps/invoice/create",
-            external: true,
-            isPro: true
-          },
-          {
-            id: uniqueId(),
-            name: "Edit",
-            url: "https://demos.shadcndashboard.dev/apps/invoice/edit/PineappleInc",
-            external: true,
-            isPro: true
-          },
+          { id: uniqueId(), name: "Requirement", url: "/apps/requirements/requirement" },
+          { id: uniqueId(), name: "Quotation", url: "/apps/requirements/quotation" },
+          { id: uniqueId(), name: "Sample", url: "/apps/requirements/sample" },
+          { id: uniqueId(), name: "Order", url: "/apps/requirements/order" },
+          { id: uniqueId(), name: "Expense", url: "/apps/requirements/expense" },
+          { id: uniqueId(), name: "Purchase", url: "/apps/requirements/purchase" },
+          { id: uniqueId(), name: "Production", url: "/apps/requirements/production" },
+          { id: uniqueId(), name: "Logistics", url: "/apps/requirements/logistics" },
+          { id: uniqueId(), name: "After-sales", url: "/apps/requirements/after_sales" },
         ],
       },
       {
@@ -230,28 +222,28 @@ const SidebarContent: MenuItem[] = [
             name: "Profile",
             url: "https://demos.shadcndashboard.dev/apps/user-profile/profile",
             external: true,
-            isPro: true
+            isPro: true,
           },
           {
             id: uniqueId(),
             name: "Followers",
             url: "https://demos.shadcndashboard.dev/apps/user-profile/followers",
             external: true,
-            isPro: true
+            isPro: true,
           },
           {
             id: uniqueId(),
             name: "Friends",
             url: "https://demos.shadcndashboard.dev/apps/user-profile/friends",
             external: true,
-            isPro: true
+            isPro: true,
           },
           {
             id: uniqueId(),
             name: "Gallery",
             url: "https://demos.shadcndashboard.dev/apps/user-profile/gallery",
             external: true,
-            isPro: true
+            isPro: true,
           },
         ],
       },
@@ -265,42 +257,42 @@ const SidebarContent: MenuItem[] = [
             name: "Shop",
             url: "https://demos.shadcndashboard.dev/apps/ecommerce/shop",
             external: true,
-            isPro: true
+            isPro: true,
           },
           {
             id: uniqueId(),
             name: "Details",
             url: "https://demos.shadcndashboard.dev/apps/ecommerce/detail/3",
             external: true,
-            isPro: true
+            isPro: true,
           },
           {
             id: uniqueId(),
             name: "List",
             url: "https://demos.shadcndashboard.dev/apps/ecommerce/list",
             external: true,
-            isPro: true
+            isPro: true,
           },
           {
             id: uniqueId(),
             name: "Checkout",
             url: "https://demos.shadcndashboard.dev/apps/ecommerce/checkout",
             external: true,
-            isPro: true
+            isPro: true,
           },
           {
             id: uniqueId(),
             name: "Add Product",
             url: "https://demos.shadcndashboard.dev/apps/ecommerce/addproduct",
             external: true,
-            isPro: true
+            isPro: true,
           },
           {
             id: uniqueId(),
             name: "Edit Product",
             url: "https://demos.shadcndashboard.dev/apps/ecommerce/editproduct",
             external: true,
-            isPro: true
+            isPro: true,
           },
         ],
       },
@@ -309,14 +301,14 @@ const SidebarContent: MenuItem[] = [
         icon: Users,
         name: "Customers",
         url: "/react-tables/user-datatable",
-        isPro: true
+        isPro: true,
       },
       {
         id: uniqueId(),
         icon: Package,
         name: "Orders",
         url: "/react-tables/order-datatable",
-        isPro: true
+        isPro: true,
       },
     ],
   },
