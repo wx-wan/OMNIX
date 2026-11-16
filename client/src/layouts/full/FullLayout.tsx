@@ -1,13 +1,21 @@
-import { FC } from 'react';
+import { FC, useEffect } from 'react';
 import Sidebar from './vertical/sidebar/Sidebar';
 import Header from './vertical/header/Header';
 import { SidebarInset, SidebarProvider } from 'src/components/ui/sidebar';
 import { cn } from 'src/lib/utils';
 import { Outlet } from 'react-router';
-import { useCustomizer } from 'src/context/CustomizerContext';
+import { STYLE_NAMES, useCustomizer } from 'src/context/CustomizerContext';
 
 const FullLayout: FC = () => {
   const { state, set } = useCustomizer();
+
+  // 从访客页（BlankLayout 已摘掉 style-*）回到主应用时补回主题皮肤；
+  // CustomizerContext 的 effect 只在 state 变化时执行，路由切换不会触发。
+  useEffect(() => {
+    const root = document.documentElement;
+    STYLE_NAMES.forEach((name) => root.classList.remove(`style-${name}`));
+    root.classList.add(`style-${state.activeStyle}`);
+  }, [state.activeStyle]);
 
   return (
     <>

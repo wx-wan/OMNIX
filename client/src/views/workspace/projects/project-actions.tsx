@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { toast } from "@/components/shadcn-dashboard/sonner/toast";
 import type {
   WsFile,
   WsIssue,
@@ -7,7 +8,7 @@ import type {
   WsTask,
   WsUser,
 } from "src/types/apps/workspace";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { ArrowUpRight, Pencil, Plus, Trash2 } from "lucide-react";
 import { Button } from "src/components/ui/button";
 import { Input } from "src/components/ui/input";
 import { Textarea } from "src/components/ui/textarea";
@@ -420,6 +421,7 @@ function DialogBody({
         addActivityNote(project.id, draft.message.trim());
         break;
     }
+    if (dialog.kind !== "archive") toast.success(t("Saved successfully"));
     onClose();
   };
 
@@ -624,16 +626,23 @@ export function AddBar({
   );
 }
 
-/** 行操作：shadcn ghost 图标按钮，编辑 / 软删除。 */
+/**
+ * 行操作：shadcn ghost 图标按钮。
+ * - editIcon="external" 时首按钮改为跳转箭头（预设阶段点击即打开详情）；
+ * - onDelete 缺省时不渲染删除按钮（系统预设阶段不可删除）。
+ */
 export function RowActions({
   onEdit,
   onDelete,
   zh,
+  editIcon = "edit",
 }: {
   onEdit?: () => void;
-  onDelete: () => void;
+  onDelete?: () => void;
   zh: boolean;
+  editIcon?: "edit" | "external";
 }) {
+  const EditIcon = editIcon === "external" ? ArrowUpRight : Pencil;
   return (
     <div className="flex items-center justify-end gap-1">
       {onEdit ? (
@@ -641,23 +650,27 @@ export function RowActions({
           type="button"
           variant="ghost"
           size="icon"
-          aria-label={zh ? "编辑" : "Edit"}
+          aria-label={
+            editIcon === "external" ? (zh ? "打开" : "Open") : zh ? "编辑" : "Edit"
+          }
           className="size-7 text-muted-foreground"
           onClick={onEdit}
         >
-          <Pencil className="size-3.5" />
+          <EditIcon className="size-3.5" />
         </Button>
       ) : null}
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        aria-label={zh ? "删除" : "Delete"}
-        className="size-7 text-destructive"
-        onClick={onDelete}
-      >
-        <Trash2 className="size-3.5" />
-      </Button>
+      {onDelete ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          aria-label={zh ? "删除" : "Delete"}
+          className="size-7 text-destructive"
+          onClick={onDelete}
+        >
+          <Trash2 className="size-3.5" />
+        </Button>
+      ) : null}
     </div>
   );
 }

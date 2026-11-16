@@ -516,3 +516,48 @@ Omnix 是线上参考 demo 的 1:1 复刻，不是一次视觉再创作。视觉
 - 状态契约**不变**：仍走 `CustomizerContext` 的 `set / setPrimaryColor / setSecondaryColor` 与 `ThemeContext.setTheme`；`index.html` 内联 ThemeInitializer、`globals.css` 的 `@import` 与 `@custom-variant`、`layout-contract.css`、`theme-tokens.css`、`rtl-contract.css`、三份 `style-*.css` 全部保留，一个都不能删。
 - **有意偏离 1:1 基线**：`FullLayout.tsx` 不再挂载 `<Customizer />`，`data-customizer-trigger`（旋转齿轮浮标）、`data-customizer-panel` / `cn-sheet-*` 的右侧 Sheet DOM 随之消失；C5 / REA 5 态矩阵中「点击浮标弹出 384px Sheet」一态不再适用，后续验收以 `/settings/layout` 页面为准。如需恢复快捷入口，在 `FullLayout` 加回挂载并另写浮标包装即可，控件本体可直接复用。
 - 文案全部走 `t()`，中英成对；`Vega / Nova / Maia / Lyra / Mira / Luma / Rhea`、`LTR / RTL` 按技术专名保留原文。
+
+### 全局 toast 替换为 Sonner 08 - Toast Types（2026-11-16）
+
+用户要求创建 shadcn block `sonner-08.tsx` / `toaster.tsx`，并**替换全局 toast**（不只是加一个 demo）。
+
+- 结构核对：`components.json`（base-nova）的 `@/components` → `src/components`，故用户给的 `components/shadcn-dashboard/...` 落在 `client/src/components/shadcn-dashboard/sonner/`；React 19.2.8、Tailwind 4.3.3、TS 6.0.2（高于要求的 ^5，语法向下兼容，不降级）；`--color-popover` / `--popover-foreground` / `--radius-*` 已在 `src/css/globals.css`，**无需新增依赖或全局样式**。`@base-ui/react@1.8.0` 已在依赖中，用 `npx shadcn@latest add toast --overwrite` 生成 `src/components/ui/toast.tsx`；CLI 写入的 `import { cn } from "cn"` 已改为 `@/lib/utils`，并恢复被 CLI 覆盖的 `button.tsx`。
+- block 实现：`toaster.tsx` 提供六向 `PositionedToaster`、`ToastData`、按 `type` 的 `typeIcons`、top 位堆叠翻转；`sonner-08.tsx` 是 6 种类型 demo（局部 manager + top-right）。类型化 tones（圆形图标 / 描边 / 按钮配色）抽到同目录 `tones.tsx`，demo 与全局共用唯一实现，视觉逐项不变。
+- 全局替换：`App.tsx` 由旧 `components/ui/sonner`（Sonner `<Toaster position="top-center" />`）改为 `PositionedToaster manager={toastManager} position="top-center"`；删除 `src/components/ui/sonner.tsx`，`npm uninstall sonner --workspace client`（lock 中仅剩 `@univerjs` 的传递依赖）。
+- 兼容层 `src/components/shadcn-dashboard/sonner/toast.ts`：模块级 `createToastManager()` + `Object.assign` façade，保留 `toast.success/error/info/warning/loading/message/reminder(message, { description, duration, id, icon, closeButton, action })`、`toast(message)` 与 `toast.dismiss(id?)`；按 tone 注入 `toneData()` 的圆形图标与描边，`loading` 改用 `typeIcons` 的 spinner。10 个调用点（登录/注册/忘记密码/个人信息/成员/联系人/FAQ/右上角 Profile/avatar-10）只改 import，17 处调用零改动。
+- 行为差异：底层由 Sonner 换成 Base UI Toast；位置沿用原 `top-center`，默认无关闭按钮（与原 Sonner 一致，可用 `closeButton: true` 开启）；配色沿用线上取证色板 teal / sky / amber / destructive / blue。
+- 验收：tsc 0 错误、lint 0 error（3 条既有 warning）、build 通过；浏览器动态触发 success/error/info → 3 个 `[data-slot=toast]`，分别带 `border-teal-400/30` / `border-destructive/30` / `border-sky-400/30` 与对应图标，viewport `sm:inset-x-0` 居中；真实登录失败链路弹出 `Invalid credentials` 错误 toast；warning / loading / dismiss 与 demo 模块加载均正常；0 新增 runtime error（控制台既有 `/api/auth/me` 401 与 MSW 版本 warning 与本改动无关）。
+
+### 成功类操作提示补齐（2026-11-16）
+
+用户反馈「登录成功、项目创建成功、保存成功的提示都没有了」。
+
+- 排查结论：**不是全局 toast 替换导致的丢失**。浏览器实测 `toast.success` 在 `/login` 与主应用 `/` 均可见（Portal 挂 `BODY`、`position:fixed`、`z-index:50`，`elementFromPoint` 命中 toast 标题），SPA 路由跳转也不清空已触发的 toast；`git log -S` 与全量 `git grep` 证明登录/注册成功分支、项目 `create`、项目详情 `submit` 在改动前后都没有 `toast.success` 调用，成功提示集合完全一致。真正原因是这些成功分支只有「写 store + 关弹窗 + `navigate`」，本来就没有反馈。
+- 补齐范围（**只在真实写入分支加提示**，`settings/general.tsx` 等纯 `preventDefault()` 占位表单不加假提示）：`views/auth/pms/login.tsx` 登录成功、`register.tsx` 注册成功、`views/workspace/projects/index.tsx` 新建项目、`projects/detail.tsx` 编辑项目保存、`projects/project-actions.tsx` 详情各弹窗保存（`archive` 不发保存类提示）。统一走 `@/components/shadcn-dashboard/sonner/toast` 的 `toast.success`，不加第二套提示组件。
+- i18n：`i18n/resources.ts` 的 `ch` 段新增 `Logged in successfully / Account created / Project created / Saved successfully` 四条中文词条；英文为源语言回退，`en` 段无需改动。
+- 验收：tsc 0 错误、lint 0 error（3 条既有 warning）、build 通过；真实登录成功跳转 `/` 后显示 `Logged in successfully`（`border-teal-400/30`）；切中文后三条文案分别为「登录成功」「项目创建成功」「保存成功」。重启 dev server（`npm run dev -- --force`）清掉卸载 `sonner` 后的 Vite 预构建缓存，避免旧标签页残留旧模块。
+
+### toast 右上角统一 + 每条提示补描述 + 控制台告警清理（2026-11-16）
+
+- 位置：`App.tsx` 的 `PositionedToaster position` 由 `top-center` 改为 `top-right`，与 Sonner 08 demo 一致；浏览器实测 toast 距右/上各 16px。
+- 描述：`sonner/toast.ts` 增加 `DETAIL_KEYS`（登录/注册/项目/保存/联系人/成员/头像/重置密码/失败等标题的中英文原文精确匹配）与 `TONE_DETAILS`（按 tone 兜底），`show()` 用 `description: options?.description ?? i18n.t(...)`；**调用点零改动，每条 toast 自动获得第二行描述**（显式传 description 时优先）。`i18n/resources.ts` 的 `ch` 段新增 27 条描述词条，英文按源语言回退。文案组织原则：描述给出「接下来能做什么 / 更改落在哪里」，不复述标题（如「项目创建成功」→「新项目已打开，可继续补充需求、任务与进度。」）。
+- 控制台修复：`npx msw init public` 将 `client/public/mockServiceWorker.js` 从 2.14.2 升到 2.15.0，消除 MSW 版本不匹配 warning 与 `mockServiceWorker.js:238 passThrough → Failed to fetch` 的两个 error；`header/Notifications.tsx` 的 `<Button render={<Link to="#" />}>` 补 `nativeButton={false}`，消除 Base UI「expected a native <button>」error。
+- 验收：tsc 0 错误、lint 0 error（3 条既有 warning）、build 通过；全新浏览器上下文复测 console **0 warning**，截图中的 3 个 error 全部消失；真实登录成功 toast 右上角两行显示 `Logged in successfully` + `Your workspace is ready. Pick up where you left off.`。仅剩 `/api/auth/me` 未登录 401 —— 这是登录墙每次导航主动校验会话的预期响应，不是故障。
+
+### Theme Style 真正生效 + 访客页隔离（2026-11-16）
+
+用户反馈「布局的主题风格没有正确应用」。
+
+- 根因：`css/globals.css` 把三份皮肤（`style-lyra.css` / `style-vega.css` / `style-variants.css`）导入在 `layer(components)`。Tailwind v4 的层序是 theme → base → components → utilities，而 Button / Card / Input 自带 `rounded-lg`、`h-8`、`px-2.5` 等 utilities 类，皮肤里的 `.style-x .cn-y` 属于 components 层，**整层被 utilities 压住**。实测 7 套风格互相切换的 computed style diff 为空，只有 `<html>` 的 class 变了。
+- 修复一：三份皮肤改导入 `layer(utilities)`。同层内靠 `.style-x .cn-y` 的 (0,2,0) 特异性压过实例工具类 (0,1,0)，同时不越过无层的 `layout-contract.css` / `theme-tokens.css`。实测 7 套产生不同规格：按钮圆角 vega 8 / nova 12 / maia 26 / lyra 8 / mira 8 / luma 26 / rhea 18，卡片圆角与内边距同步变化。
+- 修复二：皮肤进 utilities 层后会反向覆盖登录页的 `gap-8` / `sm:py-12`（AuthCard 的实例工具类），故在 `BlankLayout` 挂载时从 `<html>` 摘掉 `style-*`，在 `FullLayout` 挂载时按 `state.activeStyle` 补回。访客页恢复 utilities 优先（卡片 gap 32px / paddingTop 48px），登录后主应用自动恢复当前皮肤。
+- 验收：tsc 0 错误、lint 0 error（3 条既有 warning）、build 通过；登录页 `html.class` 仅 `light`、卡片 gap 32px；登录后 `light style-maia`、按钮 26px；7 套逐一实测均有差异。
+
+### 阶段页新建入口改为网格末尾卡片（2026-11-16）
+
+- 需求：去掉阶段 tab 右上角 hover 浮现的 `+` 按钮，改为在卡片网格末尾补一个「添加阶段」卡（仿 shadcn 风格）。
+- 实现：`projects/detail.tsx` 的 `addBar` 在 `case "Sprints"` 直接返回 `null`，其余 tab 的 hover 入口保持不动；阶段网格 `visibleCards.map` 之后追加一个虚线按钮卡（`border-dashed` + 居中圆形加号 + `Add stage` 文案，`min-h-[172px]`、hover 时边框与底色微变、`focus-visible` 走 ring）。点击复用 `setDialog({ kind: "sprint" })`，与原先的新建迭代弹窗同一入口。
+- i18n：新增 `Add stage` → 「添加阶段」，英文按源语言回退。
+- 验收：tsc 0 错误、lint 0 error（3 条既有 warning）、build 通过；阶段页实测右上角 hover 按钮不存在（`hoverButtonExists: false`），添加卡位于网格最后一个（第 12 个节点）、尺寸 219×173、`borderStyle: dashed`，点击弹出 `New Iteration` 表单。
+- 追加（同日）：网格保持内容高度、添加卡用 `self-stretch` 跟随同行 stretch，三种卡片同行等高（最后一行实测 227 / 227、底边对齐 0px）。曾试过 `auto-rows-fr`，会把行高按容器剩余高度分配、卡片之间出现大片空隙，已回退。
+- 同一改动：`RowActions` 的 `onDelete` 改为可选、新增 `editIcon: "edit" | "external"`，预设阶段只渲染 `ArrowUpRight`（aria-label `Open`）且**不渲染删除按钮**（`hideStageCard` 入口随之移除），自定义迭代仍保留 Pencil + Delete。

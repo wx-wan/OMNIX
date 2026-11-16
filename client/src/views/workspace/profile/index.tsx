@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router";
 import { useTranslation } from "react-i18next";
-import { toast } from "sonner";
+import { toast } from "@/components/shadcn-dashboard/sonner/toast";
 import { Eye } from "lucide-react";
 import {
   Card,

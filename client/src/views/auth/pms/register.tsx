@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
-import { toast } from "sonner";
+import { toast } from "@/components/shadcn-dashboard/sonner/toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -29,6 +29,7 @@ export default function PmsRegister() {
     try {
       // 注册接口同时写入 session，无需再调用一次登录。
       await register(name.trim(), email.trim(), password);
+      toast.success(t("Account created"));
       navigate("/", { replace: true });
     } catch (error) {
       toast.error(t((error as Error).message));

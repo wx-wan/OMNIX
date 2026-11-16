@@ -1,6 +1,6 @@
 import { ChevronRight } from "lucide-react";
 import { Link } from "react-router";
-import { toast } from "sonner";
+import { toast } from "@/components/shadcn-dashboard/sonner/toast";
 import {
   Accordion,
   AccordionContent,

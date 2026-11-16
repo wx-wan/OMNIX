@@ -3,13 +3,16 @@
 @import "./pages/app.css";
 
 
-/* 皮肤基类归入 components 层：官方线上的实例工具类（utilities）可覆盖它们
-   （取证实测：官方卡片 sm:gap-8 / sm:py-12 生效）。此前无层级引入导致
-   .style-* .cn-* 反向覆盖登录/注册页的 gap-6 sm:gap-8 与 px/py，间距全错。 */
-@import "./styles/style-lyra.css" layer(components);
-@import "./styles/style-vega.css" layer(components);
+/* 皮肤基类必须落在 utilities 层：7 套风格全是 `.style-x .cn-y` 形态的规格覆盖，
+   而组件本体（Button / Card / Input）带的是 utilities 里的 rounded-lg / h-8 / px-2.5。
+   此前放进 components 层会被 utilities 整体压住 —— 点 Theme Style 只改根 class、
+   视觉零变化（实测 7 套切换的 computed style diff 为空）。
+   放进 utilities 层后靠 (0,2,0) 的选择器特异性压过 (0,1,0) 的实例工具类，
+   同时不越过无层的 layout-contract / theme-tokens。 */
+@import "./styles/style-lyra.css" layer(utilities);
+@import "./styles/style-vega.css" layer(utilities);
 @import "./styles/layout-contract.css";
-@import "./styles/style-variants.css" layer(components);
+@import "./styles/style-variants.css" layer(utilities);
 @import "./styles/theme-tokens.css";
 @import "./styles/rtl-contract.css";
 @import "./styles/animation-contract.css";

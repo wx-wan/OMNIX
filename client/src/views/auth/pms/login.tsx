@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
-import { toast } from "sonner";
+import { toast } from "@/components/shadcn-dashboard/sonner/toast";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -38,6 +38,7 @@ export default function PmsLogin() {
     setSubmitting(true);
     try {
       await login(email.trim(), password, remember);
+      toast.success(t("Logged in successfully"));
       // 记住此设备：本机保存账号与密码供下次自动回填；后端按 remember 下发持久化会话 cookie。
       localStorage.setItem(REMEMBER_DEVICE_KEY, String(remember));
       if (remember) {

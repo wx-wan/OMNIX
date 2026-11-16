@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate, useParams } from "react-router";
+import { toast } from "@/components/shadcn-dashboard/sonner/toast";
 import {
   Activity,
   CalendarClock,
@@ -42,7 +43,6 @@ import {
   archiveProject,
   getStageForm,
   getStageView,
-  hideStageCard,
   projectNo,
   projectNoParam,
   projectStage,
@@ -330,11 +330,8 @@ export default function ProjectDetailPage() {
           onAdd: () => setDialog({ kind: "task" }),
         };
       case "Sprints":
-        return {
-          title: t("Sprints"),
-          label: t("New Iteration"),
-          onAdd: () => setDialog({ kind: "sprint" }),
-        };
+        /** 阶段页不设右上角悬浮新建按钮：入口改为网格末尾的「添加阶段」卡片。 */
+        return null;
       case "Members":
         return {
           title: `${t("Members")} (${members.length})`,
@@ -1005,6 +1002,7 @@ export default function ProjectDetailPage() {
                         <div className="absolute right-3 top-3 z-10 hidden group-hover/card:block">
                           <RowActions
                             zh={zh}
+                            editIcon={card.editable ? "edit" : "external"}
                             onEdit={() => {
                               if (!card.editable) {
                                 navigate(card.href);
@@ -1015,15 +1013,27 @@ export default function ProjectDetailPage() {
                               );
                               if (rec) setDialog({ kind: "sprint", record: rec });
                             }}
-                            onDelete={() =>
+                            onDelete={
                               card.editable
-                                ? removeRecord("sprints", card.sprintId, id)
-                                : hideStageCard(id, card.key)
+                                ? () => removeRecord("sprints", card.sprintId, id)
+                                : undefined
                             }
                           />
                         </div>
                       </div>
                     ))}
+                    {/* 阶段页的新建入口：网格末尾的虚线卡片，替代右上角 hover 按钮 */}
+                    <button
+                      type="button"
+                      onClick={() => setDialog({ kind: "sprint" })}
+                      aria-label={t("Add stage")}
+                      className="group/add flex flex-col items-center justify-center gap-2 self-stretch rounded-xl border border-dashed border-border bg-card/40 p-4 text-muted-foreground transition-colors outline-none hover:border-foreground/25 hover:bg-muted/30 hover:text-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                    >
+                      <span className="flex size-8 items-center justify-center rounded-full border border-border bg-background transition-colors group-hover/add:border-foreground/20">
+                        <Plus className="size-4" />
+                      </span>
+                      <span className="text-xs font-medium">{t("Add stage")}</span>
+                    </button>
                   </div>
                 ) : null}
 
@@ -1253,6 +1263,7 @@ export default function ProjectDetailPage() {
         teams={snap.teams}
         onSubmit={(values) => {
           updateProject(id, values);
+          toast.success(t("Saved successfully"));
           setEditOpen(false);
         }}
       />

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { Camera, Trash2, Upload } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/components/shadcn-dashboard/sonner/toast";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";

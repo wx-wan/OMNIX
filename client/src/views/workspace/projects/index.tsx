@@ -1,6 +1,7 @@
 import { Fragment, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router";
+import { toast } from "@/components/shadcn-dashboard/sonner/toast";
 import {
   ArrowRight,
   CircleDot,
@@ -109,6 +110,7 @@ export default function ProjectsPage() {
       ...(values.dueDate ? { dueDate: values.dueDate } : {}),
     });
     setCreatingStage(null);
+    toast.success(t("Project created"));
     navigate(`/projects/${created.id}`);
   };
 

@@ -10,7 +10,7 @@ import { Avatar, AvatarImage, AvatarFallback, AvatarBadge } from "src/components
 import { Button } from "src/components/ui/button";
 import { Check } from "lucide-react";
 import { Icon } from "@iconify/react";
-import { toast } from "sonner";
+import { toast } from "@/components/shadcn-dashboard/sonner/toast";
 
 import { cn } from "src/lib/utils";
 import { Mailbox } from 'lucide-react';
