@@ -7,6 +7,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Ellipsis,
+  Lock,
   Plus,
   Search,
 } from "lucide-react";
@@ -56,14 +57,17 @@ import { roleLabel, useUsers } from "@/api/auth/use-users";
 import { presenceStyles } from "@/lib/presence";
 import { SettingsLayout, SettingsSelect } from "./index";
 
-// 后端角色值：admin / user / viewer。页面文案由 roleLabel + t() 映射。
+// 后端可分配角色值：admin / user / viewer。super_admin 仅 seed 赋值，不接受任何选择，故不在选项内。
 const ROLES = ["admin", "user", "viewer"];
+// 超级管理员（唯一，默认 admin@omnix.dev）：角色锁定、不可移除，页面只做静态展示。
+const SUPER_ADMIN_ROLE = "super_admin";
+const isSuperAdmin = (role?: string) => role === SUPER_ADMIN_ROLE;
 
 /** /settings/members — 取证 23-settings-members.*，弹层态 32-members-* */
 export default function SettingsMembers() {
   const { t } = useTranslation();
   const { user, presence } = useAuth();
-  const isAdmin = user?.role === "admin";
+  const isAdmin = user?.role === "admin" || isSuperAdmin(user?.role);
   const { users, isLoading, updateRole, remove } = useUsers();
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
@@ -124,7 +128,7 @@ export default function SettingsMembers() {
             <SettingsSelect
               value={roleFilter}
               onValueChange={(value) => { setRoleFilter(value); setPage(1); }}
-              options={["all", "admin", "user", "viewer"]}
+              options={["all", "super_admin", "admin", "user", "viewer"]}
               formatOption={(value) => (value === "all" ? t("All roles") : t(roleLabel(value)))}
               className="w-36 cursor-pointer dark:border-border dark:bg-background"
             />
@@ -138,14 +142,15 @@ export default function SettingsMembers() {
                 <TableRow className="hover:bg-transparent!">
                   <TableHead className="px-3">{t("Member")}</TableHead>
                   <TableHead className="px-3">{t("Role")}</TableHead>
-                  <TableHead className="px-3">{t("Joined")}</TableHead>
+                  <TableHead className="px-3">{t("Department")}</TableHead>
+                  <TableHead className="px-3">{t("Join date")}</TableHead>
                   {isAdmin && <TableHead className="w-10 px-3" />}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading && (
                   <TableRow>
-                    <TableCell colSpan={isAdmin ? 4 : 3} className="px-3 py-6 text-center text-sm text-muted-foreground">
+                    <TableCell colSpan={isAdmin ? 5 : 4} className="px-3 py-6 text-center text-sm text-muted-foreground">
                       {t("Loading...")}
                     </TableCell>
                   </TableRow>
@@ -179,62 +184,77 @@ export default function SettingsMembers() {
                         </div>
                       </TableCell>
                       <TableCell className="px-3 py-3">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger
-                            render={
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="w-28 cursor-pointer justify-between capitalize"
-                              />
-                            }
+                        {isSuperAdmin(role) ? (
+                          <span
+                            title={t("Super admin role is locked")}
+                            className="inline-flex h-8 w-28 cursor-not-allowed items-center justify-center gap-1.5 rounded-md border border-border bg-muted/40 px-2 text-sm font-medium"
                           >
-                            <span>{t(roleLabel(role))}</span>
-                            <ChevronDown />
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent>
-                            {ROLES.map((option) => (
-                              <DropdownMenuItem
-                                key={option}
-                                onClick={() =>
-                                  void run(
-                                    () => updateRole(member.id, option),
-                                    t("Role updated"),
-                                  )
-                                }
-                              >
-                                {t(roleLabel(option))}
-                              </DropdownMenuItem>
-                            ))}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                            <Lock className="size-3.5 text-muted-foreground" />
+                            {t(roleLabel(role))}
+                          </span>
+                        ) : (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger
+                              render={
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="w-28 cursor-pointer justify-between capitalize"
+                                />
+                              }
+                            >
+                              <span>{t(roleLabel(role))}</span>
+                              <ChevronDown />
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent>
+                              {ROLES.map((option) => (
+                                <DropdownMenuItem
+                                  key={option}
+                                  onClick={() =>
+                                    void run(
+                                      () => updateRole(member.id, option),
+                                      t("Role updated"),
+                                    )
+                                  }
+                                >
+                                  {t(roleLabel(option))}
+                                </DropdownMenuItem>
+                              ))}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        )}
+                      </TableCell>
+                      <TableCell className="px-3 py-3 text-sm whitespace-nowrap text-muted-foreground">
+                        {member.department || "—"}
                       </TableCell>
                       <TableCell className="px-3 py-3 text-sm whitespace-nowrap text-muted-foreground">
                         {new Date(member.createdAt).toLocaleDateString()}
                       </TableCell>
                       {isAdmin && <TableCell className="px-3 py-3">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger
-                            render={
-                              <Button
-                                variant="ghost"
-                                size="icon-sm"
-                                aria-label={`Actions for ${member.name}`}
-                              />
-                            }
-                          >
-                            <Ellipsis />
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem
-                              onClick={() =>
-                                void run(() => remove(member.id), t("Member removed"))
+                        {isSuperAdmin(role) ? null : (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger
+                              render={
+                                <Button
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  aria-label={`Actions for ${member.name}`}
+                                />
                               }
                             >
-                              {t("Remove")}
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                              <Ellipsis />
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  void run(() => remove(member.id), t("Member removed"))
+                                }
+                              >
+                                {t("Remove")}
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        )}
                       </TableCell>}
                     </TableRow>
                   );

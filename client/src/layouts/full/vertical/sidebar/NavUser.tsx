@@ -25,15 +25,16 @@ export function NavUser() {
                 <SidebarMenu className=" ">
                     {navItems.map((item) => (
                         <SidebarMenuItem key={item.title}>
-                            <SidebarMenuButton size="lg" className="h-full cursor-pointer">
-                                <Link to={item.url} prefetch="none">
-                                    <div className="flex items-center gap-3 w-full">
-                                        <item.icon className="shadow-none size-5 shrink-0" />
-                                        <div className="flex flex-col flex-1 text-left text-sm leading-tight hide-menu whitespace-nowrap">
-                                            <span className="truncate font-medium">{t(item.title)}</span>
-                                        </div>
-                                    </div>
-                                </Link>
+                            {/* Link 作为按钮本体的渲染元素：整行 div 均可点击跳转，与仪表盘菜单项交互一致 */}
+                            <SidebarMenuButton
+                                size="lg"
+                                className="h-full w-full cursor-pointer"
+                                render={<Link to={item.url} prefetch="none" />}
+                            >
+                                <item.icon className="shadow-none size-5 shrink-0" />
+                                <div className="flex flex-col flex-1 text-left text-sm leading-tight hide-menu whitespace-nowrap">
+                                    <span className="truncate font-medium">{t(item.title)}</span>
+                                </div>
                             </SidebarMenuButton>
                         </SidebarMenuItem>
                     ))}

@@ -1,6 +1,5 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { CURRENT_USER_ID } from "src/api/workspace/constants";
 import { Button } from "src/components/ui/button";
 import { DatePicker } from "src/components/ui/date-picker";
 import {
@@ -24,6 +23,15 @@ import {
 import { Switch } from "src/components/ui/switch";
 import { Textarea } from "src/components/ui/textarea";
 import type { WsProject, WsUser } from "src/types/apps/workspace";
+import SelectWithAvatars, { type SelectUser } from "@/components/shadcn-dashboard/select/select-07";
+
+/** WsUser → SelectUser：经办人下拉复用 select-07 的真实用户来源。 */
+const toSelectUser = (person: WsUser): SelectUser => ({
+  id: person.id,
+  src: person.avatar,
+  fallback: person.name?.[0]?.toUpperCase() || "?",
+  name: person.name,
+});
 
 /**
  * 线上 PMS 五个「新建」弹窗的 1:1 复刻。
@@ -44,6 +52,7 @@ const isoDay = (offset = 0) => {
 type Option = { value: string; label: string };
 
 const PRIORITY_OPTIONS: Option[] = [
+  { value: "none", label: "none" },
   { value: "low", label: "low" },
   { value: "medium", label: "medium" },
   { value: "high", label: "high" },
@@ -172,13 +181,16 @@ function RecordSelect({
   options: Option[];
   noneLabel: string;
 }) {
+  /** Base UI 的 SelectValue 默认回退显示 value（id），这里显式渲染选中项的 label。 */
+  const selected = value ? options.find((option) => option.value === value) : undefined;
+  const selectedNode = selected ? selected.label : noneLabel;
   return (
     <Select
       value={value || NONE}
       onValueChange={(next) => next && onChange(next === NONE ? "" : next)}
     >
       <SelectTrigger id={id} className="w-full">
-        <SelectValue />
+        <SelectValue>{selectedNode}</SelectValue>
       </SelectTrigger>
       <SelectContent>
         <SelectItem value={NONE}>{noneLabel}</SelectItem>
@@ -218,13 +230,21 @@ export function NewIssueDialog({
   onSubmit,
   projects,
   users,
-}: CreateProps & { onSubmit: (values: NewIssueValues) => void }) {
+  defaultProjectId,
+}: CreateProps & { onSubmit: (values: NewIssueValues) => void; defaultProjectId?: string }) {
   const { t } = useTranslation();
-  const [values, setValues] = useState<NewIssueValues>(EMPTY_ISSUE);
+  const [values, setValues] = useState<NewIssueValues>({
+    ...EMPTY_ISSUE,
+    projectId: defaultProjectId ?? "",
+  });
 
   useEffect(() => {
-    if (open) setValues(EMPTY_ISSUE);
-  }, [open]);
+    if (open)
+      setValues({
+        ...EMPTY_ISSUE,
+        projectId: defaultProjectId ?? "",
+      });
+  }, [open, defaultProjectId]);
 
   const set = (key: keyof NewIssueValues, value: string) =>
     setValues((prev) => ({ ...prev, [key]: value }));
@@ -248,7 +268,7 @@ export function NewIssueDialog({
         <FieldLabel htmlFor="issue-title">{t("Title")}</FieldLabel>
         <Input
           id="issue-title"
-          placeholder={t("Fix responsive layout issues")}
+          placeholder={t("Describe the issue you need to report")}
           value={values.title}
           onChange={(event) => set("title", event.target.value)}
         />
@@ -294,13 +314,16 @@ export function NewIssueDialog({
       </div>
       <Field>
         <FieldLabel htmlFor="issue-assignee">{t("Assignee")}</FieldLabel>
-        <RecordSelect
-          id="issue-assignee"
-          value={values.assigneeId}
-          onChange={(value) => set("assigneeId", value)}
-          noneLabel={t("Unassigned")}
-          options={users.map((person) => ({ value: person.id, label: person.name }))}
-        />
+        <div className="[&>div]:max-w-none">
+          <SelectWithAvatars
+            id="issue-assignee"
+            label=""
+            labelText={t("Assign to")}
+            users={users.map(toSelectUser)}
+            value={values.assigneeId}
+            onChange={(value) => set("assigneeId", value)}
+          />
+        </div>
       </Field>
     </CreateDialog>
   );
@@ -334,13 +357,26 @@ export function NewTaskDialog({
   onSubmit,
   projects,
   users,
-}: CreateProps & { onSubmit: (values: NewTaskValues) => void }) {
+  defaultProjectId,
+}: CreateProps & { onSubmit: (values: NewTaskValues) => void; defaultProjectId?: string }) {
   const { t } = useTranslation();
   const [values, setValues] = useState<NewTaskValues>(EMPTY_TASK);
 
+  /** 任务默认优先级跟随所属项目：未选项目时退回表单默认值。 */
+  const projectPriority = (projectId: string) =>
+    projects.find((project) => project.id === projectId)?.priority || "medium";
+
   useEffect(() => {
-    if (open) setValues(EMPTY_TASK);
-  }, [open]);
+    if (!open) return;
+    const projectId = defaultProjectId ?? "";
+    setValues({
+      ...EMPTY_TASK,
+      projectId,
+      priority: projectId ? projectPriority(projectId) : EMPTY_TASK.priority,
+    });
+    // projects 只在快照就绪后变化一次，无需纳入依赖
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, defaultProjectId]);
 
   const set = (key: keyof NewTaskValues, value: string) =>
     setValues((prev) => ({ ...prev, [key]: value }));
@@ -364,7 +400,7 @@ export function NewTaskDialog({
         <FieldLabel htmlFor="task-title">{t("Title")}</FieldLabel>
         <Input
           id="task-title"
-          placeholder={t("Write project documentation")}
+          placeholder={t("Describe the task you need to add")}
           value={values.title}
           onChange={(event) => set("title", event.target.value)}
         />
@@ -383,7 +419,13 @@ export function NewTaskDialog({
         <RecordSelect
           id="task-project"
           value={values.projectId}
-          onChange={(value) => set("projectId", value)}
+          onChange={(value) =>
+            setValues((prev) => ({
+              ...prev,
+              projectId: value,
+              priority: projectPriority(value),
+            }))
+          }
           noneLabel={t("Select a project")}
           options={projects.map((project) => ({ value: project.id, label: project.name }))}
         />
@@ -411,13 +453,16 @@ export function NewTaskDialog({
       <div className="grid grid-cols-2 gap-4">
         <Field>
           <FieldLabel htmlFor="task-assignee">{t("Assignee")}</FieldLabel>
-          <RecordSelect
-            id="task-assignee"
-            value={values.assigneeId}
-            onChange={(value) => set("assigneeId", value)}
-            noneLabel={t("Unassigned")}
-            options={users.map((person) => ({ value: person.id, label: person.name }))}
-          />
+          <div className="[&>div]:max-w-none">
+            <SelectWithAvatars
+              id="task-assignee"
+              label=""
+              labelText={t("Assign to")}
+              users={users.map(toSelectUser)}
+              value={values.assigneeId}
+              onChange={(value) => set("assigneeId", value)}
+            />
+          </div>
         </Field>
         <Field>
           <FieldLabel htmlFor="task-due-date">{t("Due Date")}</FieldLabel>
@@ -621,7 +666,7 @@ export function NewEventDialog({
             id="event-assignee"
             value={values.assigneeId}
             onChange={(value) => set("assigneeId", value)}
-            noneLabel={t("none")}
+            noneLabel={t("Unassigned")}
             options={users.map((person) => ({ value: person.id, label: person.name }))}
           />
         </Field>
@@ -661,7 +706,7 @@ export function NewEventDialog({
           id="event-project"
           value={values.projectId}
           onChange={(value) => set("projectId", value)}
-          noneLabel={t("none")}
+          noneLabel={t("Select a project")}
           options={projects.map((project) => ({ value: project.id, label: project.name }))}
         />
       </Field>
@@ -678,83 +723,3 @@ export function NewEventDialog({
   );
 }
 
-/* ---------------------------------- New Team --------------------------------- */
-
-export type NewTeamValues = {
-  name: string;
-  description: string;
-  leadId: string;
-};
-
-const EMPTY_TEAM: NewTeamValues = {
-  name: "",
-  description: "",
-  leadId: CURRENT_USER_ID,
-};
-
-export function NewTeamDialog({
-  open,
-  onOpenChange,
-  onSubmit,
-  users,
-}: Omit<CreateProps, "projects"> & { onSubmit: (values: NewTeamValues) => void }) {
-  const { t } = useTranslation();
-  const [values, setValues] = useState<NewTeamValues>(EMPTY_TEAM);
-
-  useEffect(() => {
-    if (open) setValues(EMPTY_TEAM);
-  }, [open]);
-
-  const set = (key: keyof NewTeamValues, value: string) =>
-    setValues((prev) => ({ ...prev, [key]: value }));
-  const submit = () => {
-    const name = values.name.trim();
-    if (!name) return;
-    onSubmit({ ...values, name, description: values.description.trim() });
-  };
-
-  /** 线上 Owner 下拉直接展示用户 id（默认 u2）。 */
-  const owners: Option[] = users.map((person) => ({ value: person.id, label: person.id }));
-  if (!owners.some((owner) => owner.value === CURRENT_USER_ID))
-    owners.unshift({ value: CURRENT_USER_ID, label: CURRENT_USER_ID });
-
-  return (
-    <CreateDialog
-      open={open}
-      onOpenChange={onOpenChange}
-      formId="new-team-form"
-      title={t("New team")}
-      description={t("Group people who work together on the same projects.")}
-      submitLabel={t("Create team")}
-      onSubmit={submit}
-    >
-      <Field>
-        <FieldLabel htmlFor="team-name">{t("Name")}</FieldLabel>
-        <Input
-          id="team-name"
-          placeholder={t("Engineering")}
-          value={values.name}
-          onChange={(event) => set("name", event.target.value)}
-        />
-      </Field>
-      <Field>
-        <FieldLabel htmlFor="team-owner">{t("Owner")}</FieldLabel>
-        <EnumSelect
-          id="team-owner"
-          value={values.leadId}
-          onChange={(value) => set("leadId", value)}
-          options={owners}
-        />
-      </Field>
-      <Field>
-        <FieldLabel htmlFor="team-description">{t("Description")}</FieldLabel>
-        <Textarea
-          id="team-description"
-          placeholder={t("What does this team do?")}
-          value={values.description}
-          onChange={(event) => set("description", event.target.value)}
-        />
-      </Field>
-    </CreateDialog>
-  );
-}

@@ -64,41 +64,42 @@ async function main() {
   }
   console.log(`✓ seeded ${stages.length} stages`);
 
-  // 默认管理员账号（便于登录体验）；以 type=user 的统一联系人落库。已存在则同步密码，保证可登录。
+  // 超级管理员账号（唯一、不可变更、不可被其他成员选择）；以 type=user 的统一联系人落库。
+  // 角色值 super_admin 不接受任何接口修改，仅此处 seed 赋值；重跑 seed 会同步密码并保证角色锁定。
   const adminEmail = "admin@omnix.dev";
   const adminHash = await bcrypt.hash("admin123", 10);
   await prisma.contact.upsert({
     where: { email: adminEmail },
-    update: { name: "管理员", type: ContactType.user, role: "admin", password: adminHash },
+    update: { name: "管理员", type: ContactType.user, role: "super_admin", password: adminHash },
     create: {
       email: adminEmail,
       name: "管理员",
       type: ContactType.user,
-      role: "admin",
+      role: "super_admin",
       password: adminHash,
     },
   });
-  console.log("✓ ensured admin contact (admin@omnix.dev / admin123)");
+  console.log("✓ ensured super admin contact (admin@omnix.dev / admin123)");
 
   // 成员页的 8 位成员落为真实可登录用户（原 mock 数据 → Contact type=user）。
   // 密码统一 123456；alice@pms.com 为管理员，其余为 member / viewer。
   // 幂等 upsert，重跑 seed 会同步密码与角色，不动其它业务数据。
   const memberHash = await bcrypt.hash("123456", 10);
   const members = [
-    { email: "alice@pms.com", name: "Alice Johnson", role: "admin", avatar: 1 },
-    { email: "bob@pms.com", name: "Bob Smith", role: "user", avatar: 2 },
-    { email: "carol@pms.com", name: "Carol Davis", role: "user", avatar: 3 },
-    { email: "david@pms.com", name: "David Lee", role: "user", avatar: 4 },
-    { email: "eve@pms.com", name: "Eve Wilson", role: "viewer", avatar: 5 },
-    { email: "frank@pms.com", name: "Frank Brown", role: "user", avatar: 6 },
-    { email: "grace@pms.com", name: "Grace Kim", role: "admin", avatar: 7 },
-    { email: "henry@pms.com", name: "Henry Chen", role: "user", avatar: 8 },
+    { email: "alice@pms.com", name: "Alice Johnson", role: "admin", avatar: 1, department: "销售部" },
+    { email: "bob@pms.com", name: "Bob Smith", role: "user", avatar: 2, department: "技术部" },
+    { email: "carol@pms.com", name: "Carol Davis", role: "user", avatar: 3, department: "设计部" },
+    { email: "david@pms.com", name: "David Lee", role: "user", avatar: 4, department: "技术部" },
+    { email: "eve@pms.com", name: "Eve Wilson", role: "viewer", avatar: 5, department: "销售部" },
+    { email: "frank@pms.com", name: "Frank Brown", role: "user", avatar: 6, department: "技术部" },
+    { email: "grace@pms.com", name: "Grace Kim", role: "admin", avatar: 7, department: "设计部" },
+    { email: "henry@pms.com", name: "Henry Chen", role: "user", avatar: 8, department: "销售部" },
   ];
   for (const m of members) {
     const avatarUrl = `/images/profile/user-${m.avatar}.png`;
     await prisma.contact.upsert({
       where: { email: m.email },
-      update: { name: m.name, type: ContactType.user, role: m.role, password: memberHash, avatarUrl },
+      update: { name: m.name, type: ContactType.user, role: m.role, password: memberHash, avatarUrl, department: m.department },
       create: {
         email: m.email,
         name: m.name,
@@ -106,6 +107,7 @@ async function main() {
         role: m.role,
         password: memberHash,
         avatarUrl,
+        department: m.department,
       },
     });
   }

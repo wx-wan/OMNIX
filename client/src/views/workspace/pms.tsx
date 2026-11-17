@@ -1,12 +1,16 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import {
+  ArrowDown,
+  ArrowUp,
   ChevronDown,
+  ChevronsUp,
   CirclePlus,
   Clock,
-  Flag,
+  Minus,
   MoreHorizontal,
   Plus,
+  UserRound,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -44,12 +48,16 @@ export function PmsPage({
   count,
   segmented,
   children,
+  embedded,
 }: {
   title: string;
   count: string;
   segmented?: ReactNode;
   children: ReactNode;
+  /** 嵌入详情 tab 时去掉外壳与标题，只保留内容区。 */
+  embedded?: boolean;
 }) {
+  if (embedded) return <div className="flex min-w-0 flex-1 flex-col">{children}</div>;
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-4 rounded-xl bg-background p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -201,16 +209,19 @@ export function PmsHeader({
   showColumnsButton = true,
   onColumnsClick,
   columnsMenu,
+  titleW = "w-56 min-w-56",
 }: {
   columns: PmsColumn[];
   showColumnsButton?: boolean;
   onColumnsClick?: () => void;
   columnsMenu?: ReactNode;
+  /** 首列（标题列）宽度，默认 w-56；个别页面可按需收窄。 */
+  titleW?: string;
 }) {
   const { t } = useTranslation();
   return (
     <div className="flex h-10 items-center gap-2 border-b px-3 pl-13">
-      <span className="w-56 min-w-56 flex-1 text-sm font-medium text-foreground">
+      <span className={cn("flex-1 text-sm font-medium text-foreground", titleW)}>
         {t(columns[0].label)}
       </span>
       <div className="flex shrink-0 items-center">
@@ -326,6 +337,7 @@ export function PmsRow({
   actions,
   onClick,
   href,
+  titleW = "w-56 min-w-56",
 }: {
   icon?: ReactNode;
   title: string;
@@ -335,12 +347,15 @@ export function PmsRow({
   actions?: ReactNode;
   onClick?: () => void;
   href?: string;
+  /** 标题列宽度，需与 PmsHeader 的 titleW 保持一致。 */
+  titleW?: string;
 }) {
   const content = (
     <>
-      <span className="truncate text-sm font-medium">{title}</span>
+      {/* 标题优先显示，描述作为可压缩项让位，避免标题被挤成省略号。 */}
+      <span className="min-w-0 shrink text-sm font-medium truncate">{title}</span>
       {description ? (
-        <span className="hidden truncate text-xs text-muted-foreground lg:inline">
+        <span className="hidden min-w-0 flex-1 truncate text-xs text-muted-foreground lg:inline">
           {description}
         </span>
       ) : null}
@@ -350,7 +365,7 @@ export function PmsRow({
   return (
     <div className="group flex min-h-12 items-center gap-2 border-b px-3 py-2 transition-colors hover:bg-muted/50">
       <div className="flex w-8 shrink-0 items-center justify-center">{icon}</div>
-      <div className="w-56 min-w-56 flex-1">
+      <div className={cn("flex-1", titleW)}>
         <div className="flex min-w-0 items-center gap-2">
           {href ? (
             <Link to={href} className="flex min-w-0 items-baseline gap-2">
@@ -397,6 +412,7 @@ export function PmsAvatar({
   size?: number;
 }) {
   const dimension = size === 6 ? "size-6" : size === 9 ? "size-9" : "size-8";
+  const [broken, setBroken] = useState(false);
   return (
     <span
       className={cn(
@@ -404,15 +420,61 @@ export function PmsAvatar({
         dimension
       )}
     >
-      {avatar ? (
+      {avatar && !broken ? (
         <img
           src={avatar}
           alt={name ?? ""}
           className="aspect-square size-full rounded-full object-cover"
+          onError={() => setBroken(true)}
         />
       ) : (
         initials(name)
       )}
+    </span>
+  );
+}
+
+/** 未指派占位：虚线头像圈 + 文案，全项目共用同一套（负责人列 / 详情 / 下拉项）。 */
+export function PmsUnassigned({
+  size = "sm",
+  withAvatar = true,
+  className,
+}: {
+  size?: "xs" | "sm";
+  withAvatar?: boolean;
+  className?: string;
+}) {
+  const { t } = useTranslation();
+  return (
+    <span className={cn("flex items-center gap-2", size === "xs" ? "text-xs" : "text-sm", className)}>
+      {withAvatar ? (
+        <span className="flex size-6 shrink-0 items-center justify-center rounded-full border border-dashed text-muted-foreground">
+          <UserRound className="size-3.5" />
+        </span>
+      ) : null}
+      <span className="text-muted-foreground">{t("Unassigned")}</span>
+    </span>
+  );
+}
+
+/**
+ * 经办人单元格：头像 + firstName（名字首段），未指派复用 PmsUnassigned。
+ * 项目详情 / 阶段详情 / 任务 / 问题等所有列表共用同一套。
+ */
+export function PmsAssignee({
+  name,
+  avatar,
+  size = "sm",
+}: {
+  name?: string | null;
+  avatar?: string;
+  size?: "xs" | "sm";
+}) {
+  if (!name) return <PmsUnassigned size={size} />;
+  return (
+    <span className={cn("flex items-center gap-2", size === "xs" ? "text-xs" : "text-sm")}>
+      <PmsAvatar name={name} avatar={avatar} />
+      <span className="truncate">{name.split(" ")[0]}</span>
     </span>
   );
 }
@@ -485,27 +547,38 @@ export function PmsProgress({
   );
 }
 
-export const PRIORITY_COLOR: Record<string, string> = {
-  urgent: "text-red-500",
-  high: "text-orange-400",
-  medium: "text-sky-400",
-  low: "text-teal-400",
+/** 优先级图标、配色与文案的单一数据源，列表与详情共用。 */
+export const PRIORITY_META: Record<
+  string,
+  { icon: LucideIcon; color: string; labelKey: string }
+> = {
+  urgent: { icon: ChevronsUp, color: "text-red-500", labelKey: "Urgent" },
+  high: { icon: ArrowUp, color: "text-orange-500", labelKey: "High" },
+  medium: { icon: Minus, color: "text-amber-500", labelKey: "Medium" },
+  low: { icon: ArrowDown, color: "text-sky-500", labelKey: "Low" },
+  none: { icon: Minus, color: "text-muted-foreground", labelKey: "none" },
 };
 
-export function PmsPriority({ value, label }: { value: string; label: string }) {
+/** 优先级展示：icon + 文本，列表、详情共用同一套图标与配色。 */
+export function PmsPriority({ value, className }: { value: string; className?: string }) {
+  const { t } = useTranslation();
+  const meta = PRIORITY_META[value] ?? PRIORITY_META.none;
+  const Icon = meta.icon;
   return (
-    <div className={cn("flex items-center gap-1.5 text-sm", PRIORITY_COLOR[value])}>
-      <Flag className="size-3.5" />
-      <span>{label}</span>
-    </div>
+    <span
+      className={cn("inline-flex items-center gap-1.5 whitespace-nowrap", meta.color, className ?? "text-sm")}
+    >
+      <Icon className="size-3.5 shrink-0" />
+      <span>{t(meta.labelKey)}</span>
+    </span>
   );
 }
 
 export function PmsDate({ text }: { text: string }) {
   return (
     <div className="flex items-center gap-1.5 text-sm whitespace-nowrap text-muted-foreground">
-      <Clock className="size-3.5" />
-      <span>{text}</span>
+      <Clock className="size-3.5 shrink-0" />
+      <span className="truncate">{text}</span>
     </div>
   );
 }

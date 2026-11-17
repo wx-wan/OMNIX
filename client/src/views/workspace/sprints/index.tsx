@@ -8,6 +8,8 @@ import {
   useWorkspace,
 } from "src/api/workspace/use-workspace";
 import { addSprint, getActiveProject } from "src/api/workspace/project-stages";
+import { taskNo } from "src/api/workspace/task-no";
+import { useTasks } from "src/api/tasks/use-tasks";
 import { NewStageDialog, type NewStageValues } from "../create-dialogs";
 import type { WsSprint } from "src/types/apps/workspace";
 import {
@@ -33,7 +35,7 @@ const COLUMNS: PmsColumn[] = [
   { label: "Project", w: "w-40" },
   { label: "Progress", w: "w-40" },
   { label: "Dates", w: "w-40" },
-  { label: "Issues", w: "w-20" },
+  { label: "Tasks", w: "w-20" },
   { label: "Timing", w: "w-56" },
 ];
 const GROUPS: { label: string; values: string[] }[] = [
@@ -53,22 +55,17 @@ export default function SprintsPage() {
   const [selected, setSelected] = useState<WsSprint | null>(null);
   const [creating, setCreating] = useState(false);
   const all = useMemo(() => snap?.sprints ?? [], [snap]);
-  const doneIssues = useMemo(
-    () =>
-      new Set(
-        (snap?.issues ?? [])
-          .filter((issue) => issue.status === "done" || issue.status === "closed")
-          .map((issue) => issue.id)
-      ),
-    [snap]
-  );
+  const { tasks: allTasks } = useTasks();
+  /** Sprint 的任务按 task.sprintId 归属，进度与任务编号同源。 */
+  const tasksOf = (sprint: WsSprint) => allTasks.filter((task) => task.sprintId === sprint.id);
+  const isDone = (status: string) =>
+    status === "done" || status === "closed" || status === "completed";
 
   const progressOf = (sprint: WsSprint) => {
     if (sprint.status === "completed") return 100;
-    if (!sprint.issueIds.length) return 0;
-    return Math.round(
-      (sprint.issueIds.filter((id) => doneIssues.has(id)).length / sprint.issueIds.length) * 100
-    );
+    const tasks = tasksOf(sprint);
+    if (!tasks.length) return 0;
+    return Math.round((tasks.filter((task) => isDone(task.status)).length / tasks.length) * 100);
   };
 
   const timingOf = (sprint: WsSprint) => {
@@ -206,7 +203,7 @@ export default function SprintsPage() {
                     </PmsCell>
                     <PmsCell w="w-20">
                       <span className="text-sm text-muted-foreground">
-                        {sprint.issueIds.length}
+                        {tasksOf(sprint).length}
                       </span>
                     </PmsCell>
                     <PmsCell w="w-56">
@@ -238,15 +235,17 @@ export default function SprintsPage() {
             <PmsField label={t("Timing")}>{timingOf(selected)}</PmsField>
             <div className="space-y-2 border-t border-border pt-4">
               <h3 className="text-xs font-semibold">
-                {t("Issues")} ({selected.issueIds.length})
+                {t("Tasks")} ({tasksOf(selected).length})
               </h3>
-              {snap.issues
-                .filter((issue) => selected.issueIds.includes(issue.id))
-                .map((issue) => (
-                  <div key={issue.id} className="text-[11px] text-muted-foreground">
-                    #{issue.number} {issue.title}
-                  </div>
-                ))}
+              {tasksOf(selected).map((task) => (
+                <div key={task.id} className="flex items-baseline gap-2 text-[11px] text-muted-foreground">
+                  <span className="font-medium text-blue-500">
+                    {taskNo(task, allTasks)}
+                  </span>
+                  <span className="truncate">{task.title}</span>
+                  <span className="ms-auto shrink-0">{t(task.status)}</span>
+                </div>
+              ))}
             </div>
           </>
         ) : null}

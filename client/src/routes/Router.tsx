@@ -30,18 +30,6 @@ const DASHBOARD_PATHS = [
 
 const Error = Loadable(lazy(() => import('../views/auth/error')));
 
-//apps
-const Blog = Loadable(lazy(() => import('../views/apps/blog/post')));
-const BlogDetail = Loadable(lazy(() => import('../views/apps/blog/detail')));
-const BlogAdd = Loadable(lazy(() => import('../views/apps/blog/create')));
-const BlogEdit = Loadable(lazy(() => import('../views/apps/blog/edit')));
-const BlogTable = Loadable(lazy(() => import('../views/apps/blog/manage-blog')));
-
-const Notes = Loadable(lazy(() => import('../views/apps/notes')));
-
-const Tickets = Loadable(lazy(() => import('../views/apps/tickets')));
-const TicketCreate = Loadable(lazy(() => import('../views/apps/tickets/create')));
-
 // pages
 const TablesPage = Loadable(lazy(() => import('../views/pages/tables')));
 const FormPage = Loadable(lazy(() => import('../views/pages/form')));
@@ -59,15 +47,13 @@ const ContactsApp = Loadable(lazy(() => import('../views/apps/contacts')));
 // 官网 kanban-application-02 看板
 const KanbanApp = Loadable(lazy(() => import('../views/apps/kanban')));
 
-// PMS Workspace：六个模块 + Inbox，共用 /api/workspace/snapshot 真实数据快照
+// PMS Workspace：六个模块 + Inbox，项目/任务/用户数据全部来自后端 API
 const InboxApp = Loadable(lazy(() => import('../views/inbox')));
 const ProjectsPage = Loadable(lazy(() => import('../views/workspace/projects')));
 const ProjectDetailPage = Loadable(lazy(() => import('../views/workspace/projects/detail')));
-const IssuesPage = Loadable(lazy(() => import('../views/workspace/issues')));
-const TasksPage = Loadable(lazy(() => import('../views/workspace/tasks')));
+const StageDetailPage = Loadable(lazy(() => import('../views/workspace/projects/stage-detail')));
 const SprintsPage = Loadable(lazy(() => import('../views/workspace/sprints')));
 const CalendarWorkspacePage = Loadable(lazy(() => import('../views/workspace/calendar')));
-const TeamPage = Loadable(lazy(() => import('../views/workspace/team')));
 // PMS 设置页：5 个子页逐项 1:1 复刻自 pms-audit/dom/23-settings-*.html
 const SettingsGeneralPage = Loadable(lazy(() => import('../views/workspace/settings/general')));
 const SettingsMembersPage = Loadable(lazy(() => import('../views/workspace/settings/members')));
@@ -139,13 +125,6 @@ const Router = [
       ...DASHBOARD_PATHS.map((path) => ({ path, element: <DashboardPage /> })),
       { path: '/dashboards/ecommerce', element: <EcommerceProDashboard /> },
 
-      { path: '/apps/blog/post', element: <Blog /> },
-      { path: '/apps/blog/detail/:id', element: <BlogDetail /> },
-      { path: '/apps/blog/create', element: <BlogAdd /> },
-      { path: '/apps/blog/edit', element: <BlogEdit /> },
-      { path: '/apps/blog/manage-blog', element: <BlogTable /> },
-
-      { path: '/apps/notes', element: <Notes /> },
       { path: '/apps/kanban', element: <KanbanApp /> },
 
       { path: '/apps/email', element: <EmailApp /> },
@@ -153,9 +132,6 @@ const Router = [
       { path: '/apps/chat-ai', element: <ChatAI /> },
       { path: '/apps/image-ai', element: <ImageAI /> },
       { path: '/apps/calendar', element: <CalendarApp /> },
-
-      { path: '/apps/tickets', element: <Tickets /> },
-      { path: '/apps/tickets/create', element: <TicketCreate /> },
 
       { path: '/pages/tables', element: <TablesPage /> },
       { path: '/pages/form', element: <FormPage /> },
@@ -174,14 +150,12 @@ const Router = [
           { path: '/inbox', element: <InboxApp /> },
           { path: '/projects', element: <ProjectsPage /> },
           { path: '/projects/:id', element: <ProjectDetailPage /> },
+          { path: '/projects/:id/stages/:stage', element: <StageDetailPage /> },
           { path: '/apps/requirements/:stage', element: <RequirementStagePage /> },
           { path: '/apps/invoice/edit', element: <RequirementEditPage /> },
           { path: '/apps/invoice/edit/:projectNo', element: <RequirementEditPage /> },
-          { path: '/issues', element: <IssuesPage /> },
-          { path: '/tasks', element: <TasksPage /> },
           { path: '/sprints', element: <SprintsPage /> },
           { path: '/calendar', element: <CalendarWorkspacePage /> },
-          { path: '/team', element: <TeamPage /> },
 
           { path: '/settings', element: <Navigate to="/settings/general" replace /> },
           { path: '/settings/general', element: <SettingsGeneralPage /> },

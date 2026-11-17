@@ -45,6 +45,10 @@ const DETAIL_KEYS: Record<string, string> = {
   "账号已创建": "You're signed in and your workspace is ready.",
   "Project created": "The new project is open. Add requirements, tasks and progress.",
   "项目创建成功": "The new project is open. Add requirements, tasks and progress.",
+  "Project deleted": "The project and its records have been removed from the workspace.",
+  "项目已删除": "The project and its records have been removed from the workspace.",
+  "Project archived": "The project is now in your archive and hidden from the list.",
+  "项目已归档": "The project is now in your archive and hidden from the list.",
   "Saved successfully": "Your changes have been written to the project record.",
   "保存成功": "Your changes have been written to the project record.",
   "Profile updated": "Your teammates now see the latest profile.",
@@ -94,16 +98,27 @@ const detailKey = (message: ReactNode, tone: ToastTone): string => {
   return DETAIL_KEYS[title] ?? TONE_DETAILS[tone];
 };
 
+/** 相同提示在 400ms 内重复触发时复用原 toast，避免连点产生一堆相同通知。 */
+const recentToasts = new Map<string, { id: string; at: number }>();
+const TOAST_DEBOUNCE_MS = 400;
+
 const show = (message: ReactNode, tone: ToastTone, options?: ToastOptions): string => {
+  const titleKey = typeof message === "string" ? message : "";
+  const dedupeKey = `${tone}::${titleKey}`;
+  const now = Date.now();
+  const recent = recentToasts.get(dedupeKey);
+  if (recent && now - recent.at < TOAST_DEBOUNCE_MS) return recent.id;
+
   const extras: Partial<ToastData> = {
-    closeButton: options?.closeButton,
+    // 默认显示关闭按钮，用户可随时点 x 关闭（传 closeButton:false 可关闭该行为）。
+    closeButton: options?.closeButton ?? true,
     ...(options?.icon ? { icon: options.icon } : {}),
   };
 
   // Loading keeps the built-in spinner from `typeIcons` instead of a tinted badge.
   const data: ToastData = tone === "loading" ? { ...extras } : toneData(toneByName[tone], extras);
 
-  return toastManager.add({
+  const id = toastManager.add({
     id: options?.id,
     type: tone === "default" ? undefined : tone,
     title: message,
@@ -114,6 +129,8 @@ const show = (message: ReactNode, tone: ToastTone, options?: ToastOptions): stri
       : undefined,
     data,
   });
+  if (titleKey) recentToasts.set(dedupeKey, { id, at: now });
+  return id;
 };
 
 const make = (tone: ToastTone) => (message: ReactNode, options?: ToastOptions): string =>

@@ -2,26 +2,35 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate, useParams } from "react-router";
 import { toast } from "@/components/shadcn-dashboard/sonner/toast";
+import { useTasks } from "src/api/tasks/use-tasks";
 import {
   Activity,
   CalendarClock,
+  Check,
+  ChevronDown,
   CircleCheck,
   CircleDot,
-  CirclePlus,
-  Clock,
+  ClipboardList,
+  Factory,
   File,
   Flag,
+  Headphones,
   LayoutDashboard,
-  List,
   ListChecks,
+  Package,
   Plus,
+  ReceiptText,
+  ShoppingBag,
+  ShoppingCart,
+  Truck,
   TriangleAlert,
-  UserRound,
+  Wallet,
   Users,
   Zap,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { WsUser } from "src/types/apps/workspace";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -32,6 +41,12 @@ import {
 } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   agoLabel,
   formatDate,
   relativeDays,
@@ -40,11 +55,12 @@ import {
 } from "src/api/workspace/use-workspace";
 import {
   STAGES,
+  STAGE_NO_TIME,
+  stageTimeRange,
   archiveProject,
   getStageForm,
   getStageView,
   projectNo,
-  projectNoParam,
   projectStage,
   removeRecord,
   restoreProject,
@@ -57,13 +73,28 @@ import {
   updateProject,
   useProjectStageStore,
 } from "src/api/workspace/project-stages";
-import { PmsAvatar, PmsAvatarGroup } from "../pms";
-import { ArchiveProjectDialog, EditProjectDialog } from "./edit-archive-dialogs";
+import { PmsAssignee, PmsAvatar, PRIORITY_META } from "../pms";
+import { taskNo } from "src/api/workspace/task-no";
+import { projectProgress } from "src/api/workspace/project-progress";
+import { ProgressTicker } from "./progress-ticker";
+import { StackRipple } from "@/components/shadcn-dashboard/animated-list/animated-list-03";
+import SpinnerBars from "@/components/shadcn-dashboard/spinner/spinner-06";
+import AvatarDemo, { type AvatarMember } from "@/components/shadcn-dashboard/avatar/avatar-11";
+import { DurationTimer } from "./duration-timer";
+import { LeadSelect } from "./lead-select";
+import { ArchiveProjectDialog } from "./edit-archive-dialogs";
+import { STATUS_ITEMS, statusVisual } from "./project-row-actions";
+import { InlineEdit } from "@/components/shadcn-dashboard/input/inline-edit";
+import { DateRangePicker } from "@/components/shadcn-dashboard/date-picker/date-picker-02";
+import type { DateRange } from "react-day-picker";
 import {
   ProjectDialogs,
   RowActions,
   type ProjectDialog,
 } from "./project-actions";
+import IssuesPage from "../issues";
+import { useIssues } from "src/api/issues/use-issues";
+import TasksPage from "../tasks";
 
 /**
  * /projects/:id 项目详情，逐项复刻 https://pms-workspace-app.vercel.app/projects/p1
@@ -122,6 +153,7 @@ const STATUS_LABEL: Record<string, string> = {
   online: "Online",
   away: "Away",
   admin: "Admin",
+  super_admin: "Super Admin",
   member: "Member",
   viewer: "Viewer",
   lead: "Lead",
@@ -130,11 +162,19 @@ const STATUS_LABEL: Record<string, string> = {
 const labelOf = (value: string) =>
   STATUS_LABEL[value] ?? value.charAt(0).toUpperCase() + value.slice(1);
 
-const PRIORITY_TEXT: Record<string, string> = {
-  urgent: "text-red-500",
-  high: "text-orange-400",
-  medium: "text-sky-400",
-  low: "text-slate-400",
+/** 标题旁优先级 badge 沿用同一套状态色板，与选择项文案一一对应。 */
+const PRIORITY_BADGE: Record<string, string> = {
+  none: "bg-muted text-muted-foreground",
+  low: "bg-sky-400/10 text-sky-500",
+  medium: "bg-amber-500/10 text-amber-500",
+  high: "bg-orange-400/10 text-orange-500",
+  urgent: "bg-red-500/10 text-red-500",
+};
+/** 状态 tag 背景/文字色，与 STATUS_ITEMS 的 icon tone 保持一致。 */
+const STATUS_TONE_BADGE: Record<string, string> = {
+  active: "bg-blue-500/10 text-blue-500",
+  on_hold: "bg-amber-500/10 text-amber-500",
+  completed: "bg-emerald-500/10 text-emerald-500",
 };
 
 /** 迭代子任务状态色：默认灰、完成绿、进行中蓝、逾期橙。 */
@@ -176,6 +216,19 @@ const STATUS_COLOR: Record<string, string> = {
   todo: "bg-sky-400/10 text-sky-500",
 };
 
+/** 九阶段图标与配色：用于「即将到来」任务列表按阶段区分。 */
+const STAGE_ICON: Record<string, { icon: LucideIcon; tone: string }> = {
+  requirement: { icon: ClipboardList, tone: "bg-blue-500/10 text-blue-500 border-blue-500/20" },
+  quotation: { icon: ReceiptText, tone: "bg-amber-500/10 text-amber-500 border-amber-500/20" },
+  sample: { icon: Package, tone: "bg-teal-400/10 text-teal-500 border-teal-400/20" },
+  order: { icon: ShoppingCart, tone: "bg-green-500/10 text-green-500 border-green-500/20" },
+  expense: { icon: Wallet, tone: "bg-orange-400/10 text-orange-500 border-orange-400/20" },
+  purchase: { icon: ShoppingBag, tone: "bg-purple-500/10 text-purple-500 border-purple-500/20" },
+  production: { icon: Factory, tone: "bg-indigo-500/10 text-indigo-500 border-indigo-500/20" },
+  logistics: { icon: Truck, tone: "bg-cyan-500/10 text-cyan-500 border-cyan-500/20" },
+  after_sales: { icon: Headphones, tone: "bg-rose-500/10 text-rose-500 border-rose-500/20" },
+};
+
 /** 九阶段在迭代卡片中的占位说明，字段表单后续接入。 */
 const STAGE_DESC: Record<string, { en: string; zh: string }> = {
   requirement: {
@@ -198,27 +251,29 @@ export default function ProjectDetailPage() {
   const { snap, zh, user, userName, isLoading } = useWorkspace();
   const [tab, setTab] = useState("Overview");
   const [dialog, setDialog] = useState<ProjectDialog | null>(null);
-  const [editOpen, setEditOpen] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [dragOverKey, setDragOverKey] = useState<string | null>(null);
+  const [comingOpen, setComingOpen] = useState(true);
   const dragKey = useRef<string | null>(null);
   const navigate = useNavigate();
 
   const tr = (en: string, cn: string) => (zh ? cn : en);
   useProjectStageStore();
+  /** 任务已真实入库后端，按当前项目读取（替换快照里的示例任务）。 */
+  const { tasks: dbTasks } = useTasks(id);
+  const { issues: dbIssues } = useIssues(id);
   /** 打开任一项目即自动成为跨模块的当前项目，新建记录无需再手选项目。 */
   useEffect(() => setActiveProject(id), [id]);
   const allProjects = snap?.projects ?? [];
   const projectIndex = allProjects.findIndex((item) => item.id === id);
   const project = allProjects[projectIndex];
   const no = projectNo(id, projectIndex);
-  const noParam = projectNoParam(no);
   const currentStage = projectStage(id, projectIndex);
 
   const data = useMemo(() => {
     if (!snap) return null;
-    const issues = snap.issues.filter((item) => item.projectId === id);
-    const tasks = snap.tasks.filter((item) => item.projectId === id);
+    const issues = dbIssues;
+    const tasks = dbTasks;
     const sprints = [...snap.sprints]
       .filter((item) => item.projectId === id)
       .sort(
@@ -282,23 +337,54 @@ export default function ProjectDetailPage() {
       highIssues,
       comingUp,
     };
-  }, [snap, id]);
+  }, [snap, id, dbTasks, dbIssues]);
 
-  if (isLoading || !snap || !project || !data)
-    return <div className="p-10 text-sm text-muted-foreground">…</div>;
+  if (isLoading || !snap)
+    return (
+      <div className="flex min-h-40 items-center justify-center text-muted-foreground">
+        <SpinnerBars />
+      </div>
+    );
 
-  const lead = user(project.leadId);
+  if (!project || !data)
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 py-20 text-muted-foreground">
+        <TriangleAlert className="size-6 text-muted-foreground/60" strokeWidth={1.5} />
+        <p className="text-sm">{tr("Project not found", "项目不存在")}</p>
+        <Button variant="outline" size="sm" onClick={() => navigate("/projects")}>
+          {tr("Back to projects", "返回项目列表")}
+        </Button>
+      </div>
+    );
+
+  /** 就地编辑保存：单字段 PATCH 后端并提示。 */
+  const saveField = (patch: Record<string, unknown>) => {
+    void updateProject(id, patch as Partial<Parameters<typeof updateProject>[1]>).then(() =>
+      toast.success(t("Saved successfully"))
+    );
+  };
+  /** 进度按真实的「已完成(任务+问题)/总计(任务+问题)」计算，空项目为 0%。 */
+  const progress = projectProgress(id, dbTasks, dbIssues);
+
   const members = project.memberIds
     .map((memberId) => user(memberId))
     .filter(Boolean);
-  const team = snap.teams.find((item) => item.id === project.teamId);
-  const leftDays = relativeDays(project.dueDate) ?? 0;
+  /** WsUser → AvatarMember：可编辑成员组需要 id 做增删。 */
+  const toAvatarMember = (person: WsUser): AvatarMember => ({
+    id: person.id,
+    name: person.name,
+    image: person.avatar,
+    initials: person.name?.[0]?.toUpperCase() ?? "?",
+    role: person.role,
+  });
+  const memberAvatars = members.map((member) => toAvatarMember(member!));
+  const allUserAvatars = snap.users.map(toAvatarMember);
 
   const tabs: { key: string; label: string; icon: LucideIcon }[] = [
     { key: "Overview", label: t("Overview"), icon: LayoutDashboard },
-    { key: "Issues", label: `${t("Issues")} (${data.issues.length})`, icon: CircleDot },
-    { key: "Tasks", label: `${t("Tasks")} (${data.tasks.length})`, icon: ListChecks },
     { key: "Sprints", label: `${t("Sprints")} (${STAGES.length + data.sprints.length})`, icon: Zap },
+    { key: "Tasks", label: `${t("Tasks")} (${data.tasks.length})`, icon: ListChecks },
+    { key: "Issues", label: `${t("Issues")} (${data.issues.length})`, icon: CircleDot },
     { key: "Members", label: `${t("Members")} (${members.length})`, icon: Users },
     { key: "Files", label: `${t("Files")} (${data.files.length})`, icon: File },
     { key: "Activity", label: t("Activity"), icon: Activity },
@@ -318,17 +404,11 @@ export default function ProjectDetailPage() {
       case "Overview":
         return null;
       case "Issues":
-        return {
-          title: `${t("Issues")} (${data.issues.length})`,
-          label: t("New Issue"),
-          onAdd: () => setDialog({ kind: "issue" }),
-        };
+        // 悬浮新建 icon 已移除：新建问题入口保留在工具栏的「新建问题」按钮。
+        return null;
       case "Tasks":
-        return {
-          title: `${t("Tasks")} (${data.tasks.length})`,
-          label: t("New Task"),
-          onAdd: () => setDialog({ kind: "task" }),
-        };
+        // 悬浮新建 icon 已移除：新建任务入口保留在本页工具栏的 New Task 按钮。
+        return null;
       case "Sprints":
         /** 阶段页不设右上角悬浮新建按钮：入口改为网格末尾的「添加阶段」卡片。 */
         return null;
@@ -355,40 +435,77 @@ export default function ProjectDetailPage() {
     }
   })();
 
-  const detailDue = (task: (typeof data.tasks)[number]) => {
-    if (task.status === "done" || task.status === "closed") return t("Completed");
-    const days = relativeDays(task.dueDate);
-    if (days === null) return "—";
-    if (days < 0) return tr(`${-days}d overdue`, `逾期 ${-days} 天`);
-    if (days === 0) return tr("Due today", "今天到期");
-    if (days <= 7) return tr(`${days}d left`, `剩 ${days} 天`);
-    return fullDate(task.dueDate);
-  };
+  /** 「即将到来」动画列表：仅未完成，按创建时间升序（最早创建在前），图标按阶段配色，状态以 tag 展示。 */
+  const comingUpItems = [...data.tasks]
+    .filter((task) => task.sprintId === currentStage)
+    .filter((task) => task.status !== "done" && task.status !== "closed")
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+    .map((task) => {
+    const stage = STAGE_ICON[task.sprintId ?? ""] ?? STAGE_ICON.requirement;
+    const Icon = stage.icon;
+    return {
+      id: task.id,
+      icon: (
+        <span
+          className={cn(
+            "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border",
+            stage.tone
+          )}
+        >
+          <Icon className="size-5" />
+        </span>
+      ),
+      title: task.title,
+      description:
+        task.assigneeId
+          ? `${taskNo(task, data.tasks)} · ${userName(task.assigneeId)}`
+          : taskNo(task, data.tasks),
+      tag: (
+        <span
+          className={cn(
+            "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium",
+            STATUS_COLOR[task.status] ?? "bg-blue-500/10 text-blue-500"
+          )}
+        >
+          {t(STATUS_LABEL[task.status] ?? task.status)}
+        </span>
+      ),
+    };
+  });
 
-  const comingDue = (task: (typeof data.comingUp)[number]) => {
-    const days = relativeDays(task.dueDate) ?? 0;
-    if (days === 0) return tr("Today", "今天");
-    return tr(`In ${days} days`, `${days} 天后`);
-  };
-
+  /** Sprint 进度以归属该 Sprint 的任务为准（task.sprintId），与任务列表/编号同源。 */
+  const sprintTasks = (sprint: (typeof data.sprints)[number]) =>
+    dbTasks.filter((task) => task.sprintId === sprint.id);
+  const isTaskDone = (status: string) =>
+    status === "done" || status === "closed" || status === "completed";
   const sprintDone = (sprint: (typeof data.sprints)[number]) =>
-    sprint.issueIds.filter((issueId) => {
-      const issue = snap.issues.find((item) => item.id === issueId);
-      return issue && (issue.status === "done" || issue.status === "closed");
-    }).length;
+    sprintTasks(sprint).filter((task) => isTaskDone(task.status)).length;
 
-  /** 迭代卡片：第一行阶段名、第二行起止日期、第三行阶段描述；子任务按真实数量渲染。 */
+  /**
+   * 阶段卡片：9 个固定阶段，每个阶段通过 task.sprintId === stage.key 关联任务，
+   * 卡片底部的彩色块与「x/y done · N%」直接反映该阶段任务完成进度。
+   */
+  const stageTasks = (stageKey: string) => dbTasks.filter((task) => task.sprintId === stageKey);
   const stageCards = STAGES.map((stage, i) => {
-    const form = getStageForm(stageFormKey(no, stage.key));
     const finished = i < stageIndexOf(currentStage);
     const active = stage.key === currentStage;
+    const tasks = stageTasks(stage.key);
     return {
       key: `stage-${stage.key}`,
-      href: `/apps/invoice/edit/${noParam}?stage=${stage.key}`,
+      href: `/projects/${id}/stages/${stage.key}`,
       title: stageLabel(stage.key, zh),
-      subtitle: form
-        ? `${fullDate(form.createDate)} – ${fullDate(form.dueDate)}`
-        : "—",
+      subtitle: (() => {
+        if (STAGE_NO_TIME.has(stage.key)) return "\u00A0"; // 保留占位，保持卡片高度一致
+        const saved = getStageForm(stageFormKey(no, stage.key));
+        if (saved?.createDate && saved?.dueDate) {
+          return `${fullDate(saved.createDate)} – ${fullDate(saved.dueDate)}`;
+        }
+        if (i > stageIndexOf(currentStage)) return tr("To be planned", "待规划");
+        const range = stageTimeRange(stage.key, project.createdAt);
+        return range
+          ? `${fullDate(range.start.toISOString())} – ${fullDate(range.end.toISOString())}`
+          : "\u00A0";
+      })(),
       statusText: finished
         ? tr("Done", "完成")
         : active
@@ -400,17 +517,22 @@ export default function ProjectDetailPage() {
           ? CARD_TONE.active
           : CARD_TONE.todo,
       desc: STAGE_DESC[stage.key]?.[zh ? "zh" : "en"] ?? "",
-      dots: [] as { key: string; title?: string; tone: string }[],
-      done: 0,
-      total: 0,
+      dots: tasks.map((task) => ({
+        key: task.id,
+        title: `${taskNo(task, dbTasks)} ${task.title} · ${labelOf(task.status)}`,
+        tone: SPRINT_DOT[task.status] ?? "bg-slate-200",
+      })),
+      done: tasks.filter((task) => isTaskDone(task.status)).length,
+      total: tasks.length,
       editable: false,
       sprintId: "",
     };
   });
 
   const sprintCards = data.sprints.map((sprint) => {
+    const tasks = sprintTasks(sprint);
     const done = sprintDone(sprint);
-    const total = sprint.issueIds.length;
+    const total = tasks.length;
     const days = relativeDays(sprint.endDate);
     const overdue = sprint.status !== "completed" && days !== null && days < 0;
     const running = sprint.status === "in_progress" || sprint.status === "active";
@@ -434,16 +556,11 @@ export default function ProjectDetailPage() {
             ? CARD_TONE.active
             : CARD_TONE.todo,
       desc: sprint.goal,
-      dots: sprint.issueIds.map((issueId) => {
-        const issue = snap.issues.find((item) => item.id === issueId);
-        return {
-          key: issueId,
-          title: issue
-            ? `#${issue.number} ${issue.title} · ${labelOf(issue.status)}`
-            : undefined,
-          tone: SPRINT_DOT[issue?.status ?? ""] ?? "bg-slate-200",
-        };
-      }),
+      dots: tasks.map((task) => ({
+        key: task.id,
+        title: `${taskNo(task, dbTasks)} ${task.title} · ${labelOf(task.status)}`,
+        tone: SPRINT_DOT[task.status] ?? "bg-slate-200",
+      })),
       done,
       total,
       editable: true,
@@ -533,36 +650,9 @@ export default function ProjectDetailPage() {
       {t(labelOf(value))}
     </span>
   );
-  const priorityCell = (value: string) => (
-    <div className={cn("flex items-center gap-1.5 text-sm", PRIORITY_TEXT[value])}>
-      <Flag className="size-3.5" />
-      <span>{t(labelOf(value))}</span>
-    </div>
-  );
   const personCell = (name?: string, avatar?: string) => (
-    <span className="flex items-center gap-2 text-sm">
-      {name ? (
-        <>
-          <PmsAvatar name={name} avatar={avatar} />
-          <span className="truncate">{name}</span>
-        </>
-      ) : (
-        <>
-          <span className="flex size-6 items-center justify-center rounded-full border border-dashed text-muted-foreground">
-            <UserRound className="size-3" />
-          </span>
-          <span>{t("Unassigned")}</span>
-        </>
-      )}
-    </span>
+    <PmsAssignee name={name} avatar={avatar} />
   );
-  const dateCell = (text: string) => (
-    <div className="flex items-center gap-1.5 text-sm whitespace-nowrap text-muted-foreground">
-      <Clock className="size-3.5" />
-      <span>{text}</span>
-    </div>
-  );
-
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-6 rounded-xl bg-background p-6">
       <Breadcrumb>
@@ -582,7 +672,13 @@ export default function ProjectDetailPage() {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-semibold tracking-tight">{project.name}</h1>
+            <InlineEdit
+              as="h1"
+              value={project.name}
+              onCommit={(next) => next && saveField({ name: next })}
+              className="text-2xl font-semibold tracking-tight"
+              label={t("Click to edit")}
+            />
             <span className="text-sm font-medium text-blue-500">{no}</span>
             {project.archived ? (
               <span
@@ -592,39 +688,92 @@ export default function ProjectDetailPage() {
                 {t("Archived")}
               </span>
             ) : null}
-            <span
-              data-slot="badge"
-              className="inline-flex h-5 w-fit shrink-0 items-center justify-center rounded-4xl border-0 bg-sky-400/10 px-2 py-0.5 text-xs font-medium whitespace-nowrap text-sky-500 shadow-none"
-            >
-              {stageLabel(currentStage, zh)}
-            </span>
-            <span
-              data-slot="badge"
-              className="inline-flex h-5 w-fit shrink-0 items-center justify-center rounded-4xl border-0 bg-blue-500/10 px-2 py-0.5 text-xs font-medium whitespace-nowrap text-blue-500 shadow-none"
-            >
-              {statusLabel}
-            </span>
-            {(project.priority === "high" || project.priority === "urgent") && (
-              <span
-                data-slot="badge"
-                className="inline-flex h-5 w-fit shrink-0 items-center justify-center rounded-4xl border-0 bg-orange-400/10 px-2 py-0.5 text-xs font-medium whitespace-nowrap text-orange-500 shadow-none"
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <button
+                    type="button"
+                    className={cn(
+                      "inline-flex h-5 w-fit shrink-0 cursor-pointer items-center justify-center rounded-4xl border-0 px-2 py-0.5 text-xs font-medium whitespace-nowrap shadow-none hover:opacity-80",
+                      STATUS_TONE_BADGE[project.status] ?? STATUS_TONE_BADGE.active
+                    )}
+                  />
+                }
               >
-                {t("High priority")}
-              </span>
-            )}
+                <span className="flex items-center gap-1.5">
+                  {(() => {
+                    const visual = statusVisual(project.status);
+                    const StatusIcon = visual.icon;
+                    return <StatusIcon className={cn("size-3.5", visual.tone)} />;
+                  })()}
+                  {statusLabel}
+                </span>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-40">
+                {STATUS_ITEMS.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <DropdownMenuItem
+                      key={item.value}
+                      onClick={() => saveField({ status: item.value })}
+                    >
+                      <Icon className={cn("size-3.5", item.tone)} />
+                      {t(item.label)}
+                      {project.status === item.value ? <Check className="ml-auto size-4" /> : null}
+                    </DropdownMenuItem>
+                  );
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <button
+                    type="button"
+                    className={cn(
+                      "inline-flex h-5 w-fit shrink-0 cursor-pointer items-center justify-center rounded-4xl border-0 px-2 py-0.5 text-xs font-medium whitespace-nowrap shadow-none hover:opacity-80",
+                      PRIORITY_BADGE[project.priority] ?? "bg-muted text-muted-foreground"
+                    )}
+                  />
+                }
+              >
+                <span className="flex items-center gap-1.5">
+                  {(() => {
+                    const meta = PRIORITY_META[project.priority] ?? PRIORITY_META.none;
+                    const PriorityIcon = meta.icon;
+                    return <PriorityIcon className={cn("size-3.5", meta.color)} />;
+                  })()}
+                  {t(project.priority)}
+                </span>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-40">
+                {["none", "low", "medium", "high", "urgent"].map((priority) => {
+                  const meta = PRIORITY_META[priority] ?? PRIORITY_META.none;
+                  const PriorityIcon = meta.icon;
+                  return (
+                  <DropdownMenuItem
+                    key={priority}
+                    onClick={() => saveField({ priority })}
+                  >
+                    <PriorityIcon className={cn("size-3.5", meta.color)} />
+                    {t(priority)}
+                    {project.priority === priority ? <Check className="ml-auto size-4" /> : null}
+                  </DropdownMenuItem>
+                  );
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
-          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            {project.description}
-          </p>
+          <InlineEdit
+            as="p"
+            value={project.description ?? ""}
+            placeholder={t("No description")}
+            onCommit={(next) => saveField({ description: next })}
+            className="mt-1 max-w-2xl text-sm text-muted-foreground"
+            label={t("Click to edit")}
+          />
         </div>
         <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => setEditOpen(true)}
-            className="inline-flex h-7 shrink-0 items-center justify-center rounded-md border border-transparent bg-primary px-2.5 text-[0.8rem] font-medium text-primary-foreground hover:bg-primary/90"
-          >
-            {t("Edit")}
-          </button>
           {project.archived ? (
             <button
               type="button"
@@ -696,7 +845,11 @@ export default function ProjectDetailPage() {
                           const days = -(relativeDays(task.dueDate) ?? 0);
                           return (
                             <li key={task.id}>
-                              <Link to="/tasks" className="flex items-center gap-3 py-3">
+                              <button
+                                type="button"
+                                onClick={() => setTab("Tasks")}
+                                className="flex w-full items-center gap-3 py-3 text-left"
+                              >
                                 <TriangleAlert className="size-4 shrink-0 text-red-500" />
                                 <span className="min-w-0 flex-1 truncate text-sm font-medium">
                                   {task.title}
@@ -710,16 +863,20 @@ export default function ProjectDetailPage() {
                                     task.assigneeId ? user(task.assigneeId)?.avatar : undefined
                                   )}
                                 </span>
-                              </Link>
+                              </button>
                             </li>
                           );
                         })}
                         {data.highIssues.map((issue) => (
                           <li key={issue.id}>
-                            <Link to="/issues" className="flex items-center gap-3 py-3">
+                            <button
+                              type="button"
+                              onClick={() => setTab("Issues")}
+                              className="flex w-full items-center gap-3 py-3 text-left"
+                            >
                               <TriangleAlert className="size-4 shrink-0 text-orange-500" />
                               <span className="min-w-0 flex-1 truncate text-sm font-medium">
-                                #{issue.number} {issue.title}
+                                #Q{issue.number} {issue.title}
                               </span>
                               <span className="shrink-0 text-xs text-amber-500">
                                 {t("High priority")}
@@ -730,7 +887,7 @@ export default function ProjectDetailPage() {
                                   issue.assigneeId ? user(issue.assigneeId)?.avatar : undefined
                                 )}
                               </span>
-                            </Link>
+                            </button>
                           </li>
                         ))}
                         {data.overdue.length === 0 && data.highIssues.length === 0 ? (
@@ -782,147 +939,47 @@ export default function ProjectDetailPage() {
                         </div>
                       </div>
                       <div className="p-5">
-                        <h3 className="text-sm font-medium">{t("Coming up")}</h3>
+                        <div className="flex items-center justify-between gap-3">
+                          <h3 className="text-sm font-medium">{t("Coming up")}</h3>
+                          {comingUpItems.length > 1 ? (
+                            <button
+                              type="button"
+                              onClick={() => setComingOpen((v) => !v)}
+                              className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                            >
+                              {comingOpen ? t("Hide") : t("Show All")}
+                              <ChevronDown
+                                className={cn(
+                                  "size-3 transition-transform",
+                                  comingOpen && "rotate-180"
+                                )}
+                              />
+                            </button>
+                          ) : null}
+                        </div>
                         <p className="mb-4 text-xs text-muted-foreground">
                           {t("Open tasks due in the next 14 days")}
                         </p>
-                        <ul className="divide-y divide-border">
-                          {data.comingUp.map((task) => (
-                            <li
-                              key={task.id}
-                              className="flex items-center justify-between gap-3 py-3 first:pt-0"
-                            >
-                              <div className="min-w-0">
-                                <p className="truncate text-sm font-semibold">{task.title}</p>
-                                <p className="mt-1 text-xs text-muted-foreground">
-                                  {comingDue(task)} ·{" "}
-                                  {task.assigneeId
-                                    ? userName(task.assigneeId)
-                                    : t("Unassigned")}
-                                </p>
-                              </div>
-                              {badge(
-                                task.status,
-                                STATUS_COLOR[task.status] ?? "bg-blue-500/10 text-blue-500"
-                              )}
-                            </li>
-                          ))}
-                        </ul>
-                        {data.comingUp.length === 0 ? (
+                        {comingUpItems.length ? (
+                          <StackRipple
+                            stackCardItems={comingUpItems}
+                            open={comingOpen}
+                            onOpenChange={setComingOpen}
+                            showToggle={false}
+                            showAllLabel={t("Show All")}
+                            hideLabel={t("Hide")}
+                          />
+                        ) : (
                           <EmptyState icon={CalendarClock} text={t("No tasks due soon")} />
-                        ) : null}
+                        )}
                       </div>
                     </div>
                   </>
                 ) : null}
 
-                {tab === "Issues" && data.issues.length === 0 ? (
-                  <EmptyState icon={CirclePlus} text={t("No issues in this project")} />
-                ) : null}
-                {tab === "Issues" && data.issues.length > 0 ? (
-                  <div className="relative w-full overflow-x-auto">
-                    <table className="w-full min-w-3xl caption-bottom text-sm">
-                      {tableHead([
-                        t("Issue"),
-                        t("Status"),
-                        t("Priority"),
-                        t("Assignee"),
-                        t("Created by"),
-                        t("Updated"),
-                      ])}
-                      <tbody>
-                        {data.issues.map((issue) => (
-                          <tr key={issue.id} className="group/row border-b">
-                            <td className={cellClass}>
-                              <Link to="/issues" className="block min-w-0">
-                                <h6 className="max-w-64 truncate text-sm font-medium">
-                                  {issue.title}
-                                </h6>
-                                <p className="text-xs text-muted-foreground">
-                                  #{issue.number}
-                                </p>
-                              </Link>
-                            </td>
-                            <td className={cellClass}>
-                              {badge(issue.status, STATUS_COLOR[issue.status])}
-                            </td>
-                            <td className={cellClass}>{priorityCell(issue.priority)}</td>
-                            <td className={cellClass}>
-                              {personCell(
-                                issue.assigneeId ? userName(issue.assigneeId) : undefined,
-                                issue.assigneeId ? user(issue.assigneeId)?.avatar : undefined
-                              )}
-                            </td>
-                            <td className={cellClass}>
-                              {personCell(
-                                userName(issue.reporterId),
-                                user(issue.reporterId)?.avatar
-                              )}
-                            </td>
-                            <td className={cn(cellClass, "relative")}>
-                              {dateCell(agoLabel(issue.updatedAt, zh ? "ch" : "en"))}
-                              <div className="absolute right-2 top-1/2 hidden -translate-y-1/2 rounded-md bg-card group-hover/row:flex">
-                                <RowActions
-                                  zh={zh}
-                                  onEdit={() => setDialog({ kind: "issue", record: issue })}
-                                  onDelete={() => removeRecord("issues", issue.id, id)}
-                                />
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : null}
+                {tab === "Issues" ? <IssuesPage projectId={id} embedded /> : null}
 
-                {tab === "Tasks" && data.tasks.length === 0 ? (
-                  <EmptyState icon={List} text={t("No tasks in this project")} />
-                ) : null}
-                {tab === "Tasks" && data.tasks.length > 0 ? (
-                  <div className="relative w-full overflow-x-auto">
-                    <table className="w-full min-w-3xl caption-bottom text-sm">
-                      {tableHead([
-                        t("Task"),
-                        t("Status"),
-                        t("Priority"),
-                        t("Assignee"),
-                        t("Due"),
-                      ])}
-                      <tbody>
-                        {data.tasks.map((task) => (
-                          <tr key={task.id} className="group/row border-b">
-                            <td className={cellClass}>
-                              <h6 className="max-w-64 truncate text-sm font-medium">
-                                {task.title}
-                              </h6>
-                            </td>
-                            <td className={cellClass}>
-                              {badge(task.status, STATUS_COLOR[task.status])}
-                            </td>
-                            <td className={cellClass}>{priorityCell(task.priority)}</td>
-                            <td className={cellClass}>
-                              {personCell(
-                                task.assigneeId ? userName(task.assigneeId) : undefined,
-                                task.assigneeId ? user(task.assigneeId)?.avatar : undefined
-                              )}
-                            </td>
-                            <td className={cn(cellClass, "relative")}>
-                              {dateCell(detailDue(task))}
-                              <div className="absolute right-2 top-1/2 hidden -translate-y-1/2 rounded-md bg-card group-hover/row:flex">
-                                <RowActions
-                                  zh={zh}
-                                  onEdit={() => setDialog({ kind: "task", record: task })}
-                                  onDelete={() => removeRecord("tasks", task.id, id)}
-                                />
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : null}
+                {tab === "Tasks" ? <TasksPage projectId={id} embedded /> : null}
 
                 {tab === "Sprints" ? (
                   <div className="grid gap-4 p-5 md:grid-cols-2">
@@ -1190,13 +1247,13 @@ export default function ProjectDetailPage() {
             <div className="space-y-2 border-b border-border px-5 py-4">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">{t("Progress")}</span>
-                <span className="text-sm font-medium text-blue-500">{project.progress}%</span>
+                <span className="text-sm font-medium text-blue-500">{progress}%</span>
               </div>
               <div className="flex h-1.5 flex-wrap gap-3 [&>div]:h-1.5">
                 <div className="relative flex h-1 w-full items-center overflow-x-hidden rounded-full bg-blue-500/10">
                   <div
                     className="h-full bg-blue-500 transition-all"
-                    style={{ width: `${project.progress}%` }}
+                    style={{ width: `${progress}%` }}
                   />
                 </div>
                 <span
@@ -1218,55 +1275,80 @@ export default function ProjectDetailPage() {
                   x
                 </span>
               </div>
-              <p className="text-xs text-muted-foreground">
-                {tr(
-                  `${data.closedIssues} of ${data.issues.length} issues closed`,
-                  `${data.issues.length} 个问题中 ${data.closedIssues} 个已关闭`
-                )}
-              </p>
+              <ProgressTicker
+                done={data.closedIssues + data.doneTasks}
+                total={data.issues.length + data.tasks.length}
+                doneTasks={data.doneTasks}
+                totalTasks={data.tasks.length}
+                doneIssues={data.closedIssues}
+                totalIssues={data.issues.length}
+                progress={progress}
+                zh={zh}
+              />
             </div>
             <div className="divide-y divide-border">
               {detailRow(t("Project No."), no)}
               {detailRow(t("Stage"), stageLabel(currentStage, zh))}
               {detailRow(
                 t("Lead"),
-                <span className="flex items-center gap-2 text-sm">
-                  <PmsAvatar name={lead?.name} avatar={lead?.avatar} />
-                  <span className="truncate">{lead?.name}</span>
-                </span>
-              )}
-              {detailRow(t("Team"), team?.name ?? "—")}
-              {detailRow(
-                t("Members"),
-                <PmsAvatarGroup
-                  people={members.map((member) => ({
-                    name: member!.name,
-                    avatar: member!.avatar,
-                  }))}
-                  max={4}
+                <LeadSelect
+                  users={snap.users}
+                  value={project.leadId}
+                  onChange={(leadId) => {
+                    void updateProject(id, { leadId }).then(() =>
+                      toast.success(t("Saved successfully"))
+                    );
+                  }}
                 />
               )}
-              {detailRow(t("Started"), fullDate(project.createdAt))}
-              {detailRow(t("Due date"), fullDate(project.dueDate))}
-              {detailRow(t("Time left"), `${leftDays}d`)}
+              {detailRow(
+                t("Members"),
+                <AvatarDemo
+                  members={memberAvatars}
+                  allUsers={allUserAvatars}
+                  editable
+                  visible={4}
+                  showHint={false}
+                  size="sm"
+                  align="start"
+                  onChange={(ids) => {
+                    void setProjectMembers(id, ids).then(() =>
+                      toast.success(t("Saved successfully"))
+                    );
+                  }}
+                />
+              )}
+              {detailRow(
+                t("Started"),
+                <DateRangePicker
+                  single
+                  zh={zh}
+                  value={
+                    project.createdAt
+                      ? {
+                          from: new Date(new Date(project.createdAt).toISOString().slice(0, 10)),
+                          to: new Date(new Date(project.createdAt).toISOString().slice(0, 10)),
+                        }
+                      : undefined
+                  }
+                  onCommit={(range: DateRange) =>
+                    range.from &&
+                    saveField({
+                      createdAt: new Date(
+                        `${range.from.getFullYear()}-${String(range.from.getMonth() + 1).padStart(2, "0")}-${String(range.from.getDate()).padStart(2, "0")}`
+                      ).toISOString(),
+                    })
+                  }
+                />
+              )}
+              {detailRow(t("Order date"), fullDate(project.dueDate))}
+              {detailRow(t("Duration"), <DurationTimer createdAt={project.createdAt} />)}
               {detailRow(t("Open issues"), data.issues.length - data.closedIssues)}
               {detailRow(t("Tasks done"), `${data.doneTasks}/${data.tasks.length}`)}
             </div>
           </div>
         </div>
       </div>
-      <EditProjectDialog
-        open={editOpen}
-        onOpenChange={setEditOpen}
-        project={project}
-        users={snap.users}
-        teams={snap.teams}
-        onSubmit={(values) => {
-          updateProject(id, values);
-          toast.success(t("Saved successfully"));
-          setEditOpen(false);
-        }}
-      />
       <ArchiveProjectDialog
         open={archiveOpen}
         onOpenChange={setArchiveOpen}
@@ -1281,7 +1363,7 @@ export default function ProjectDetailPage() {
         onClose={() => setDialog(null)}
         zh={zh}
         t={(key) => t(key)}
-        nextIssueNumber={Math.max(100, ...snap.issues.map((item) => item.number)) + 1}
+        nextIssueNumber={Math.max(500, ...dbIssues.map((item) => item.number)) + 1}
       />
     </div>
   );

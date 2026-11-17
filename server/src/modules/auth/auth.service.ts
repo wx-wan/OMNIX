@@ -11,13 +11,19 @@ import { randomBytes } from "node:crypto";
 import { ContactType, Prisma } from "@prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
 
+/** 超级管理员：唯一且不可变更，只能由 seed 赋值（默认 admin@omnix.dev），任何接口都不接受此角色值。 */
+export const SUPER_ADMIN_ROLE = "super_admin";
+/** 可登录成员可选的角色（不含 super_admin，防止通过接口提权）。 */
+const ASSIGNABLE_ROLES = ["admin", "user", "viewer"];
+
 export interface PublicUser {
   id: string;
   email: string;
   name: string;
   role: string;
   avatarUrl: string; // 头像路径；未设置时用默认头像
-  createdAt: string; // ISO 字符串，成员页「已加入」列展示真实创建时间
+  createdAt: string; // ISO 字符串，成员页「加入时间」列展示真实创建时间
+  department: string | null; // 部门（Contact.department），成员页「部门」列展示
   presence: string; // 在线状态：online | away | busy | offline
 }
 
@@ -157,21 +163,31 @@ export class AuthService {
     return rows.map((row) => this.toPublic(row));
   }
 
-  /** 改角色属于敏感操作，仅管理员可执行。 */
+  /** 改角色属于敏感操作，仅管理员 / 超级管理员可执行。 */
   async requireAdmin(userId: string): Promise<void> {
     const actor = await this.prisma.contact.findUnique({ where: { id: userId } });
-    if (!actor || actor.type !== ContactType.user || actor.role !== "admin" || actor.isSystem || actor.archived) {
+    if (
+      !actor ||
+      actor.type !== ContactType.user ||
+      (actor.role !== "admin" && actor.role !== SUPER_ADMIN_ROLE) ||
+      actor.isSystem ||
+      actor.archived
+    ) {
       throw new ForbiddenException("Admin only");
     }
   }
 
   async updateUserRole(id: string, role: string): Promise<PublicUser> {
-    if (!["admin", "user", "viewer"].includes(role)) {
+    if (!ASSIGNABLE_ROLES.includes(role)) {
       throw new BadRequestException("Invalid role");
     }
     const user = await this.prisma.contact.findUnique({ where: { id } });
     if (!user || user.type !== ContactType.user || user.isSystem || user.archived) {
       throw new NotFoundException(`User ${id} not found`);
+    }
+    // 超级管理员角色锁定：既不能把超管改成别的，也不能把别人改成超管（超管不在 ASSIGNABLE_ROLES 中）。
+    if (user.role === SUPER_ADMIN_ROLE) {
+      throw new ForbiddenException("Super admin role cannot be changed");
     }
     return this.toPublic(await this.prisma.contact.update({ where: { id }, data: { role } }));
   }
@@ -181,6 +197,9 @@ export class AuthService {
     const user = await this.prisma.contact.findUnique({ where: { id } });
     if (!user || user.type !== ContactType.user || user.isSystem || user.archived) {
       throw new NotFoundException(`User ${id} not found`);
+    }
+    if (user.role === SUPER_ADMIN_ROLE) {
+      throw new ForbiddenException("Super admin cannot be removed");
     }
     await this.prisma.contact.update({ where: { id }, data: { archived: true } });
   }
@@ -192,6 +211,7 @@ export class AuthService {
     role: string | null;
     avatarUrl?: string | null;
     createdAt: Date;
+    department?: string | null;
     presence?: string | null;
   }): PublicUser {
     return {
@@ -201,6 +221,7 @@ export class AuthService {
       role: user.role ?? "user",
       avatarUrl: user.avatarUrl || "/images/profile/user-1.png",
       createdAt: user.createdAt.toISOString(),
+      department: user.department ?? null,
       presence: user.presence ?? "offline",
     };
   }

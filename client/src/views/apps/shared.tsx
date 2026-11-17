@@ -29,8 +29,12 @@ const AVATARS: Record<string, string> = {
 };
 
 export function avatarSrc(path?: string): string {
-  const key = path?.split("/").pop()?.replace(/\.\w+$/, "");
-  return (key && AVATARS[key]) || fallback;
+  if (!path) return fallback;
+  const key = path.split("/").pop()?.replace(/\.\w+$/, "");
+  // 线上 fixture 的 /images/profile/user-N.png → 本地同名资源；
+  // 用户上传的真实路径（/uploads/...、data:、http...）不在字典里，直接返回原路径加载真实图。
+  if (key && AVATARS[key]) return AVATARS[key];
+  return path;
 }
 
 /** 线上页面外层容器链（取证自 DOM：w-full mx-auto container → min-h → page-transition → flex flex-col gap-4） */

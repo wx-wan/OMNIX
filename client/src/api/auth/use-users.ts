@@ -6,13 +6,15 @@ export type MemberUser = {
   id: string;
   email: string;
   name: string;
-  role: string; // admin | user | viewer
+  role: string; // super_admin | admin | user | viewer
   avatarUrl: string; // 真实头像路径
-  createdAt: string; // ISO，已加入列
+  department: string | null; // 部门，成员页「部门」列
+  createdAt: string; // ISO，加入时间列
 };
 
 /** 后端角色值 ↔ 页面展示文案 key。 */
 export const ROLE_KEYS: Record<string, string> = {
+  super_admin: "Super Admin",
   admin: "Admin",
   user: "Member",
   viewer: "Viewer",

@@ -38,34 +38,27 @@ import { uniqueId } from "lodash";
 
 import {
   Bell,
-  BookOpen,
   CalendarDays,
-  CircleAlert,
   Contact,
   Layers,
   LayoutGrid,
   List,
-  ListTodo,
   LucideIcon,
   Mail,
   MessageCircle,
-  NotebookText,
   Package,
   Receipt,
   ShoppingBag,
   Sparkles,
-  Ticket,
   UserCircle,
-  UserRound,
   Users,
-  Zap,
 } from "lucide-react"
 
 /**
  * 导航结构（参考 PMS Workspace 复刻）：
  * - Home：Dashboard / Inbox / Chats（Inbox 在聊天上方，PMS Home 组口径）
- * - Workspace：Projects / Issues / Tasks / Sprints / Calendar / Team
- * - Apps：保留既有 Apps 模块（已移除 Chats、Calendar）
+ * - Workspace：Projects / Calendar（Issues / Tasks / Sprints 入口按各自任务隐藏，路由保留）
+ * - Apps：保留既有 Apps 模块（已移除 Chats、Calendar、Notes、Blogs、Tickets）
  * heading 使用英文 key，走导航层 i18n，英文界面不再硬显示中文。
  */
 const SidebarContent: MenuItem[] = [
@@ -103,33 +96,9 @@ const SidebarContent: MenuItem[] = [
       },
       {
         id: uniqueId(),
-        name: "Issues",
-        icon: CircleAlert,
-        url: "/issues",
-      },
-      {
-        id: uniqueId(),
-        name: "Tasks",
-        icon: ListTodo,
-        url: "/tasks",
-      },
-      {
-        id: uniqueId(),
-        name: "Sprints",
-        icon: Zap,
-        url: "/sprints",
-      },
-      {
-        id: uniqueId(),
         name: "Calendar",
         icon: CalendarDays,
         url: "/calendar",
-      },
-      {
-        id: uniqueId(),
-        name: "Team",
-        icon: UserRound,
-        url: "/team",
       },
     ],
   },
@@ -141,34 +110,6 @@ const SidebarContent: MenuItem[] = [
         name: "Kanban",
         icon: List,
         url: "/apps/kanban",
-      },
-      {
-        id: uniqueId(),
-        name: "Notes",
-        icon: NotebookText,
-        url: "/apps/notes",
-      },
-      {
-        name: "Blogs",
-        id: uniqueId(),
-        icon: BookOpen,
-        items: [
-          { id: uniqueId(), name: "Blog Listing", url: "/apps/blog/post" },
-          {
-            id: uniqueId(),
-            name: "Blog Detail",
-            url: "/apps/blog/detail/streaming-video-way-before-it-was-cool-go-dark-tomorrow",
-          },
-          { id: uniqueId(), name: "Blog Edit", url: "/apps/blog/edit" },
-          { id: uniqueId(), name: "Blog Create", url: "/apps/blog/create" },
-          { id: uniqueId(), name: "Manage Blog", url: "/apps/blog/manage-blog" },
-        ],
-      },
-      {
-        id: uniqueId(),
-        name: "Tickets",
-        icon: Ticket,
-        url: "/apps/tickets",
       },
       {
         name: "AI",

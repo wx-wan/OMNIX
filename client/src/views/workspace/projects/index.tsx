@@ -3,11 +3,15 @@ import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router";
 import { toast } from "@/components/shadcn-dashboard/sonner/toast";
 import {
-  ArrowRight,
-  CircleDot,
+  ArrowDown,
+  ArrowUp,
+  Check,
+  ChevronDown,
+  ChevronsUp,
   Columns3,
   List,
   ListFilter,
+  Minus,
   Search,
   SlidersHorizontal,
   UserRound,
@@ -15,24 +19,27 @@ import {
 import {
   CURRENT_USER_ID,
   formatDate,
-  relativeDays,
   resolveDate,
   useWorkspace,
 } from "src/api/workspace/use-workspace";
 import {
+  SEED_TASKS,
   STAGES,
-  advanceStage,
   createProject as createStageProject,
   projectNo,
   projectStage,
   stageLabel,
+  updateProject,
   useProjectStageStore,
   type StageKey,
 } from "src/api/workspace/project-stages";
+import { createTask, useTasks } from "src/api/tasks/use-tasks";
+import { projectCounts, projectProgress } from "src/api/workspace/project-progress";
+import { useUsers } from "src/api/auth/use-users";
+import type { SeedAssigneeRole } from "src/api/workspace/project-stages";
 import type { WsProject } from "src/types/apps/workspace";
 import {
   PmsAvatar,
-  PmsAvatarGroup,
   PmsCard,
   PmsCell,
   PmsDate,
@@ -50,33 +57,57 @@ import {
   type PmsColumn,
 } from "../pms";
 import {
+  DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuGroup,
+  DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { NewProjectDialog, type NewProjectValues } from "./new-project-dialog";
-import { ProjectRowActions } from "./project-row-actions";
+import { SetupSteps, type StepItem } from "@/components/shadcn-dashboard/animated-list/animated-list-02";
+import { ProjectRowActions, statusVisual } from "./project-row-actions";
+import AvatarDemo, { type AvatarMember } from "@/components/shadcn-dashboard/avatar/avatar-11";
 
+/**
+ * 列宽平衡：项目列 w-48（比原 w-56 短，保留名称可读性）；
+ * 成员列 w-28 容纳 3 个 24px 头像 + 间距；Progress/Created 各收一档为项目列腾空间。
+ */
+const TITLE_W = "w-48 min-w-48";
 const COLUMNS: PmsColumn[] = [
-  { label: "Project", w: "w-56" },
-  { label: "Stage", w: "w-28" },
-  { label: "Lead", w: "w-36" },
+  { label: "Project", w: TITLE_W },
+  { label: "Lead", w: "w-32" },
   { label: "Members", w: "w-28" },
   { label: "Progress", w: "w-32" },
-  { label: "Priority", w: "w-28" },
-  { label: "Due date", w: "w-32" },
+  { label: "Priority", w: "w-32" },
+  { label: "Created", w: "w-40" },
 ];
+/** 优先级下拉：与任务列表一致的降序与图标，选择后写入后端。 */
+const PRIORITY_MENU = [
+  { value: "urgent", label: "Urgent", icon: ChevronsUp, tone: "text-red-500" },
+  { value: "high", label: "High", icon: ArrowUp, tone: "text-orange-500" },
+  { value: "medium", label: "Medium", icon: Minus, tone: "text-muted-foreground" },
+  { value: "low", label: "Low", icon: ArrowDown, tone: "text-sky-500" },
+  { value: "none", label: "none", icon: Minus, tone: "text-muted-foreground" },
+] as const;
+
 const PRIORITY_RANK: Record<string, number> = {
   urgent: 4,
   high: 3,
   medium: 2,
   low: 1,
 };
+/** 看板卡片状态胶囊配色：与 project-row-actions 的 STATUS_ITEMS 保持一致。 */
+const STATUS_BADGE: Record<string, string> = {
+  active: "bg-blue-500/10 text-blue-500",
+  on_hold: "bg-amber-500/10 text-amber-500",
+  completed: "bg-emerald-500/10 text-emerald-500",
+};
 /** 线上 PMS 表头加号展开的 Columns 菜单顺序；Completed 为锁定项。 */
-const COLUMN_MENU = ["Lead", "Members", "Progress", "Priority", "Due date"];
-const GROUP_BY = ["Stage", "Team", "Lead", "Status", "None"];
-const SORT_BY = ["Recently updated", "Name (A–Z)", "Due date", "Progress", "Priority"];
+const COLUMN_MENU = ["Lead", "Members", "Progress", "Priority", "Created"];
+const GROUP_BY = ["Stage", "Lead", "Status", "None"];
+const SORT_BY = ["Recently updated", "Name (A–Z)", "Created", "Progress", "Priority"];
 /** 看板列配色沿用 /apps/kanban 的四套浅色，九阶段循环取值。 */
 const BOARD_TONES = [
   { wrap: "bg-sky-400/10", badge: "border-sky-400/40 text-sky-500", dot: "bg-sky-400" },
@@ -88,6 +119,8 @@ const BOARD_TONES = [
 export default function ProjectsPage() {
   const { t } = useTranslation();
   const { snap, zh, user, firstName, isLoading } = useWorkspace();
+  const { tasks: allTasks } = useTasks();
+  const { users: members } = useUsers();
   const [view, setView] = useState("List");
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -101,17 +134,85 @@ export default function ProjectsPage() {
   const store = useProjectStageStore();
   const navigate = useNavigate();
   const [creatingStage, setCreatingStage] = useState<StageKey | null>(null);
+  const [initializing, setInitializing] = useState(false);
+  const [initPointer, setInitPointer] = useState(0);
+  const [initDone, setInitDone] = useState(false);
+  // 初始化进度步骤：按 SEED_TASKS 的阶段顺序去重，直接复用项目初始化清单。
+  const initSteps: StepItem[] = useMemo(
+    () =>
+      Array.from(new Set(SEED_TASKS.map((seed) => seed.stage))).map((key) => ({
+        id: key,
+        title: stageLabel(key, zh),
+      })),
+    [zh]
+  );
 
   /** 弹窗里填写项目基本信息后创建并进详情；客户与产品信息在迭代 → 需求阶段 → 需求详情表单里补录。 */
-  const create = (values: NewProjectValues, stage: StageKey) => {
-    const created = createStageProject(values.name, values.description, stage, {
-      status: values.status,
-      priority: values.priority,
-      ...(values.dueDate ? { dueDate: values.dueDate } : {}),
-    });
+  const create = async (values: NewProjectValues, stage: StageKey) => {
+    // 先按角色（部门）确定每个预置任务的经办人，再把所有经办人勾进项目成员。
+    const people = members ?? [];
+    const byDepartment = (keyword: string) =>
+      people.find((person) => person.department?.includes(keyword))?.id ?? CURRENT_USER_ID;
+    const assigneeOf = (role: SeedAssigneeRole): string => {
+      switch (role) {
+        case "design":
+          return byDepartment("设计");
+        case "engineering":
+          return byDepartment("技术");
+        case "purchase":
+          // 当前工作区暂无采购部成员，回退给项目负责人。
+          return byDepartment("采购");
+        case "lead":
+        default:
+          return CURRENT_USER_ID;
+      }
+    };
+    const assignees = SEED_TASKS.map((seed) => ({
+      seed,
+      assigneeId: assigneeOf(seed.assigneeRole),
+    }));
+    const memberIds = Array.from(new Set(assignees.map((item) => item.assigneeId)));
+
+    // 关闭表单，展示阶段初始化进度（SetupSteps）：从第一个阶段开始
     setCreatingStage(null);
-    toast.success(t("Project created"));
-    navigate(`/projects/${created.id}`);
+    setInitPointer(0);
+    setInitDone(false);
+    setInitializing(true);
+    try {
+      const created = await createStageProject(values.name, values.description, stage, {
+        status: values.status,
+        priority: values.priority,
+        memberIds,
+      });
+      // 按 SEED_TASKS 的阶段顺序逐个落库：createdAt 严格递增，taskNo 才会连续
+      // T001 / T002 / T003……；并发 Promise.all 会让 createdAt 乱序导致编号跳号。
+      for (const { seed, assigneeId } of assignees) {
+        await createTask({
+          title: seed.title,
+          description: seed.description,
+          projectId: created.id,
+          sprintId: seed.stage,
+          assigneeId,
+          // 待规划：不赋值预估工时与到期日
+          status: "backlog",
+          dueDate: null,
+          estimate: null,
+          // 预置任务优先级跟随新项目
+          priority: created.priority ?? "medium",
+        });
+        // 按当前任务所属阶段推进受控 pointer，动画随真实落库串行前进。
+        const stageIdx = initSteps.findIndex((step) => step.id === seed.stage);
+        if (stageIdx >= 0) setInitPointer(stageIdx);
+      }
+      // 最后一个阶段建完：收起步骤列表，显示紧凑完成态后跳转。
+      setInitPointer(initSteps.length);
+      setInitDone(true);
+      await new Promise((resolve) => window.setTimeout(resolve, 1400));
+      toast.success(t("Project created"));
+      navigate(`/projects/${created.id}`);
+    } finally {
+      setInitializing(false);
+    }
   };
 
   const all = useMemo(
@@ -121,8 +222,6 @@ export default function ProjectsPage() {
   const indexOf = (project: WsProject) => all.findIndex((p) => p.id === project.id);
   const noOf = (project: WsProject) => projectNo(project.id, indexOf(project));
   const stageOf = (project: WsProject) => projectStage(project.id, indexOf(project));
-  const stageName = (project: WsProject) => stageLabel(stageOf(project), zh);
-  const advance = (project: WsProject) => advanceStage(project.id, stageOf(project));
 
   const list = useMemo(() => {
     let out = all.filter((p) =>
@@ -133,7 +232,7 @@ export default function ProjectsPage() {
     const sorted = [...out];
     const time = (value: string) => resolveDate(value)?.getTime() ?? 0;
     if (sortBy === "Name (A–Z)") sorted.sort((a, b) => a.name.localeCompare(b.name));
-    else if (sortBy === "Due date") sorted.sort((a, b) => time(a.dueDate) - time(b.dueDate));
+    else if (sortBy === "Created") sorted.sort((a, b) => time(a.createdAt) - time(b.createdAt));
     else if (sortBy === "Progress") sorted.sort((a, b) => b.progress - a.progress);
     else if (sortBy === "Priority")
       sorted.sort((a, b) => (PRIORITY_RANK[b.priority] ?? 0) - (PRIORITY_RANK[a.priority] ?? 0));
@@ -162,9 +261,7 @@ export default function ProjectsPage() {
           items: list.filter((p) => p.status === status),
         }))
         .filter((g) => g.items.length);
-    return (snap?.teams ?? [])
-      .map((team) => ({ label: team.name, items: list.filter((p) => p.teamId === team.id) }))
-      .filter((g) => g.items.length);
+    return [{ label: "All", items: list }];
   }, [groupBy, list, snap, zh, store]);
 
   const boardColumns = useMemo(
@@ -177,16 +274,28 @@ export default function ProjectsPage() {
     [list, store]
   );
 
-  const membersOf = (project: WsProject) =>
-    project.memberIds.map((id) => ({ name: user(id)?.name ?? id, avatar: user(id)?.avatar }));
+  const membersOf = (project: WsProject): AvatarMember[] =>
+    project.memberIds.map((id) => {
+      const person = user(id);
+      return {
+        name: person?.name ?? id,
+        image: person?.avatar,
+        initials: person?.name?.[0]?.toUpperCase() ?? id[0]?.toUpperCase(),
+        role: person?.role,
+      };
+    });
 
-  const dueText = (project: WsProject) => {
-    if (project.progress === 100 || project.status === "completed") return t("Completed");
-    const days = relativeDays(project.dueDate);
-    if (days !== null && days > 0 && days <= 14)
-      return zh ? `${days} 天后` : `${days}d left`;
-    return formatDate(project.dueDate, "ch", "full");
+  /** 下单日期 = 订单阶段开始日期，当前由 dueDate 承载（创建项目时设定）。 */
+  const orderDateOf = (project: WsProject) => project.dueDate;
+  /** 看板卡片时间沿用项目创建时刻（下单仅有日期粒度）。 */
+  const cardTime = (project: WsProject) => {
+    const date = resolveDate(project.createdAt);
+    return date
+      ? date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })
+      : "";
   };
+  /** 列表「创建时间」列：显示项目创建时刻。 */
+  const createdText = (project: WsProject) => formatDate(project.createdAt, "ch", "full");
 
 
   if (isLoading || !snap) return <div className="p-10 text-sm text-muted-foreground">…</div>;
@@ -212,9 +321,6 @@ export default function ProjectsPage() {
             {t(label)}
           </DropdownMenuCheckboxItem>
         ))}
-        <DropdownMenuCheckboxItem checked={false} disabled>
-          {t("Completed")}
-        </DropdownMenuCheckboxItem>
       </DropdownMenuGroup>
     </DropdownMenuContent>
   );
@@ -313,7 +419,7 @@ export default function ProjectsPage() {
       >
         {view === "List" ? (
           <>
-            <PmsHeader columns={columns} columnsMenu={columnsMenu} />
+            <PmsHeader columns={columns} columnsMenu={columnsMenu} titleW={TITLE_W} />
             {groups.map((group) => (
               <PmsGroup
                 key={group.label}
@@ -328,31 +434,31 @@ export default function ProjectsPage() {
                   )
                 }
               >
-                {group.items.map((project) => (
+                {group.items.map((project) => {
+                  const status = statusVisual(project.status);
+                  const StatusIcon = status.icon;
+                  return (
                   <PmsRow
                     key={project.id}
-                    icon={<CircleDot className="size-4 text-blue-500" />}
+                    icon={<StatusIcon className={`size-4 ${status.tone}`} />}
                     title={project.name}
-                    description={`${noOf(project)} · ${project.description}`}
+                    titleW={TITLE_W}
+                    description={
+                      project.description
+                        ? `${noOf(project)} · ${project.description}`
+                        : noOf(project)
+                    }
                     href={`/projects/${project.id}`}
                     actions={
                       <ProjectRowActions
                         project={project}
                         currentStage={stageOf(project)}
-                        zh={zh}
                       />
                     }
                     cells={
                       <Fragment>
-                        {visible("Stage") ? (
-                          <PmsCell w="w-28">
-                            <span className="inline-flex h-5 items-center rounded-4xl bg-blue-500/10 px-2 text-[11px] font-medium text-blue-500">
-                              {stageName(project)}
-                            </span>
-                          </PmsCell>
-                        ) : null}
                         {visible("Lead") ? (
-                          <PmsCell w="w-36">
+                          <PmsCell w="w-32">
                             <div className="flex items-center gap-2">
                               <PmsAvatar
                                 name={user(project.leadId)?.name}
@@ -366,34 +472,63 @@ export default function ProjectsPage() {
                         ) : null}
                         {visible("Members") ? (
                           <PmsCell w="w-28">
-                            <PmsAvatarGroup people={membersOf(project)} />
+                            <AvatarDemo
+                              members={membersOf(project)}
+                              visible={3}
+                              showHint={false}
+                              size="sm"
+                              align="start"
+                            />
                           </PmsCell>
                         ) : null}
                         {visible("Progress") ? (
                           <PmsCell w="w-32">
-                            <PmsProgress value={project.progress} status={project.status} />
-                          </PmsCell>
-                        ) : null}
-                        {visible("Priority") ? (
-                          <PmsCell w="w-28">
-                            <PmsPriority
-                              value={project.priority}
-                              label={t(
-                                project.priority.charAt(0).toUpperCase() +
-                                  project.priority.slice(1)
-                              )}
+                            <PmsProgress
+                              value={projectProgress(project.id, allTasks, snap?.issues ?? [])}
+                              status={project.status}
                             />
                           </PmsCell>
                         ) : null}
-                        {visible("Due date") ? (
+                        {visible("Priority") ? (
                           <PmsCell w="w-32">
-                            <PmsDate text={dueText(project)} />
+                            <DropdownMenu>
+                              <DropdownMenuTrigger
+                                aria-label={`Priority: ${project.priority}`}
+                                className="flex items-center gap-1 rounded-md px-1 py-1 text-sm outline-none hover:bg-muted"
+                              >
+                                <PmsPriority value={project.priority} />
+                                <ChevronDown className="size-3 text-muted-foreground" />
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="start" className="w-40">
+                                <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                                  {t("Change priority")}
+                                </div>
+                                {PRIORITY_MENU.map(({ value, label, icon: Icon, tone }) => (
+                                  <DropdownMenuItem
+                                    key={value}
+                                    onClick={() => updateProject(project.id, { priority: value })}
+                                  >
+                                    <Icon className={`size-3.5 ${tone}`} />
+                                    {t(label)}
+                                    {project.priority === value ? (
+                                      <Check className="ml-auto size-4" />
+                                    ) : null}
+                                  </DropdownMenuItem>
+                                ))}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </PmsCell>
+                        ) : null}
+                        {visible("Created") ? (
+                          <PmsCell w="w-40">
+                            <PmsDate text={createdText(project)} />
                           </PmsCell>
                         ) : null}
                       </Fragment>
                     }
                   />
-                ))}
+                  );
+                })}
               </PmsGroup>
             ))}
           </>
@@ -416,41 +551,41 @@ export default function ProjectsPage() {
                   </span>
                 </div>
                 <div className="flex w-full flex-col items-start gap-2">
-                  {items.map((project) => (
+                  {items.map((project) => {
+                    const { total } = projectCounts(project.id, allTasks, snap?.issues ?? []);
+                    return (
                     <div
                       key={project.id}
-                      className="group/task relative flex w-full cursor-grab flex-col gap-3 rounded-xl bg-card p-3 shadow-sm active:cursor-grabbing"
+                      className="relative flex w-full cursor-grab flex-col gap-3 rounded-xl bg-card p-3 shadow-sm active:cursor-grabbing"
                     >
-                      <Link to={`/projects/${project.id}`} className="flex flex-col gap-2 pr-6">
-                        <span className="text-[10px] font-medium text-blue-500">
-                          {noOf(project)}
-                        </span>
-                        <p className="cursor-pointer text-sm wrap-break-word text-card-foreground hover:text-card-foreground/80">
-                          {project.name}
-                        </p>
-                        <span className="text-[11px] text-muted-foreground">
-                          {formatDate(project.dueDate, "en", "full")} · 3:09 PM
-                        </span>
+                      <Link to={`/projects/${project.id}`} className="flex flex-col gap-2">
+                        <div className="flex items-center gap-2">
+                          <p className="min-w-0 flex-1 cursor-pointer text-sm wrap-break-word text-card-foreground hover:text-card-foreground/80">
+                            {project.name}
+                          </p>
+                          <span
+                            className={`inline-flex h-5 shrink-0 items-center rounded-4xl px-2 text-[11px] font-medium ${
+                              total === 0
+                                ? "bg-muted text-muted-foreground"
+                                : STATUS_BADGE[project.status] ?? STATUS_BADGE.active
+                            }`}
+                          >
+                            {total === 0 ? t("Not started") : t(statusVisual(project.status).label)}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[11px] text-muted-foreground">
+                            {formatDate(orderDateOf(project), "en", "full")} · {cardTime(project)}
+                          </span>
+                          <PmsAvatar
+                            name={user(project.leadId)?.name}
+                            avatar={user(project.leadId)?.avatar}
+                          />
+                        </div>
                       </Link>
-                      {stageOf(project) !== "after_sales" ? (
-                        <button
-                          type="button"
-                          title={zh ? "流转到下一阶段" : "Move to next stage"}
-                          onClick={() => advance(project)}
-                          className="absolute right-2 top-2 hidden size-6 items-center justify-center rounded-md bg-blue-500 text-white group-hover/task:flex"
-                        >
-                          <ArrowRight className="size-3.5" />
-                        </button>
-                      ) : null}
                     </div>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={() => setCreatingStage(stage.key)}
-                    className="flex h-8 w-full cursor-pointer items-center gap-2 px-2 text-xs text-muted-foreground hover:bg-muted"
-                  >
-                    + {t("Add Task")}
-                  </button>
+                    );
+                  })}
                 </div>
               </div>
             ))}
@@ -465,6 +600,16 @@ export default function ProjectsPage() {
         }}
         onSubmit={(values) => create(values, creatingStage ?? "requirement")}
       />
+
+      {initializing ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/10 supports-backdrop-filter:backdrop-blur-xs"
+          role="status"
+          aria-live="polite"
+        >
+          <SetupSteps steps={initSteps} pointer={initPointer} done={initDone} />
+        </div>
+      ) : null}
     </PmsPage>
   );
 }

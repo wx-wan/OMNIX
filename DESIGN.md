@@ -561,3 +561,445 @@ Omnix 是线上参考 demo 的 1:1 复刻，不是一次视觉再创作。视觉
 - 验收：tsc 0 错误、lint 0 error（3 条既有 warning）、build 通过；阶段页实测右上角 hover 按钮不存在（`hoverButtonExists: false`），添加卡位于网格最后一个（第 12 个节点）、尺寸 219×173、`borderStyle: dashed`，点击弹出 `New Iteration` 表单。
 - 追加（同日）：网格保持内容高度、添加卡用 `self-stretch` 跟随同行 stretch，三种卡片同行等高（最后一行实测 227 / 227、底边对齐 0px）。曾试过 `auto-rows-fr`，会把行高按容器剩余高度分配、卡片之间出现大片空隙，已回退。
 - 同一改动：`RowActions` 的 `onDelete` 改为可选、新增 `editIcon: "edit" | "external"`，预设阶段只渲染 `ArrowUpRight`（aria-label `Open`）且**不渲染删除按钮**（`hideStageCard` 入口随之移除），自定义迭代仍保留 Pencil + Delete。
+
+### 新建项目预置需求任务 + 任务落库（2026-11-16）
+
+- 需求：新建项目时在「需求」阶段预置两条任务（客户画像 / 产品需求，文案润色），接入任务栏，并让任务成为真实可入库的产品功能。
+- 实现：`project-stages.ts` 的 `createProject` 内定义 `SEED_TASKS`，创建项目时同一次 `commit` 写入两条 `WsTask`（`task-seed-<projectId>-<index>`，status `todo`、priority `medium`、due `+7d`），并各追加一条 `activity`。任务归属项目（`WsTask` 无阶段字段），经 `mergeWorkspaceSnapshot` 自动并入 `snap.tasks`，无需改任务栏。
+- 任务栏接入：项目详情 Tasks tab（`snap.tasks.filter(projectId===id)`）与全局 `/tasks`（`snap.tasks`）原本就读真实 store，两条预置任务自动出现；刷新后仍在（`omnix-workspace-project-stages-v1` 持久化 + 多标签同步）。
+- 真实可入库补强：`/tasks` 列表的完成勾选此前是纯展示，现接 `updateRecord("tasks", id, { status })`，勾选 / 取消即写 `recordEdits` 并落 localStorage，项目进度由任务完成度自动推导。
+- 润色文案：「建立客户画像」——梳理目标客户的行业背景、采购角色与决策链路，明确关键诉求与痛点，为后续方案与报价提供依据；「梳理产品需求」——汇总客户对功能、规格、交付与验收的期望，形成可追踪的需求清单，作为打样与生产的输入。
+- 验收：tsc 0 错误、lint 0 error（3 条既有 warning）、build 通过；新建项目后 localStorage 出现两条 `task-seed-*`，详情 Tasks tab 与全局 /tasks 均显示两条，勾选完成写入 `recordEdits.tasks[id].status=done` 且刷新后 checkbox 仍为勾选态；测试数据已按备份恢复。
+
+### 任务真实入库后端 + 增删改查（2026-11-16）
+
+用户澄清：「入库」指入后端数据库（PostgreSQL），任务列表要真实增删改查（此前是 MSW 示例数据）。
+
+- 审计结论：后端为 NestJS + Prisma + PostgreSQL（4000 端口），但**没有任务模型/模块**；前端任务由 `workspace-data.ts` 的 MSW 快照示例数据 + `project-stages.ts` 的 localStorage overlay 承载。故本次做全栈改造。
+- 后端：
+  - `prisma/schema.prisma` 新增 `model Task`（title/description/status/priority/labelIds String[]/assigneeId/dueDate DateTime?/sprintId/estimate Int?/projectId String/parentId/createdAt/updatedAt；`projectId` 仅字符串关联——工作区项目仍由前端快照承载，不建外键），`@@map("tasks")`。
+  - 迁移 `20261116010000_add_tasks`。因历史存在 `design_orders` 漂移（`design_fee_amount` → `sample_fee`，非本次引入），`migrate dev` 要求 reset 会丢数据，故用 `prisma db push` 建表（仅建 tasks，无破坏）后 `migrate resolve --applied` 对齐历史。
+  - 新增 `src/modules/tasks/`：`CreateTaskDto` / `UpdateTaskDto` / `TasksService`（list/create/update/remove）/ `TasksController`（GET/POST/PATCH/DELETE，写操作 `@UseGuards(MemberGuard)`），注册进 `app.module.ts`。
+- 前端：
+  - 新增 `src/api/tasks/use-tasks.ts`：`useTasks(projectId?)`（SWR 读 `/api/tasks`）+ 独立 `createTask/updateTask/removeTask` API，写后 `globalMutate` 刷新所有 `/api/tasks*` 缓存。
+  - 任务列表页 `/tasks` 改用 `useTasks`：数据、新建、完成勾选（`updateTask`）、行尾删除按钮（`removeTask`）全部走后端，表头新增操作列。
+  - 项目详情 `detail.tsx`：`useTasks(id)` 读取，Tasks tab 删除走后端。
+  - `project-actions.tsx` 的任务新建/编辑（task case）改为 `createTask/updateTask` 后端，`submit` 转 async。
+  - 预置任务：`project-stages.ts` 导出 `SEED_TASKS`（不再写 localStorage），`projects/index.tsx` 新建项目后 `Promise.all(createTask)` 写入后端。
+- 验收：后端 curl 登录→list 空→create→update(status done)→delete(204) 全通；前端 UI 新建项目后后端出现两条预置任务（建立客户画像 / 梳理产品需求），全局 /tasks 与详情 Tasks tab 均显示，勾选完成落库为 done、删除后后端仅剩一条；tsc/lint/build 全过；测试任务与 localStorage 状态已清理恢复。
+
+### 项目行操作菜单对齐截图（2026-11-16）
+
+- 菜单结构（`project-row-actions.tsx` 重写）：Copy link / Copy ID / Open in new tab ｜ Open project ｜ Move to（子菜单）/ Duplicate / Mark as completed ｜ Archive project / Delete project（destructive），三条分隔线，与截图分组一致。
+- Move to 子菜单改为**项目状态**切换（此前错误地复用 STAGES 阶段）：Active（CircleDot 灰）/ On hold（PauseCircle 黄）/ Completed（CircleCheck 绿），当前状态右侧打勾；`DropdownMenuSubContent side="left"` 使子菜单在左侧弹出，与截图一致。
+- 新增 Duplicate：`createProject(name + " copy", description, currentStage, {status, priority, dueDate})` 后 toast + 跳转新项目；新增 Archive project：`archiveProject(id)`。移除原来独立且语义重复的「Active project」项。
+- i18n 补 `Archive project` → 「归档项目」、`Duplicate` → 「创建副本」；其它文案沿用既有词条。
+- 验收：菜单项抓取顺序为 `Copy link / Copy ID / Open in new tab / Open project / Move to / Duplicate / Mark as completed / Archive project / Delete project`，悬浮 Move to 展开 `Active / On hold / Completed`；截图核对分组与图标颜色一致；tsc 0 错误、lint 0 error（3 条既有 warning）、build 通过。
+
+### 任务列表优先级 / 倒计时 / 状态下拉 / 经办人下拉（2026-11-16）
+
+- 优先级 → 预估工时：`PRIORITY_HOURS = { none: 24, low: 12, medium: 8, high: 4, urgent: 2 }`。新建任务按优先级写入 `estimate`，修改优先级时同步把 `estimate` 置为该档默认值。
+- Estimate 倒计时：以 `createdAt` 为起点按预估工时倒数（每分钟 tick 重算，`Math.ceil` 取整小时，耗尽显示 `0h`）；到期日固定为**创建时间 + 7 天**，新建任务由前端写入 `dueDate = now + 7d`。
+- 优先级列改为下拉：Urgent / High / Medium / Low / None（降序，带 ↓↑— 图标与颜色，当前项打勾），文案 `Change priority`。
+- 状态列改为下拉：Backlog / Todo / In Progress / Review / Done / Closed（表格中 closed 仍并入 Done 组，菜单用 `STATUS_MENU_LABEL` 区分 Closed），文案 `Change status`。
+- 经办人列改为下拉：Unassigned + `snap.users` 全体成员（头像 + 姓名，当前项打勾），文案 `Assign to`；新建任务默认经办人为创建人 `CURRENT_USER_ID`。
+- 未指派（`assigneeId` 为空）的任务隐藏行尾删除按钮。
+- 项目列表移除 Stage 列（同时删除 `stageName` 与 cells 中的阶段单元格，表头为 Project / Lead / Members / Progress / Priority / Due date）。
+- i18n 补 `Change priority`（修改优先级）、`Change status`（修改状态）、`Assign to`（指派给）；`PRIORITY_OPTIONS` 增加 `none`。
+- 验收：任务行实测未指派 `deleteBtn=false`、已指派 `deleteBtn=true`；优先级下拉 `Urgent/High/Medium/Low/None`、状态下拉 `Backlog/Todo/In Progress/Review/Done/Closed`、经办人下拉 `Unassigned + 8 位成员`；点选 Urgent 后后端 `estimate` 由 12 变 2；项目列表表头已无 Stage；tsc/lint/build 全过，测试任务已清空。
+
+### 任务列表：标签列替换为阶段列（2026-11-16）
+
+- 需求：任务里的「标签」改为「阶段」。
+- 实现：`tasks/index.tsx` 的 `labelsOf(task)`（读 `labelIds`）替换为 `stageOf(task)`——按 `task.projectId` 在 `snap.projects` 中定位下标后调用 `projectStage(projectId, index)`，取项目当前阶段并用 `stageLabel(key, isZh(lang))` 本地化；组件内加 `useProjectStageStore()` 订阅阶段变更。
+- 三处渲染统一改为蓝色阶段徽标（`bg-blue-500/10 text-blue-500`，`h-5 rounded-4xl text-[11px]`）：List 表格的 `Stage` 列（表头 `HEADERS` 由 `Labels` 改为 `Stage`）、Board 卡片、任务详情 `PmsSheet` 的 `Stage` 字段（原 `Labels` 字段移除）。
+- 清理：移除不再使用的 `labelsOf`、`PmsLabelChip` 导入与 `useWorkspace()` 的 `label` 解构。`Stage`/`Labels` 中文词条沿用既有 `Stage: 阶段`。
+- 验收：表头无 `Labels`、`Stage` 位于第 4 列；实测任务行阶段单元格为 `Requirement`（项目 p1 处于需求阶段），看板卡片同样显示 `Requirement`；详情面板 `hasStageField: true`、`hasLabelsField: false`；tsc/lint/build 全过，测试任务已删除。
+
+### 预估工时与到期日改为后端统一推导（2026-11-16）
+
+- 问题：预置任务行的`预估`与`到期`显示 `—`。原因是 `projects/index.tsx` 创建预置任务时只传了 title/description/status/priority/projectId，`estimate` 与 `dueDate` 落库为 `null`；默认值逻辑此前只在前端任务新建表单里。
+- 后端（唯一事实源）：`TasksService` 新增 `PRIORITY_ESTIMATE`（none 24 / low 12 / medium 8 / high 4 / urgent 2）与 `DUE_IN_DAYS = 7`。`create` 未显式给出时按优先级补 `estimate`、按「now + 7 天」补 `dueDate`；`update` 改 `priority` 且未显式传 `estimate` 时联动为新优先级默认工时。
+- 前端简化：`tasks/index.tsx` 删除本地 `PRIORITY_HOURS`，新建任务不再自行计算 `estimate/dueDate`，改优先级也只传 `priority`，全部交由后端推导，避免两处映射漂移。
+- 历史数据：对已有两条预置任务（estimate/dueDate 为 null）按「创建时间 + 7 天」与优先级默认值补齐。
+- 验收：`POST /tasks` 只带 title/priority/projectId 时返回 `estimate: 8`、`dueDate` 距 `createdAt` 恰为 7.0 天；`PATCH {priority:"urgent"}` 后 `estimate` 变 2；页面两条预置任务显示「需求 / Medium / 8h / 11月23日 / Todo / Unassigned」。后端 build、前端 tsc/lint/build 全过。
+
+### 任务默认优先级跟随项目 + 未指派占位头像（2026-11-16）
+
+- 默认优先级：`create-dialogs.tsx` 的 `NewTaskDialog` 新增 `defaultProjectId`，打开时以当前项目（`getActiveProject()`）作为默认项目，并按该项目 `priority` 初始化优先级；项目选择框 `onChange` 同步把优先级改为新项目优先级（用户仍可手动覆盖）。任务页 `create` 再兜底一次：`priority: values.priority || 项目优先级 || "medium"`。新建项目时写入的两条预置任务优先级也改为 `created.priority ?? "medium"`。
+- 未指派行样式：任务列表 Assignee 单元格在 `assigneeId` 为空时渲染 24×24 虚线圆占位头像（`rounded-full border border-dashed` + `UserRound` 图标）再跟 `Unassigned` 文案，与下拉菜单里的 Unassigned 项视觉一致；该行仍隐藏删除按钮。
+- 验收：tsc 0 错误、lint 0 error（3 条既有 warning）、build 通过；实测未指派行 `hasAvatarPlaceholder: true`、`hasUserIcon: true`、占位 24×24；打开新建任务弹窗时 Project 默认当前项目、Priority 自动为该项目优先级（p1 → `high`）。
+
+### 任务显示项目编号 + 项目模块真正落库后端（2026-11-16）
+
+- 任务列表：`tasks/index.tsx` 的 Project 单元格改为两行（项目名 + 蓝色小字编号 `#26xxxx`），编号用 `projectNo(task.projectId, index)`，与项目列表同源。
+- 审计结论：后端此前**没有 Project 模型/模块**；项目数据来自 MSW 快照示例项目（p1..pN）+ `project-stages.ts` 的 localStorage overlay。本次做全栈落库，方案类比任务落库。
+- 后端：
+  - `prisma/schema.prisma` 新增 `model Project`（id 沿用前端项目 id，含 name/description/status/priority/dueDate String/memberIds/leadId/progress/archived/teamId/**stage**/**no**），`@@map("projects")`；迁移 `20261116020000_add_projects`（db push + migrate resolve）。
+  - 新增 `src/modules/projects/`（CreateProjectDto / UpdateProjectDto / ProjectsService / ProjectsController，GET / GET:id / POST / PATCH / DELETE，写操作 MemberGuard），注册进 `app.module.ts`。
+- 前端：
+  - 新增 `src/api/projects/use-projects.ts`：`useProjects(includeArchived?)`（SWR）+ 独立 `createProject/updateProject/removeProject` API，写后 `globalMutate` 刷新 `/api/projects*`。
+  - `use-workspace.ts` 数据源切换：新增 `useSWR("/api/projects")`，用后端项目替换快照里的 MSW 示例项目（`baseWithProjects.projects = dbProjects`）；`hydrateBackendProjects` 把后端项目的 stage/no 同步进本地缓存，使 `projectStage` / `projectNo` 保持同步读取。
+  - `project-stages.ts` 项目生命周期写操作改为后端 API：`createProject`（POST，返回后端项目）、`updateProject`/`archiveProject`/`restoreProject`/`setProjectStage`（PATCH）、`deleteProject`（DELETE）；activity 时间线仍留 overlay 承载；`setProjectMembers` 复用 updateProject。
+  - 调用点适配：`projects/index.tsx` 新建、`project-row-actions.tsx` 副本改为 `await` 后端返回。
+- 验收：curl `POST/PATCH/DELETE /projects` 全通；前端新建项目后后端 projects 出现该行（含 stage `requirement`、no `#2611001`），两条预置任务同 projectId 落库；项目列表 `0 → 1 projects` 并显示「项目落库验证 #2611001 · …」；详情页标题/`Tasks (2)`/编号均正常。tsc 0 错误、lint 0 error、build 通过；测试数据已清理。
+- 遗留说明：MSW 示例项目（p1..pN）已从列表移除（数据源切后端），存量 localStorage 项目不会自动迁移，需在后端重建；详情页子记录（issues/sprints/files/activities 等）仍由前端 overlay 承载，未在本轮范围。
+
+### Demo 项目迁移 + 负责人 / 折叠 logo / 日期图标修复（2026-11-16）
+
+- Demo 数据迁移：`use-workspace.ts` 增加一次性迁移 effect（`omnix-projects-migrated-v1` 标记 + `migratedRef` 防 StrictMode 重复），把 MSW 快照项目与 localStorage 存量项目（Test0001 等）批量 `POST /api/projects`，阶段/编号从 overlay 的 `stages/nos` 取（无则用 `STAGE_KEYS[index]` / `projectNo` 兜底）；迁移前按 id 跳过后端已有项目，避免多浏览器重复迁移主键冲突。实测后端 projects 从 0 → 17，前端列表同步显示。
+- 负责人名称：`constants.ts` 的 `CURRENT_USER_ID` 由 `u2`（Bob Smith）改为 `u1`（Alice Johnson）——登录账号 alice@pms.com 与个人资料维护的 Alice（admin）一致，快照 u1 即 Alice；迁移时把历史写入的 `leadId: u2` / `memberIds` 里的 u2 同步修正为 u1。实测列表负责人全部显示 Alice。
+- 折叠态 logo：`FullLogo.tsx` 折叠图标补 `shrink-0 object-contain`——原 `size-7` 容器用默认 `object-fit: fill` 把 309×172 的宽图拉成 28×28，视觉上被压扁；改为等比 contain 后 28×28 容器内保持宽高比居中。
+- 截止日期图标：`pms.tsx` 的 `PmsDate` 里 `Clock` 补 `shrink-0`、文本补 `truncate`。根因是 flex 容器空间不足时 SVG 被压缩（实测同一 `size-3.5` 图标宽度从 14px 被挤到 1–8px、高度仍 14px），修复后全部 14×14，与 Test0001 行一致。
+- 验收：tsc 0 错误、lint 0 error（3 条既有 warning）、build 通过；截图核对折叠 logo 完整、负责人 Alice、图标统一。
+
+### 收起侧边栏 hover 不展开 + 项目优先级下拉 + 示例数据全部清除（2026-11-16）
+
+- 收起侧边栏 hover 不展开：
+  - 【真正根因】`css/globals.css` 第 262–346 行的 `[data-sidebar-type="true"] [data-slot="sidebar"][data-collapsible="icon"]` 内有一段 `.sidebar-box:hover { width: 250px !important; ... .hide-menu { display:flex !important } }`——这是从 shadcndashboard demo 复刻来的 hover-preview 浮层：侧边栏是 `position:fixed; z-10; bg-sidebar` 容器，hover 时被撑到 250px 并强制显示所有 `.hide-menu` 文字，于是「带白色背景的浮层」盖住右侧内容区。开关是 `CustomizerContext.tsx` 第 161 行 `root.setAttribute("data-sidebar-type", String(state.isCollapse))`，纯 CSS 驱动、无 JS 展开逻辑。
+  - 修复：删除整段 `.sidebar-box:hover` 规则（含内部对 sidebar-container/sidebar-inner 宽度、`.hide-menu` 显隐、menu-button 对齐的所有 `!important` 覆盖）；把仅剩的图标居中规则从 `.sidebar-box:not(:hover)` 改为恒常 `.sidebar-box`，保留收起态「隐藏文字 + 图标居中」。`nav-items/index.tsx` 的 `onMouseEnter` 只是 hover 高亮圆角背景（正常反馈），与浮层无关，保留。
+  - 【前次遗漏】之前只改了 `nav-collapse/index.tsx` 分组标题 `isCollapse ? "..." : ...`，那只是分组标题，不是浮层根因，问题依旧——本次从 CSS 层彻底去掉。
+  - 验收：收起态（`.sidebar-box` 宽 70px、`.hide-menu` display:none），hover 侧边栏后宽度仍 70px、文字仍 none，不再弹白色浮层；截图确认侧栏恒为单列图标。tsc/lint/build 全过、0 console error。
+- 项目优先级下拉：`projects/index.tsx` Priority 列改为 `DropdownMenu`（`aria-label="Priority: {priority}"`），Urgent/High/Medium/Low/None 降序带图标与颜色、当前项打勾；点选调 `updateProject(id, { priority })` 写入后端。实测点 Test0001 的 Medium→Urgent，`PATCH /projects/:id` 后 DB `priority=urgent`、前端标签同步（测试数据已恢复 medium）。
+- 示例数据全部清除（审计 + 落地）：
+  - 删除 `api/workspace/workspace-data.ts`（1664 行 MSW 示例快照）及 `mock-handlers.ts` 的 `WorkspaceHandlers` 注册；`/api/workspace/snapshot` 不再请求。
+  - `use-workspace.ts` 数据源收敛：项目 `/api/projects`、用户 `/api/auth/users`（`avatarUrl→avatar`、`role/status` 映射成 `WsUser`）、任务 `/api/tasks`；子记录只来自本地 overlay 的用户自建内容。删掉一次性 demo 迁移 effect 与 `hydrateSeedProjects` 调用；`isLoading/error` 改为两个 SWR 合并。
+  - 数据修复：迁移进库的 14 个项目 `leadId/memberIds` 仍是 MSW 假 id（u1~u8），真实后端用户是 CUID，导致负责人列全显示 `?`/`—`。一次性脚本按姓名 1:1 映射（u1 Alice / u2 Bob / u3 Carol / u4 David / u5 Eve / u6 Frank / u7 Grace / u8 Henry）批量改写 DB，tasks 表无假 id assignee。`CURRENT_USER_ID` 由假 id `u1` 改为 Alice 真实 CUID `cmwhzff3k000cpttzjn6rhh4i`；新建项目 `teamId` 由示例 `t1` 改为空。
+  - 保留项：`SEED_TASKS`（新建项目预置的真实任务，写后端）、`getActiveProject()` 兜底 `p1`（已迁移为真实项目）非示例数据。
+  - 验收：负责人列由 `?`/`—` 恢复为真实头像 + Alice/Carol 姓名；tsc 0 错误、lint 0 error（3 条既有 warning）、build 通过；浏览器 0 console error、0 pageerror。
+
+### 项目列表重复编号 / 头像裂图 / 负责人全名（2026-11-16）
+
+- 重复编号 + 头像裂图（同一根因）：`project-stages.ts` 的 `mergeWorkspaceSnapshot` 把 `b.projects`（后端）+ `overlay.projects`（localStorage 遗留）直接拼接，且无去重。用户浏览器残留迁移前的旧项目（同名同编号、leadId 仍是 MSW 假 id u1/u2），于是 #2611016/#2611013/#2611012 各显示两次，重复行的负责人显示 `?`/`—`、头像裂图。
+  - 修复：项目已 100% 落库，`overlay.projects` 纯属历史遗留且已无任何写操作新增（`createProject` 直接 `await apiCreateProject` 写后端）。`mergeWorkspaceSnapshot` 的 `projects` 改为只返回后端 `b.projects`（保留 `projectEdits` 覆盖与软删过滤），完全忽略 overlay.projects。
+  - 头像裂图另因：seed 里 David Lee/Eve Wilson 的 `avatarUrl` 指向 `/images/profile/user-4.png`、`user-5.png`，但这两个文件缺失（返回 SPA HTML fallback → `<img>` 裂图）。已补齐两个 PNG（复制 user-9/user-10），并给 `pms.tsx` 的 `PmsAvatar` 加 `onError → initials` 兜底，任何坏 URL 都回退首字母而非裂图。
+- 负责人全名：`projects/index.tsx` Lead 列由 `firstName(project.leadId)` 改为 `user(project.leadId)?.name ?? "—"`，完整显示 `Alice Johnson` / `Carol Davis` 等；移除未用的 `firstName` 解构。
+- 验收：界面 13 个项目、13 个唯一编号、0 重复；注入模拟 overlay 残留后刷新仍 13 项 0 重复；负责人显示全名；页面 53 张图全部加载成功、0 裂图；tsc/lint/build 全过、0 console error。
+
+### 项目操作栏完善 + 优先级「无」（2026-11-16）
+
+- 复制反馈：`project-row-actions.tsx` 的 `copy()` 改为 async，成功 `toast.success(t("Link copied") / t("ID copied"))`、失败 `toast.error`；i18n 补两个词条。实测点「复制链接」「复制 ID」分别弹「链接已复制」「ID 已复制」。
+- 「Move to」改为「标记为」：i18n `"Move to": "标记为"`。子菜单 Active/On hold/Completed 三态共用导出的 `STATUS_ITEMS`，进行中(active) 图标由灰色改 `text-blue-500` 蓝色；列表行首 icon 改由 `statusVisual(project.status)` 按状态渲染（active 蓝色 CircleDot / on_hold 琥珀 PauseCircle / completed 绿色 CircleCheck），截图核对进行中行蓝色⊕、已完成行绿色✓。
+- 创建副本：`${project.name}${t("CopySuffix")}`，i18n `CopySuffix`= en " copy" / zh " 副本"（en 显式声明避免带空格 key 回退成字面）。实测「Test0001」→「Test0001 副本」，后端落库 12→13 并自动跳详情页（测试数据已删除恢复）。
+- 其余功能审计：在新标签页打开 / 打开项目 / 标记为已完成 / 归档 / 删除均调用后端 CRUD（`updateProject`/`archiveProject`/`deleteProject`，内部 `revalidateProjects` 刷 SWR），功能完整；本次为状态切换/标记完成/归档/删除补 `toast.success(t("Saved successfully"))` 反馈。
+- 优先级「不分组」→「无」：优先级下拉的 none 项此前 label 为 `t("None")`="不分组"（与 GROUP BY 的 None 共用 key），改为 label `"none"`，并在 i18n en 显式声明 `"none": "None"`、zh 复用已有 `"none": "无"`；项目页与任务页的单元格显示也针对 `priority==="none"` 走 `t("none")`。GROUP BY 的 `"None"="不分组"` 保持不变。
+- 验收：菜单文案「复制链接/复制 ID/标记为/创建副本/标记为已完成/归档项目/删除项目」齐全；两个 toast、副本落库、蓝色 icon、优先级「无」均实测通过；tsc 0 错误、lint 0 error（3 条既有 warning）、build 通过、0 console error。
+
+### 团队概念移除 + 日期语义调整 + 看板卡片 + 删除 toast（2026-11-16）
+
+- 列控制菜单：`projects/index.tsx` 的 `columnsMenu` 删除置灰的 `<DropdownMenuCheckboxItem disabled>{t("Completed")}</DropdownMenuCheckboxItem>`，菜单现只有 Lead/Members/Progress/Priority/Order date。
+- 团队概念移除：① `sidebaritems.ts` 删除 Workspace 的 Team 导航项 + `UserRound` 导入；② `Router.tsx` 移除 TeamPage 懒加载与 `/team` 路由；③ 删除孤儿团队页 `views/workspace/team/index.tsx` 与 `create-dialogs.tsx` 的 `NewTeamDialog`/`NewTeamValues`；④ 项目模块清团队字段：`index.tsx` 的 GROUP_BY 去 Team + 删团队分组分支、`detail.tsx` 删 team 变量/展示行/`teams` 传参、`edit-archive-dialogs.tsx` 删 teamId 表单与 WsTeam 类型、`project-stages.ts` 的 createProject 不再写 teamId。后端 `Project.teamId` 列与类型定义保留（数据兼容，无 UI 入口）。
+- 日期语义：`dueDate` 字段承载「下单日期」（订单阶段开始日期），`createdAt` 为「开始日期」。列表表头/COLUMN_MENU/SORT_BY 的 "Due date" → "Order date"，列值改为直接显示下单日期（去掉「剩余天数」）；详情页 Started=createdAt、Due date→Order date、Time left→Duration（持续时间= 下单日期−创建日期 的天数）；看板卡片日期用下单日期 + 创建时刻。i18n 补 `Order date`=下单日期、`Duration`=持续时间。说明：阶段进入时间未持久化，故用可编辑的 dueDate 作为下单日期，未新增 DB 迁移。
+- 看板卡片：`projects/index.tsx` 看板卡片重做为「项目名 + 状态胶囊（STATUS_BADGE 蓝/琥珀/绿）+ 下单日期·创建时刻 + 负责人头像」，删除每张卡片底部的 `+ Add Task` 按钮（阶段看板不支持添加任务）。截图核对与提供样图一致。
+- 删除/归档 toast 规范：`toast.ts` 的 DETAIL_KEYS 新增 `Project deleted/项目已删除`、`Project archived/项目已归档` 及各自描述；i18n 同步补键；`project-row-actions.tsx` 删除项目由 `t("Saved successfully")` 改为 `t("Project deleted")`、归档改为 `t("Project archived")`。审计全项目 toast：删除类仅此一处误用，已修正；联系人删除/成员移除本就规范。
+- 验收：列菜单无 Completed 置灰项；侧栏无团队；详情显示「开始日期/下单日期/持续时间」、无「剩余时间/团队」；看板 12 卡片全带头像+状态胶囊、无 Add Task；删除临时项目弹「项目已删除」+ 删除专用描述（非保存成功），已清理测试数据；tsc 0 错误、lint 0 error（3 条既有 warning）、build 通过、0 console error。
+
+### 右上角个人信息：Sheet 侧弹 → shadcn Dropdown block（2026-11-16）
+
+- 项目结构已满足：shadcn base-nova（`components.json` aliases `@/`→`src/*`，`src/*`→`src/*`）、React 19、Tailwind 4、TypeScript 6（覆盖要求的 5+）；`components/ui/avatar.tsx`、`dropdown-menu.tsx` 与 `tw-animate-css` 已就位，无需 CLI 安装依赖。
+- 新建 block：`client/src/components/shadcn-dashboard/dropdown-menu/dropdown-menu-01.tsx`，完全按提供的代码 1:1 实现（圆角 2xl / w-3xs / 头像+在线绿点 / 三组菜单 / Signout 红色破坏性项），导入路径用项目别名 `@/components/ui/*`。为可复用做两点参数化：`user`（name/email/avatar/initials/online，默认沿用 David McMichael 演示数据）、`onSelect` + `labelOf`（默认原样英文，接入方可本地化）。额外导出命名组件 `Dropdown`。
+- 替换侧弹：`header/Profile.tsx` 由 `Sheet` 右侧抽屉改为 `<Dropdown>`；接入真实 `useAuth()` 用户（name/email/avatarSrc/initials）、`myPresence==="online"` 控制绿点；`onSelect` 接真实行为——个人资料→`/profile`、账户设置→`/settings/general`、订阅/账单→toast「该板块暂未开放」、Signout→logout 后跳 `/login`。`labelOf={t}` 实现中英文菜单本地化，i18n 补 5 个 key。
+- 未改动：动画 token（`--color-card`→`ring-card`、`w-3xs`、`data-open:*`）均为 Tailwind 4 + tw-animate-css 原生，全局 CSS 无需新增。
+- 验收：截图核对下拉视觉与 block 一致；中英文菜单文案正确（个人资料/我的订阅/我的账单/账户设置/退出登录）；头像显示真实用户、在线绿点显示；点个人资料跳 `/profile`、Signout 跳 `/login`；tsc 0 错误、lint 0 error（3 条既有 warning）、build 通过、0 console error。
+
+### 在线绿点恢复 + Select-07 负责人 + 成员多选（2026-11-16）
+
+- 在线绿点：上一轮换成 Dropdown 后，右上角 trigger 头像丢了旧 Sheet 里的 `AvatarBadge`，面板内绿点又被 Avatar 的 `after:` 伪元素遮挡。修复：trigger 头像补 `<AvatarBadge className={presenceStyles[myPresence].className} />`（青绿 10×10），block 面板绿点 span 加 `z-10`。浏览器实测两处绿点均显示。
+- 新建 block：`client/src/components/shadcn-dashboard/select/select-07.tsx`，按提供代码 1:1（头像 + 名称、`User Context` 分组、当前项打勾），参数化 `users/value/onChange/label`，导出 `SelectUser` 类型。label 为空时不渲染 `<Label>`（供外层 FieldLabel 接管）。
+- 编辑项目弹窗（`edit-archive-dialogs.tsx`）三项调整：
+  - 日期语义：`Due Date` 字段改为 `Order date`（下单日期，对应上一轮项目列表/详情的语义调整），id 同步改 `edit-project-order-date`。
+  - 负责人：由纯文本 `RecordSelect` 改为 `SelectWithAvatars`（select-07），`toSelectUser` 把真实 WsUser 转成选项（头像 + 姓名）；删除不再使用的 `RecordSelect`。
+  - 成员：由平铺 Checkbox 列表改为下拉多选 `MemberMultiSelect`——trigger 显示已选头像组（最多 5 +N），面板每项「左头像 + 名称、右角色（Admin/User/Viewer）」，复用 `DropdownMenuCheckboxItem`，Base UI 点击后菜单保持打开可连续多选。
+  - 【关键坑】Base UI 的 `DropdownMenuLabel` 必须包在 `DropdownMenuGroup` 内，否则运行时抛 `MenuGroupContext is missing` 导致整页崩溃；Trigger 用 `render={<button/>}` 而非 Radix 的 `asChild`。
+- 验收：截图核对三处视觉；负责人下拉每项带头像、当前项打勾；成员下拉 11 项左头像名称+右角色、点击 Bob Smith 后菜单仍开且选中 2 项、保存后后端 `memberIds` 为 Alice+Bob（测试数据已恢复）；Order date 标签正确；tsc 0 错误、lint 0 error（3 条既有 warning）、build 通过、0 console error。
+
+### 项目列表行成员组件 → avatar-11 block（2026-11-16）
+
+- 新建 block：`client/src/components/shadcn-dashboard/avatar/avatar-11.tsx`，按提供代码 1:1（Tooltip 悬停显示姓名、AvatarGroup 头像堆叠、超出 +N 用 Popover 展示隐藏成员「左头像+名称、右角色」、无图回退首字母）。参数化 `members/visible/showHint/size`，导出 `AvatarMember` 类型；默认沿用 block 演示数据可独立使用。
+- 替换列表行成员：`projects/index.tsx` 的成员列由 `PmsAvatarGroup` 改为 `<AvatarDemo members={membersOf(project)} visible={3} showHint={false} size="default" />`；`membersOf` 改为返回 `AvatarMember[]`（name/image/initials/role，来自真实 WsUser）。移除未用的 `PmsAvatarGroup` import。
+- 【坑】block 的 `key={member.name}` 在项目成员含重名时触发 React duplicate key 报错（迁移遗留 p1 的 memberIds 出现两次 Alice）→ 改为 `key={name-index}` 消除警告；同时修复后端 p1 重复成员数据（4→3 且唯一）。
+- 注：当前工作区表头已是 "Created"（非上一轮登记的 Order date），属外部状态，本次未回退。
+- 验收：截图核对头像堆叠 + `+N` + Popover 隐藏成员列表视觉；Popover 实测显示「4 members / Grace Kim - admin」；console error 0；tsc 0 错误、lint 0 error（3 条既有 warning）、build 通过。
+
+### 项目列表成员列尺寸/对齐 + 列宽微调（2026-11-16）
+
+- 成员头像与负责人一致：`AvatarDemo` 由 `size="default"`（32px）改为 `size="sm"`（24px，与 `PmsAvatar` 默认 size-6 相同），`+N` 计数圈同档 size-6。
+- 居左对齐：block 新增 `align?: "center" | "start"`，列表行传 `align="start"`（demo 仍默认居中）。
+- 列宽：`PmsHeader`/`PmsRow` 新增可选 `titleW`（默认 `w-56 min-w-56`，其它列表页不受影响）。项目页首列 `TITLE_W = w-48 min-w-48`（224→192px）；Members 列 w-24→w-28 容纳 3 个 24px 头像；Progress w-36→w-32。
+- 标题可读性：`PmsRow` 的标题由与描述平分 `truncate` 改为「标题 `shrink` 优先、描述 `flex-1 truncate` 让位」，项目名完整显示（Website Redesign / 测试我的第一个项目 等），Created 列日期保持完整（w-40）。
+- 验收：截图核对成员头像 24px 与负责人一致、居左；项目名完整；Created 完整；issues/sprints 等共享列表页因 `titleW` 默认值不变而未受影响；tsc 0 错误、lint 0 error（3 条既有 warning）、build 通过、0 console error。
+
+### avatar-11 成员头像组 Popover 中英文（2026-11-17）
+
+- 问题：block 里 Popover 文案硬编码英文——「N members」「{role}（user 小写）」「Show N more members」「Hover a face to see who it is」，中文界面下未翻译。
+- 修复：`avatar-11.tsx` 引入 `useTranslation`，四处接入 i18n——`t("{{n}} members", {n})`、role 首字母大写后 `t(...)`、`t("Show {{n}} more members", {n})`、`t("Hover a face to see who it is")`；人名是专有名词不翻译。
+- i18n：en 新增 2 个插值 key 声明（`{{n}} members`、`Show {{n}} more members`），zh 新增 4 条（「{{n}} 位成员」「再显示 {{n}} 位成员」「悬停头像查看姓名」+ `User`=「普通成员」、`Editor`=「编辑者」）；Owner/Admin/Viewer 中文词条已存在（负责人/管理员/查看者）复用。
+- 验收：英文界面 Popover「4 members / Henry Chen - User」，中文界面「4 位成员 / Henry Chen - 普通成员」，aria-label「再显示 1 位成员」；tsc 0 错误、lint 0 error（3 条既有 warning）、build 通过、0 console error。
+
+### 上传头像未应用到展示位（2026-11-17）
+
+- 现象：上传新头像后，下方「头像」编辑区显示新图，但顶部「个人资料」卡片仍显示默认头像。
+- 根因：`views/apps/shared.tsx` 的 `avatarSrc(path)` 只把路径取文件名 key 后查内置 `AVATARS` 字典（user-1~10），查不到就返回 fallback 默认图。上传的真实路径 `/uploads/<uuid>.png` 不在字典 → 所有用 `avatarSrc` 展示的地方都回退到默认图；只有编辑区用本地 `preview`（blob/真实 URL）才显示新图。
+- 修复：`avatarSrc` 改为——空值返回 fallback；内置 key（user-N）仍映射本地资源（保持线上 fixture 路径映射）；其它路径（/uploads/...、data:、http...）直接原样返回，加载真实图。
+- 链路确认无误：上传走 `/api/upload`（后端落盘 uploads/、返回 /uploads/xxx）→ `updateProfile` 写库 → `onSaved` → `updateUser` 更新 AuthContext；Vite 已反代 `/uploads` 到 :4000，后端 `express.static(/uploads)` 静态托管，上传 URL 可正常加载。
+- 验收：Alice 上传的鸭子头图（DB 为 /uploads/483a1087-....png）现在在顶部卡片、编辑区、右上角导航头像三处一致显示，img naturalWidth=2048 加载成功、不再 fallback；此修复全局受益（导航/成员设置/联系人/邮件页的 avatarSrc 调用点）；tsc 0 错误、build 通过、0 console error。
+
+### 侧栏 Setting/Documentation 整行可点击（2026-11-17）
+
+- 问题：底部 Setting / Documentation 与仪表盘等菜单项交互不一致——原来 `<SidebarMenuButton>` 内嵌一个 inline `<Link>`，只有文字/图标区域可点，行内空白处点击无效。
+- 修复：`NavUser.tsx` 改为 `SidebarMenuButton render={<Link to={item.url} prefetch="none" />}`（Base UI 的 render prop），让按钮本体就是 Link，并加 `w-full` 占满整行；去掉内层包裹 Link。结构现与仪表盘菜单项（Link 包 NavItem）一致：整行 div 均可点击跳转。
+- 验收：实测 Setting 行右侧空白（x=220,y=650）点击跳 `/settings/general`、Documentation 行空白（x=226,y=683）点击跳 `/faq`；`<a>` 本身带 `data-slot=sidebar-menu-button`、宽 216px 高 34px；tsc 0 错误、lint 0 error（3 条既有 warning）、build 通过；唯一 console error 是登录墙 `/api/auth/me` 未登录 401（预期）。
+
+### 新建项目去掉截止日期（2026-11-17）
+
+- `new-project-dialog.tsx`：`NewProjectValues` 删除 `dueDate`，弹窗删除 Due Date 的 `<Field>`/`<DatePicker>`，移除 DatePicker import。
+- `projects/index.tsx`：`create()` 不再透传 `values.dueDate` 给 `createStageProject`。
+- `project-stages.ts`：`createProject` 的 dueDate 由 `extra?.dueDate || "RELATIVE_DAYS_PLUS30"` 改为 `extra?.dueDate ?? null`——新建不设截止/下单日期（未下单），仅创建副本时沿用原项目 dueDate。
+- 语义：dueDate 现只承载详情页/看板的「下单日期」（订单阶段开始），新建时为空显示「—」、Duration 0d；列表用的是 Created 列（createdAt），不受影响。
+- 验收：弹窗字段仅 Name/Description/Status/Priority，无 Due Date；实测创建「无截止日期测试」项目后端 `dueDate: null`、详情页 Order date=「—」、Duration=0d（测试数据已删除）；tsc 0 错误、lint 0 error（3 条既有 warning）、build 通过、0 console error。
+
+### 新建项目隐藏状态/优先级 + Button/toast 防抖 + toast 可关闭（2026-11-17）
+
+- 新建弹窗隐藏 Status/Priority：`new-project-dialog.tsx` 删除两个 Select Field 与 STATUS_OPTIONS/PRIORITY_OPTIONS、`select` import；`NewProjectValues` 保留 status/priority，`EMPTY` 仍为 `active`/`medium`（进行中/中）作为创建默认值。弹窗现仅 Name/Description；实测创建项目后端 `status=active, priority=medium, dueDate=null`。
+- toast 防抖 + 可关闭：`sonner/toast.ts` 的 `show()` 加 `recentToasts` Map——相同 tone+title 在 400ms 内重复触发复用原 id 不新增；`closeButton` 默认 `true`（可传 false 关闭）。实测连点两次「Copy ID」只弹 1 个 toast，且 toast 内有 `toast-close` 按钮。
+- Button 防抖：`components/ui/button.tsx` 的 `Button` 加 `debounceMs` prop（默认 300ms，传 0 关闭），用 useRef 记录上次点击时间，窗口内重复 onClick 忽略。
+- 【关键坑】`type="submit" form="..."` 的按钮：浏览器原生表单提交绕过 Button 的 onClick 防抖，连点仍会重复提交（实测连点创建出 2 个项目）。故在 `new-project-dialog.tsx` 的业务层 `submit()` 再加 `submitting` ref 锁（重复提交直接 return，1s 兜底释放防失败卡死）。复测连点两次 Create Project 只创建 1 个项目。
+- 验收：弹窗仅 Name/Description；默认值 active/medium；toast 400ms 防抖 + x 关闭按钮；Button 300ms onClick 防抖 + 表单提交锁；测试数据已清理；tsc 0 错误、lint 0 error（3 条既有 warning）、build 通过、0 console error。
+
+### 可编辑成员组 + 详情实时计时器（2026-11-17）
+
+- 扩展 avatar-11：`AvatarMember` 加 `id`；新增 `editable`（默认 false）、`allUsers`、`onChange` props。editable 时在头像组末尾加虚线圆圈「+」按钮，弹出 Popover 列出全部可选用户（左头像+名称、右角色、勾选框），勾选回调 `onChange(ids)`。列表行不传 editable（只读，无 + 按钮）；项目详情 Members 字段传 editable + allUsers=snap.users，onChange 走 `setProjectMembers(id, ids)` 写后端。实测勾选 Carol Davis 后 p1 成员 3→4 落库（测试数据已恢复）。
+- Started → 创建日期：i18n `"Started"` 中文由「开始日期」改为「创建日期」。
+- 详情持续时间：`duration-timer.tsx` 新建 `DurationTimer`——从 createdAt 实时 tick（每秒），展示「xx天xx时xx分xx秒」，逐位数字用 motion 的 AnimatePresence 纵向滚动（仿 shadcn 数字计时器）。天/时为 0 时隐藏对应段（如「19时05分01秒」），天数不补零、分秒补零。
+- 【样式调整】初版数字用 `bg-muted/60 + font-mono` 方块，与详情行其它值（text-sm font-medium 无底色）不一致；改为继承父级字体、去掉方块背景，仅保留 `tabular-nums` + 滚动动画，视觉与「45% / #2611001 / Alice Johnson」一致。
+- 验收：详情显示「19时05分01秒」且 2 秒后秒数从 24→27 实时跳动；0 天段不显示；字体与其它详情值一致；添加成员可勾选并落库；列表成员只读；tsc 0 错误、lint 0 error（3 条既有 warning）、build 通过、0 console error。
+
+### 详情负责人改为可下拉选择（2026-11-17）
+
+- 新建 `lead-select.tsx`：`LeadSelect` 用 shadcn DropdownMenu（Base UI），触发器为头像 + 名称 + hover 箭头（`aria-label=t("Change lead")`），面板列出全部用户（头像 + 名称 + 角色，当前项打勾），点击项回调 `onChange(userId)`。
+- `detail.tsx`：Lead 字段由纯展示 `PmsAvatar + 名字` 改为 `<LeadSelect users={snap.users} value={project.leadId} onChange={leadId => updateProject(id,{leadId}).then(toast)} />`；移除不再使用的 `lead` 局部变量（PmsAvatar 仍在任务/成员头像处使用，保留 import）。
+- i18n 补 `"Change lead"`=更换负责人。
+- 验收：截图核对下拉视觉（标签 + 头像 + 名称 + 角色 + 打勾）；实测切换 Alice Johnson→Bob Smith 后端 leadId 落库（已恢复 Alice）；tsc 0 错误、lint 0 error（3 条既有 warning）、build 通过、0 console error。
+
+### 阶段(Sprint)↔任务闭环 + 任务编号 #T001（2026-11-17）
+
+- 审计结论：原 Sprint 只通过 `issueIds` 关联 Issue（非 Task）；`WsTask.sprintId`/后端 Task.sprintId 字段存在但前端从不读写；无任务编号。截图 `3/6 done · 50%` 效果原已存在于 detail.tsx 的 sprintCards，但数据源是 Issue。
+- 【复用现有字段，不改数据库】采用 `task.sprintId` 作为关联维度：
+  - 新建项目闭环：`projects/index.tsx` 的 `create()` 建项目后 `addSprint(projectId, {name:"Sprint 1", status:"active"})`，2 条预置任务创建时带 `sprintId: sprint.id`——阶段卡片立即同步任务进度。
+  - 进度改按 Task：detail.tsx 的 `sprintTasks/sprintDone` + sprintCards 的 total/dots 改按 task.sprintId 统计；sprints/index.tsx 的 `progressOf/tasksOf`、Tasks 列、详情 Sheet 的任务列表同步改为按 Task（表头 Issues→Tasks）。完成判定统一 done/closed/completed。
+  - 任务编号 `#T001`：新建 `task-no.ts` 的 `taskNo(task, allTasks)`——按 createdAt+id 排序的全局序号（Task 无 number 字段，展示层生成）。显示在 tasks 页任务标题前、sprint 卡片 dot title、sprints 页详情 Sheet 任务列表。
+- 验收：实测新建「闭环测试项目」→ 2 条预置任务 sprintId 一致 → Sprint 卡片 `0/2 done · 0%`，把一条任务改 done 后刷新变 `1/2 done · 50%`；Sprint 详情显示 `#T018 梳理产品需求 done / #T017 建立客户画像 todo`；tasks 页 16 个任务显示 #T00x；测试数据已清理；tsc 0 错误、lint 0 error（3 条既有 warning）、build 通过、0 console error。
+
+### 修正：预置任务挂需求阶段 + 负责人截取名（2026-11-17）
+
+- 背景：上一轮把 2 条预置任务挂在自动建的 "Sprint 1" 上是错的（用户截图指出）；正确是初始化 9 个阶段、需求阶段的 2 条任务挂在**需求阶段**下。
+- 修正内容：
+  - `projects/index.tsx` 的 `create()` 删除 `addSprint("Sprint 1")`，2 条预置任务 `sprintId = "requirement"`（阶段 key 作稳定标识，无需实体 Sprint）。
+  - `detail.tsx` 的 `stageCards`（9 个固定阶段）由硬编码 `dots:[], done:0, total:0` 改为按 `dbTasks.filter(t => t.sprintId === stage.key)` 统计；需求阶段卡片显示任务彩色块 + 进度，其它阶段 0/0。`sprintCards` 仍按真实 Sprint 的 `s-new-xxx` id 过滤，与阶段 key 不冲突。
+  - 负责人截取名恢复：`projects/index.tsx` 从 `useWorkspace()` 解构 `firstName`，Lead 单元格由完整 `user(id).name` 改为 `firstName(id)`（即 name.split(" ")[0]，中文名无空格则原样）。
+- 验收：新建测试项目 → 2 条任务 sprintId=`requirement`、无 Sprint 1；详情 Sprints tab 9 阶段卡片，Requirement 显示 `0/2 done · 0%`，其它 0/0；任务改 done 后 Requirement 变 `1/2 done · 50%`；列表负责人显示 "Alice"（截取名）；测试数据已清理；tsc 0 错误、lint 0 error（3 条既有 warning）、build 通过、0 console error。
+
+### 删除项目级联删除任务（2026-11-17）
+
+- 根因：Project 与 Task 仅通过字符串 `projectId` 关联（schema 无 `@relation`/外键级联），`ProjectsService.remove()` 原只 `prisma.project.delete`，任务变成孤儿数据。
+- 修复：`server/src/modules/projects/projects.service.ts` 的 `remove()` 用 `prisma.$transaction([task.deleteMany({where:{projectId:id}}), project.delete({where:{id}})])` 在同一事务里先删任务再删项目，保证原子性。
+- 验收：API 实测创建测试项目 + 2 任务 → DELETE 项目 → 项目消失且该项目下任务从 2→0（deleteStatus 200 / projectGone true / remainingTasks 0）；后端 watch 编译 0 errors；唯一 console error 是登录墙 `/api/auth/me` 未登录 401（预期）。
+
+### 项目进度逻辑完善（2026-11-17）
+
+- 根因：`mergeWorkspaceSnapshot` 的 `deriveProgress` 因 `patchProject(item, false)`（created=false）从不生效，进度完全来自后端静态 `project.progress` 字段（建项目写死 0，任务完成不联动）；且 snapshot 的 tasks/issues 恒为空，无法在 merge 层算。
+- 口径：进度 = 已完成(任务+问题) / 总计(任务+问题)；两者都为 0 时 0%。完成状态统一 done/closed/completed。
+- 实现：
+  - 新建 `project-progress.ts` 导出 `projectProgress(projectId, tasks, issues)` 与 `projectCounts(...)`（总数/完成数）。
+  - 列表 `projects/index.tsx`：引入 `useTasks()` 全局任务，`<PmsProgress>` 改为 `projectProgress(project.id, allTasks, snap.issues)`；看板卡片 map 加 `projectCounts`，total=0 时状态胶囊显示「未开始」灰底（i18n 补 `Not started`=未开始）。
+  - 详情 `detail.tsx`：侧栏进度百分比/进度条改用 `projectProgress(id, dbTasks, snap.issues)`；Progress 说明文案从「x of y issues closed」改为「任务与问题共 N 项，已完成 M 项」。
+- 验收：用户项目 2 条 todo → 列表进度 0%；一条改 done → 进度条 50%（已恢复）；空项目测试 → 0% 且看板显示「未开始」/Not started（测试数据已删除，用户项目保留）；tsc 0 错误、lint 0 error（3 条既有 warning）、build 通过、0 console error。
+
+### 详情进度提醒上下滚动（2026-11-17）
+
+- 需求：截图红框处「任务与问题共 N 项，已完成 M 项」改为上下滚动的进度提醒，文案重新组织、重点提醒进度。
+- 实现：新建 `progress-ticker.tsx`——固定单行高度 `h-4 overflow-hidden`，用 motion `AnimatePresence` 做纵向进出（新文案从下进、旧的向上出），每 10s 轮播一条（初版 2.8s，按用户要求改为 10s）。文案按场景组织：有事项时 3 条（整体进度/任务与问题拆分/剩余提醒或全部完成），空项目 2 条（尚未开始/新建后跟踪）；中英双语。
+- `detail.tsx`：Progress 区原静态 `<p>` 替换为 `<ProgressTicker done/total/doneTasks/totalTasks/doneIssues/totalIssues/progress/zh />`。
+- 验收：截图确认单行展示不撑开布局；英文轮播「1 item remaining — keep going」→「Tasks 1/2 · Issues 0/0 resolved」，中文「整体进度 50% · 已完成 1/2 项」→「还剩 1 项待完成，继续推进」；tsc 0 错误、lint 0 error（3 条既有 warning）、build 通过、0 console error。轮播间隔后按用户要求从 2.8s 调为 10s。
+
+### 隐藏阶段列表页导航（2026-11-17）
+
+- `sidebaritems.ts` 删除 Workspace 组的 Sprints（阶段）导航项与不再使用的 `Zap` import，注释同步更新。仅隐藏入口，`/sprints` 路由与页面保留（项目详情的阶段卡片仍可进入）。
+- 验收：侧栏 WORKSPACE 现为 Projects / Issues / Tasks / Calendar；无「阶段」/Sprints 入口；tsc 0 错误、lint 0 error（3 条既有 warning）；唯一 console error 是登录墙 `/api/auth/me` 未登录 401（预期）。
+
+### 项目初始化：三阶段任务 + 角色经办人（2026-11-17）
+
+- 审计发现：系统 `role` 仅 super_admin/admin/user/viewer，**无 design/purchase/engineering 角色**；但 `department` 有设计部（Carol Davis、Grace Kim）、技术部（Bob Smith、David Lee、Frank Brown）、销售部（Alice 等），**无采购部**。故「设计角色/工程角色」按部门匹配，「采购角色」因无采购部回退项目负责人。
+- 种子任务重构：`project-stages.ts` 的 `SEED_TASKS` 由 2 条改为 24 条 `SeedTask`（带 `stage` + `assigneeRole`）：
+  - 需求 stage=requirement：建立客户画像、梳理产品需求（2 条，lead）
+  - 报价 stage=quotation：价格核算、发送报价、报价反馈（3 条，lead）
+  - 样品 stage=sample：负责人 6 条（收取样品费用/下发设计单/设计确认/下发工程单/寄样/客户确认）、设计部 5 条（画图+渲染/安排3D打印/移交模具店/安排下缸/通知模种到厂）、采购 5 条（采购大货模/采购夹具/采购钢板/包装辅材采购/组装辅材采购）、工程部 3 条（安排打样/创建成品档案/创建成品装配清单）
+- 创建流程：`projects/index.tsx` 引入 `useUsers()`（带 department），`assigneeOf(role)` 按部门关键词匹配（设计→设计部、工程→技术部、采购→回退 lead），任务 `sprintId=seed.stage` 挂对应阶段。
+- 验收：实测新建项目创建 24 任务，byStage={requirement:2, quotation:3, sample:19}，byAssignee={Alice(销售部/lead):16, Carol(设计部):5, Bob(技术部):3}；详情阶段卡片显示需求 0/2、报价 0/3、样品 0/19；测试数据已删除（级联删除 24 任务归零），用户项目保留；tsc 0 错误、lint 0 error（3 条既有 warning）、build 通过、0 console error。
+- 补充：经办人也勾进项目成员——`createProject` 的 `extra` 加 `memberIds`，`index.tsx` 的 `create()` 先算各任务的 assigneeId 去重后作为 memberIds 传入（createProject 内部再并上 CURRENT_USER_ID）。实测新项目 memberIds=[Alice, Carol, Bob]，24 任务的 assigneeId 全部在成员内、无多余成员。
+
+### 任务阶段显示 + 待规划状态（2026-11-17）
+
+- 背景：用户另一个任务负责隐藏 Issues/Tasks 导航入口，本轮不动侧栏（撤销了误恢复的 Issues/Tasks 导航，保持 Projects/Calendar 隐藏态）。
+- 任务阶段：`tasks/index.tsx` 的 `stageOf(task)` 原返回**项目当前阶段**（导致所有任务显示"需求"），改为读任务自身 `task.sprintId`（STAGE_KEYS 校验，非法回退 requirement）；import 去掉 projectStage，加 STAGE_KEYS/StageKey。
+- 待规划：`projects/index.tsx` 预置任务 status 由 todo 改为 `backlog`（中文 i18n「待规划」已存在）。
+- 预估/到期不赋值：`server/src/modules/tasks/tasks.service.ts` 的 create 区分 undefined 与显式 null——undefined 仍按优先级/7 天补默认（保持其它入口行为），显式 null 则存 null；前端预置任务传 `dueDate:null, estimate:null`。
+- 验收：实测新建项目 24 任务 byStage={sample:19,quotation:3,requirement:2}、全部 status=backlog、withDue=0、withEstimate=0；任务页阶段列正确显示需求/报价/样品；测试数据已删除；tsc 0 错误、lint 0 error（3 条既有 warning）、build 通过、后端 Found 0 errors、0 console error。
+
+### Coming up 动画任务列表（animated-list-03 block，2026-11-17）
+
+- 新建 shadcn block `animated-list-03.tsx`（StackRipple）：motion AnimatePresence 做折叠态堆叠卡片 ↔ 展开态滚动列表切换；支持受控 open/onOpenChange、showToggle、showAllLabel/hideLabel、可选 time、tag。展开列表 `max-h-72 overflow-y-auto` 固定高度滚动；根容器与卡片去掉 max-w-xs 以撑满父列。
+- `detail.tsx` 的 Coming up 区域由静态 `<ul>` 替换为 StackRipple：
+  - 数据：全部任务按 createdAt **升序**（最早在前），每项图标按 `STAGE_ICON`（9 阶段各有 LucideIcon + 配色），描述为 `#Txxx · 经办人`，右侧 `tag` 为状态 badge（STATUS_COLOR + STATUS_LABEL）；卡片内不显示阶段文字。
+  - Show All/Hide 按钮移到「Coming up」标题右侧（受控 `comingOpen`），`comingOpen ?? comingUpItems.length === 1` —— **只有 1 个任务时默认展开**、无切换按钮；>1 时才显示按钮。
+- i18n 补 `Show All`=显示全部、`Hide`=收起。
+- 验收：截图确认卡片撑满 Coming up 列、阶段图标带色、状态 tag、无阶段文字；6 任务折叠显示前 3（任务一二三）、点 Show All 展开全部 6 且固定高度可滚动（scrollHeight 392 > clientHeight 286）；单任务默认展开无按钮；任务按创建时间排序；tsc 0 错误、lint 0 error（3 条既有 warning）、build 通过、0 console error。
+- 后续按用户要求改为**卡片默认展开**：`comingOpen` 初始值由 null（仅单任务展开）改为 `true`，按钮显示 Hide、全部任务默认展示，点 Hide 才收起为堆叠态。实测用户项目 2 任务默认全部展开、按钮为 Hide；tsc 0 错误、0 console error。
+- 用户要求展开态去掉外边框：`animated-list-03.tsx` 展开容器 class 去掉 `rounded-xl border border-border`（保留 max-h-72 滚动与 bg/p-2），实测 computed borderWidth=0、borderRadius=0；卡片自身边框保留。tsc/build 通过。
+
+### 阶段随任务自动流转 + 按阶段过滤展示（2026-11-17）
+
+- 审计结论：原链路缺 4 环——①无「当前阶段任务全完成」判定 ②任务状态切换不触发流转 ③Coming up 用全部任务 ④任务列表无阶段过滤。`setProjectStage → PATCH /api/projects/:id → hydrate → projectStage` 写库链路本就通；无 per-stage 完成字段，用 `i < stageIndexOf(current)` 推导即可。
+- 实现：
+  - `use-tasks.ts` 新增 `maybeAdvanceStage(projectId)`：PATCH 任务成功后（仅 patch.status 变化时）调用——fetch 该项目 tasks + project，若当前 stage 的任务**非空且全部 done/closed/completed**，则 `nextStage(current)` 并 `PATCH /api/projects/:id {stage}`（最后一阶段封顶不推进、空阶段不推进），revalidate /api/projects + /api/tasks。try/catch 吞掉推进失败，不影响任务本身更新。
+  - `detail.tsx` 的 comingUpItems 加 `.filter(task => task.sprintId === currentStage)`（保留并行任务的未完成过滤）——只展示当前阶段任务；阶段推进后自然显示下一阶段任务。
+  - `tasks/index.tsx` 的 list 加 `task.sprintId === stageOfProject(task.projectId)`（从 snap.projects 的 stage 字段取），默认任务列隐藏其它阶段的初始化任务。
+  - `WsProject` 类型补 `stage?: string`（后端有该字段，前端类型之前遗漏）。
+- 验收：新建项目初始 stage=requirement、Coming up 只显示 2 条需求任务；需求任务在 UI 改完成后 stage 自动变 quotation、Coming up 切换显示报价 3 任务（发送报价/报价反馈/价格核算）；其它阶段任务在默认任务列隐藏；tsc 0 错误、lint 0 error（3 条既有 warning）、build 通过、0 console error。测试数据已清理（未动并行任务数据）。
+
+### 阶段详情页 1:1 复刻（2026-11-17）
+
+- 需求：项目详情点击阶段卡片（如需求阶段）跳转到阶段详情页，按用户提供的 demo 截图 1:1 复刻。
+- 新建 `views/workspace/projects/stage-detail.tsx`：
+  - Header：Sprints 标题 + 副标题「A 1-2 week period to finish a chosen set of issues.」+ 右上 All sprints / 阶段选择（Requirement）/ New sprint 三按钮。
+  - 左侧分组表格：Issue / Status / Priority / Assignee 四列，按 In progress / To do / Done 分组（分组头含数量与 hint），任务显示标题+编号（taskNo）、状态 badge（点击切换 done/todo）、PmsPriority、负责人头像。
+  - 右侧面板：阶段名 + Active/Done/Not started badge、Progress + 进度条、Day 8 of 15 · 7 days left、Project / Dates / Issues / Done / Goal、黑色 Complete sprint 按钮（仅当前阶段可点，点击 setProjectStage 推进下一阶段并回项目详情）。
+- 路由：`Router.tsx` 加 `/projects/:id/stages/:stage`（lazy StageDetailPage）。
+- 跳转：`detail.tsx` 阶段卡片 href 由 `/apps/invoice/edit/...?stage=xxx` 改为 `/projects/${id}/stages/${stage.key}`；移除不再使用的 noParam/projectNoParam。
+- 类型：`WsProject` 补 `no?: string`（后端 Project.no）。
+- 验收：截图与 demo 对照——布局/分组头/四列表格/右侧面板/黑色按钮一致；点击需求阶段卡片跳转到 `/projects/:id/stages/requirement`；阶段页显示 2 条需求任务、Progress 0%、Active badge；tsc 0 错误、lint 0 error（3 条既有 warning）、build 通过、0 console error。
+- 精修：登录线上 `pms-workspace-app.vercel.app/sprints?sprint=s1`（alice@pms.com/123456）实测 CSS 后校准：主容器 gap-5、两栏 gap-6 + items-start；表格加 bg-card，表头 14px/500/foreground、td px-3 py-3；分组头 12px 加粗词 + muted 说明；任务标题 14px/500（原 600）、编号 12px；状态 badge h20/圆角26/px-2/text-xs/500；右栏 lg:w-80（原 w-72）、外壳无样式、内部 panel `overflow-hidden rounded-xl border bg-card lg:sticky lg:top-20`、分区 padding 16px 20px / 字段行 12px 20px / 按钮区 20px；按钮 h8/圆角10/text-sm/500；进度条 track bg-teal-400/10 + indicator bg-primary。截图对比与线上高度一致；tsc/build 通过、0 console error。
+
+### 阶段详情文案 + 完成阶段确认框 + 批量完成（2026-11-17）
+
+- 文案：`All sprints`→`Back to project`/返回项目、`New sprint`→`New stage`/新建阶段、`Complete sprint`→`Complete stage`/完成阶段；副标题润色为「展示当前阶段的任务与问题，跟踪阶段进度。」/「View tasks and issues in the current stage and track its progress.」。i18n 补 4 条。
+- 完成逻辑：`stage-detail.tsx` 的黑色按钮由直接执行改为打开 `AlertDialog`（标题=完成阶段，描述「是否标记为完成并解决当前阶段的所有任务和问题？确认后将批量完成任务并进入下一阶段。」/ 英文对应，取消/确认）。确认后 `handleComplete()`：批量完成当前阶段未完成任务 → `setProjectStage(nextStage)` → 回项目详情。
+- 后端批量接口：`server/src/modules/tasks/dto/bulk-complete-tasks.dto.ts`（ids: string[]）+ `TasksController @Patch("bulk/complete")`（放在 `:id` 路由前避免冲突）+ `TasksService.bulkComplete()` 用 `prisma.task.updateMany({where:{id:{in:ids}}, data:{status:"done"}})`。前端 `use-tasks.ts` 导出 `bulkCompleteTasks(ids)`。问题模块尚未搭建，后续在此扩展。
+- 验收：中英文文案均生效；点击完成阶段弹出确认框（截图核对）；实测确认后需求阶段 2 条任务全部变 done、项目 stage requirement→quotation、跳转回项目详情；并行任务项目数据已恢复原状；tsc 0 错误、lint 0 error（3 条既有 warning）、build 通过、后端 0 errors、0 console error。
+
+### 阶段详情去按钮 + 任务列表调整 + 预估到期规则（2026-11-17）
+
+- 阶段详情：删除「新建阶段」按钮（原只是跳回项目详情的占位），移除 Plus import。
+- 任务列表 `tasks/index.tsx`：
+  - 项目详情内嵌（embedded）去掉「项目」列（headersFor(embedded) 过滤 + 条件 td + colSpan 动态 + Board 卡片隐藏项目名）。
+  - 经办人文本由 userName（全名）改为 firstName（首名），头像仍用全名保留首字母缩写。
+  - `currentStageOnly` 默认 false（默认展示所有任务，勾选框仅在 embedded 出现）。
+  - create() 补传 values.dueDate（之前表单填写被丢弃）。
+- 预估/到期规则：
+  - 后端 `tasks.service.ts`：去掉 DUE_IN_DAYS=7；`defaultDueDate(estimate)` = 创建时间 + estimate 小时；create 先算 estimate 再算 dueDate；update 在预估变化且未显式传 dueDate 时联动到期 = 创建时间 + 新预估（ensureExists 改为返回 task）。优先级预估仍为 urgent:2/high:4/medium:8/low:12/none:24。
+  - 前端：Estimate 列改为 DropdownMenu（2/4/8/12/24/48h 可选，显示按天 `Math.ceil(estimate/24)d`）；Due 列改为可编辑 `<input type=date>`（onChange 调 updateTask）；移除倒计时心跳 nowTick/useEffect；i18n 补 Estimate (hours)。
+- 验收：阶段详情无新建按钮；项目详情 Tasks 默认显示 24 任务（全阶段混合）、表头无 Project 列、经办人显示首名、预估列显示 Xd；实测 high 优先级建任务→estimate 4h、到期=创建+4h，改 estimate=24→到期联动 +24h；tsc 0 错误、lint 0 error（3 条既有 warning）、build 通过、后端 tsc 0 错误、0 console error。测试数据已清理。
+
+### 阶段卡片时间展示规则（2026-11-17）
+
+- 需求：阶段卡片 subtitle 按阶段状态/类型差异化：
+  - 各阶段默认天数 `STAGE_DAYS`：需求2/报价2/样品7/订单90/采购7/生产30/物流7；费用与售后为 null（贯穿整个业务阶段，**不展示时间，空字符串**）。
+  - `stageTimeRange(stageKey, createdAt)`：以项目创建时间为起点，按 STAGES 顺序累加前序阶段天数，算出该阶段起止（无缝衔接，如需求结束日=报价开始日）。
+  - subtitle 规则：费用/售后 → `""`；未开始阶段（i > 当前阶段索引）→ `tr("To be planned","待规划")`；需求/已完成/当前阶段 → `${fullDate(start)} – ${fullDate(end)}`。
+  - 移除原来从 `getStageForm` 读 createDate/dueDate 的逻辑（及未使用的 getStageForm/stageFormKey import）。
+- 验收：初始需求卡片显示「创建日 – 创建+2天」、报价/样品/订单/采购/生产/物流 显示 To be planned、费用/售后 为空；把项目 stage 推到 quotation 后需求保留原时间段、报价显示「需求结束 – +2天」、样品起仍 To be planned；数据已恢复；tsc 0 错误、lint 0 error、build 通过、0 console error。
+
+### 日期持久化 + date-picker-02 block + 卡片高度对齐（2026-11-17）
+
+- 新建 shadcn block `components/shadcn-dashboard/date-picker/date-picker-02.tsx`：DateRangePicker，触发器为**纯文字+日历图标+箭头**（无按钮边框）；用 Base UI Popover + react-day-picker（mode=single 自己管两段式）——第一次点选起点（弹层保持打开），第二次点晚于起点的日期才提交（onCommit）并关闭，点更早日期重设起点。支持 value/onChange/onCommit 受控。
+- 阶段详情 `stage-detail.tsx`：用 DateRangePicker 替换原内联日历；`handleDateCommit` 把选中的起止写入 `saveStageForm(formKey, {createDate, dueDate})` 持久化（读也从 getStageForm，切阶段 useEffect 同步）；value 用 dateRange state。
+- 阶段卡片 `detail.tsx`：subtitle 优先读持久化的 `getStageForm(stageFormKey(no, stage.key))` 的 createDate/dueDate，无则回退动态计算/待规划；费用/售后与无日期占位用 `\u00A0`（不换行空格）保持 `<p>` 行高，**卡片高度与其它无任务卡片一致**（实测均 157px）；有任务卡片高度因彩色块数量自然增加。
+- 验收：date-picker block 在阶段详情显示日期+图标；实测连点两个日期（11→15）弹层全程保持打开、选完提交并显示 Nov 11–15、自动关闭；回项目详情阶段卡片显示持久化后的「2026年11月11日 – 2026年11月15日」；Expense/After-sales 空日期卡片与其它卡片等高（157px）；tsc 0 错误、lint 0 error、build 通过、0 console error。
+- 后续调整：date-picker-02 补 `zh` prop——中文显示「11月17日 – 11月24日」（用项目 formatDate(ch,short)），英文「Nov 17 – Nov 24」；去掉 ChevronDown 下拉箭头，日历图标移到触发器**最右侧**；展开恢复双月日历（numberOfMonths=2）+ Popover align=end 右对齐；阶段详情传 zh={zh}。截图核对通过、0 console error。
+
+### 项目详情就地编辑（去编辑按钮，2026-11-17）
+
+- 需求：删除「编辑」按钮，把编辑功能落到对应文本上——点项目名改名称、描述空时显示「暂无描述」点击可编辑、点状态改状态、点优先级改优先级、点创建日期选日期；负责人/成员已有逻辑不动。
+- 前端 `detail.tsx`：
+  - 名称：h1 点击切 Input（Enter/blur 保存，Esc 取消）；描述：无内容显示 `t("No description")`=暂无描述，点击切 textarea（blur 保存、Esc 取消）。
+  - 状态/优先级：badge 改为 DropdownMenuTrigger（**必须用原生 button 作 render**，用 span 会触发 Base UI 无障碍警告），选项来自 STATUS_ITEMS / `[none,low,medium,high,urgent]`，选中打勾；点击调 `saveField()` 单字段 PATCH + toast。
+  - 创建日期（侧栏 Started）：`<input type="date">`，onChange 调 saveField({createdAt})。
+  - 删除 Edit 按钮与 `<EditProjectDialog>` 渲染；新增 saveField/commitName/commitDesc helper。
+  - i18n 补 Click to edit。
+- 后端：UpdateProjectDto 加 `createdAt?: string`（@IsDateString）；ProjectsService.update 写 `createdAt: new Date(dto.createdAt)`；前端 ProjectInput 加 createdAt。
+- 验收：实测点名称→input→改值落库、状态下拉三项、优先级下拉、创建日期改值落库（createdAt 变 2026-11-10）；数据已恢复；发现并修复 Base UI「非 button 作 DropdownMenuTrigger」警告；tsc 0 错误（前后端）、lint 0 error、build 通过、0 console error。
+
+### 内联编辑 shadcn 风格重构 + 日期组件属性化/本地化 + 配色统一（2026-11-17）
+
+- 探查 shadcndashboard.dev/components：有 `Input 24 - Inline Edit`（Label + 输入框 + helper），无「纯文本+下划线」变体；按用户要求保留 contentEditable 交互，视觉对齐 shadcn 规范。
+- 新建 `components/shadcn-dashboard/input/inline-edit.tsx` 替换旧 inline-editable.tsx（已删）：点击保持原文本样式、底部 `border-b-2 border-ring/50` 灰线、focus ring 用 shadcn `ring-3 ring-ring/20`、hover `bg-accent/60`；blur/Enter 保存、Esc 取消；用 `key=editing?"editing":"view"` 让 React 管理内容，不手动改 DOM。
+- **暂无描述占位**：用 CSS `empty:before:content-[attr(data-placeholder)]` 灰色伪元素——编辑态清空后依然可见、不进 DOM/textContent（不会被误保存）、可再次点击编辑；detail.tsx 用 `placeholder={t("No description")}`。
+- date-picker-02：`single` 属性控制单框（`numberOfMonths={1}`，项目详情创建日期）/ 双框（`numberOfMonths={2}`，阶段详情日期范围）；`zh` 时给 Calendar 传 `locale={zhCN}`（date-fns/locale），中文显示「2026年11月 / 一 二 三…」；英文走原格式。
+- 配色统一：状态 tag 新增 `STATUS_TONE_BADGE`（active 蓝/on_hold 琥珀/completed 绿），与 STATUS_ITEMS.icon 的 tone 同色；优先级 PRIORITY_BADGE 改为与 PRIORITY_META.color 一致（medium 从 sky 改 amber、low 从 slate 改 sky），badge 文字色=icon 色，背景同色 10%。
+- 列表：无描述时 `description={noOf(project)}`（不追加「 · 」）。
+- 验收：截图核对状态/优先级 tag 与 icon 色值完全相同（computed color 一致）；编辑态清空后伪元素仍显示「暂无描述」且可再次编辑、输入保存落库；项目详情日期单月中文、阶段详情双月中文；tsc 0 错误、lint 0 error、build 通过、0 console error。
+
+### 关闭 Blog/Notes/Ticket 模块（保留 MSW/Inbox，2026-11-17）
+
+- 背景：用户明确 blog / notes / ticket 项目内不需要展示，关闭；inbox 保留（后续功能完善后再删）。**MSW 整体保持启用**（main.tsx 的 worker.start 不动）。
+- 改动：
+  - `api/mocks/handlers/mock-handlers.ts`：移除 Bloghandlers / NotesHandlers / TicketHandlers，只留 onlineContractHandlers + InboxHandlers。
+  - `api/mocks/handlers/online-contract.ts`：移除 `/api/notes`、`/api/ticket`、`/api/blog` 契约端点及对应 fixture import，只留 `/api/email`、`/api/chat`。
+  - `routes/Router.tsx`：删除 Blog(5 路由)/Notes(1)/Ticket(2) 的 lazy import 与路由表项。
+  - `sidebaritems.ts`：删除 Apps 组的 Notes / Blogs / Tickets 导航项及未用的 NotebookText / BookOpen / Ticket icon import。
+- 页面/context 源文件保留（路由已关，不会加载、不会 fetch），后续需要可恢复。
+- 验收：侧栏 Apps 只剩 Contacts/Setting/Documentation；`/apps/notes` 跳 404；`/inbox` 正常访问且 `/api/inbox/notifications` mock 返回 200；tsc 0 错误、lint 0 error、build 通过、0 console error。
+
+### 阶段详情进度条配色 + 列表/进度 i18n（2026-11-17）
+
+- 进度条：indicator 由 `bg-primary` 改为 `bg-teal-500`（亮青绿，匹配用户截图），track 保持 `bg-teal-400/10`；百分比文字由 `text-blue-500` 改为 `text-foreground`（截图为深色）。
+- i18n 补词条（en/zh）：`In progress`/进行中、`being worked on or in review`/正在处理或审核中、`To do`/待办、`not started yet`/尚未开始、`finished`/已完成、`Day 8 of 15 · 7 days left`/第 8 天，共 15 天 · 剩余 7 天、`No issues`/暂无任务。表头 Issue/Status/Priority/Assignee 与分组 title/hint 原本已用 t() 包裹，补词条后即生效。
+- 验收：computed 颜色 indicator=oklch(0.704 0.14 182.503)（teal-500）、track=teal-400/10，截图与用户给的截图一致；中文界面表头/分组/进度/天数/目标/按钮全中文；tsc 0 错误、lint 0 error、build 通过、0 console error。
+
+### 阶段详情任务化 + 日期同步 + 进度提示同步（2026-11-17）
+
+- 任务化：阶段详情列表表头 `Issue`→`Task`、空状态 `No issues`→`No tasks`、右侧计数 `Issues`→`Tasks`；副标题与完成确认框文案由「任务与问题」统一为「任务」。i18n 补 No tasks。
+- 日期同步：把 `STAGE_DAYS`/`STAGE_NO_TIME`/`stageTimeRange()` 从 detail.tsx 提取到 `project-stages.ts` 导出（两个页面共用）；阶段详情 `resolveRange()` 改为「优先 stageForm 持久化日期，无则按 stageTimeRange 推算」——与项目阶段卡片同一口径；费用/售后无日期。
+- date-picker-02 修正：去掉 `value ?? 默认 now~now+7` 的回退（外部传空就是空，费用阶段日期为空）；改为受控 value 用 useEffect 按时间戳同步内部草稿（避免新对象引用导致循环）。
+- 进度提示同步：`progress-ticker.tsx` 文案全部去掉「问题/issues」——「暂无任务」「当前阶段 X/Y 项任务已完成」「还剩 N 项任务」「Overall progress... tasks done」。
+- 验收：阶段详情表头 Task、无 Issue；阶段详情日期 Nov 17–19 与项目卡片 2026年11月17日–19日一致；费用阶段日期为空；进度跑马灯三条文案中英文均无 issues/问题（实测轮播 10s 间隔）；tsc 0 错误、lint 0 error、build 通过、0 console error。
+
+### 阶段详情进度提示按日期动态计算（2026-11-17）
+
+- 需求：阶段详情进度提示由硬编码「第8天/共15天/剩余7天」改为按阶段日期时间段动态展示「今天距开始多少天 / 共几天 / 剩余几天」。
+- 实现（`stage-detail.tsx`）：用 date-fns `differenceInCalendarDays` 计算——`total = days(to,from)+1`、`sinceStart = days(today,from)`、`left = days(to,today)`；三种情况：未开始 `Starts in N days`、已结束 `Ended`、进行中 `{{d}} days since start · {{total}} days total · {{left}} days left`；费用/售后无日期时提示为空。i18n 三条中英文词条（中文「距开始 {{d}} 天 · 共 {{total}} 天 · 剩余 {{left}} 天」）。
+- 验收：需求阶段日期 Nov 17–19、今天 11-17 → 英文 `0 days since start · 3 days total · 2 days left`、中文「距开始 0 天 · 共 3 天 · 剩余 2 天」；tsc 0 错误、lint 0 error（3 既有 warning）、build 通过、0 console error。
+
+### 阶段详情任务→事项文案（2026-11-17）
+
+- 需求：阶段详情中展示的「任务」统一改为「事项」（仅阶段详情，不影响项目详情/任务页）。
+- 改动：`stage-detail.tsx` 副标题（`View items...` / 展示当前阶段的事项）、表头 `t("Item")`、空状态 `t("No items")`、右侧计数 `t("Items")`、完成确认框文案（批量完成事项），注释同步。i18n 补 `Item`/`Items`/`No items`（中文 事项/事项/暂无事项）。
+- 验收：英文界面副标题/表头为 items、无 Task 字样；中文界面为「事项」、无「任务」字样；tsc 0 错误、lint 0 error、build 通过、0 console error。
+
+### Issue 落库 + 阶段详情 Add Issue/Add Task（2026-11-17）
+
+- 审计结论：Issue 原本**没有后端**——无 schema model、无 issues module/controller/service/dto、无 `/api/issues`；前端 `snap.issues` 恒为空基线，实际来自 localStorage overlay，`addIssue()` 只写本地。Task 落库链路完整（createTask + sprintId）。
+- 问题落库方案（新建 Issue 后端）：
+  - Prisma `model Issue`（id/number/title/description/status/priority/severity/assigneeId/sprintId/projectId/createdAt/updatedAt，索引 projectId+sprintId）+ migration `20261117030000_add_issues` + prisma generate。
+  - 后端 `modules/issues/`（dto: create/update/bulk-complete；service: list(projectId,sprintId)/create/update/bulkComplete/remove；controller: GET/POST/PATCH bulk/PATCH :id/DELETE）+ app.module 注册 IssuesModule。
+  - 项目删除事务加 `issue.deleteMany({projectId})` 级联删问题。
+  - 前端 `api/issues/use-issues.ts`（createIssue/updateIssue/bulkCompleteIssues/useIssues）；NewIssueDialog 加 defaultProjectId。
+- 阶段详情 UI：列表底部加「+ Add Issue」「+ Add Task」按钮（复用 NewIssueDialog/NewTaskDialog，defaultProjectId=id）；提交时分别 `createIssue({projectId:id, sprintId:stageKey, number:max+1})` 和 `createTask({projectId:id, sprintId:stageKey})` 落库；列表渲染 `useIssues(id,stageKey)` 的 issue 行（#number/状态/优先级/经办人）；阶段完成 `handleComplete` 一并 `bulkCompleteIssues` 批量完成问题。
+- 验收：实测 Add Issue→后端 `/api/issues` 返回记录（number=501/sprintId=requirement/status=backlog）、列表显示「Issues 1 · Open issues」+该问题；Add Task→后端 `/api/tasks` 记录 sprintId=requirement/status=todo；bulk-complete API 实测问题 status→done；测试数据已清理；tsc 0 错误、lint 0 error（3 既有 warning）、build 通过、后端 tsc 0 错误、0 console error。
+
+### 经办人 none → 未指派（2026-11-17）
+
+- 需求：项目/经办人为空时统一显示「未指派 / Unassigned」，不显示 none / — / ?。
+- 改动：
+  - `create-dialogs.tsx` Event 弹窗：`noneLabel={t("none")}` → 经办人 `t("Unassigned")`、项目 `t("Select a project")`；全仓库已无 `t("none")`。
+  - `use-workspace.ts`：`firstName` 回退由 `—` 改为 `isZh ? 未指派 : Unassigned`（与 userName 一致）。
+  - `stage-detail.tsx`：issue/task 行无经办人时由 `?` 圆形占位改为 `t("Unassigned")` 文字。
+- 验收：实测创建无经办人任务，阶段详情列表显示 `Unassigned`（中文界面为未指派）；项目列表无 none 显示；tsc 0 错误、lint 0 error、build 通过、0 console error。
+
+### 项目详情 Issues tab 改读后端（2026-11-17）
+
+- 问题：Issue 已落库后端 `/api/issues`，但 `IssuesPage` 与项目详情仍读 `snap.issues`（localStorage overlay 恒为空），导致 Issues tab 列表不显示、tab 计数为 0。
+- 改动：
+  - `issues/index.tsx`：`all` 改用 `useIssues(projectId)`（后端）；`create()` 改用 `createIssue()`（不再写 localStorage）；`labelIds` 访问加 `?? []` 兼容后端缺字段；加载态加 issuesLoading。
+  - `detail.tsx`：加 `useIssues(id)` → `dbIssues`；`data.issues`、`projectProgress`、`nextIssueNumber` 全部由 `snap.issues` 改用 `dbIssues`；data useMemo 依赖加 dbIssues。
+- 验收：项目详情 Issues tab 计数 `Issues (1)`（与实际后端问题数一致）、列表显示问题行 #501；tsc 0 错误、lint 0 error（3 既有 warning）、build 通过、0 console error。

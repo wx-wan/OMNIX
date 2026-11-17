@@ -1,7 +1,6 @@
 import { Fragment, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  ChevronDown,
   Circle,
   CircleCheck,
   CircleDashed,
@@ -16,17 +15,20 @@ import {
   UserRoundCheck,
   UserRoundX,
 } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
+import { agoLabel, resolveDate, useWorkspace } from "src/api/workspace/use-workspace";
+import { getActiveProject } from "src/api/workspace/project-stages";
+import { useIssues } from "src/api/issues/use-issues";
 import {
-  CURRENT_USER_ID,
-  agoLabel,
-  resolveDate,
-  useWorkspace,
-} from "src/api/workspace/use-workspace";
-import { addIssue, getActiveProject } from "src/api/workspace/project-stages";
+  ItemAssigneeMenu,
+  ItemPriorityMenu,
+  ItemStatusMenu,
+  STATUS_LABEL,
+} from "../item-fields";
+import SpinnerBars from "@/components/shadcn-dashboard/spinner/spinner-06";
 import { NewIssueDialog, type NewIssueValues } from "../create-dialogs";
 import type { WsIssue } from "src/types/apps/workspace";
 import {
-  PmsAvatar,
   PmsCard,
   PmsCell,
   PmsField,
@@ -38,7 +40,6 @@ import {
   PmsOptionGroup,
   PmsPage,
   PmsPopover,
-  PmsPriority,
   PmsSegmented,
   PmsSheet,
   PmsRow,
@@ -48,20 +49,19 @@ import {
 const COLUMNS: PmsColumn[] = [
   { label: "Issue", w: "w-56" },
   { label: "Project", w: "w-36" },
-  { label: "Labels", w: "w-52" },
   { label: "Status", w: "w-36" },
   { label: "Priority", w: "w-28" },
   { label: "Assignee", w: "w-40" },
   { label: "Created by", w: "w-40" },
   { label: "Updated", w: "w-28" },
 ];
+/** 分组与任务列表一致：closed 与 done 同属完成。 */
 const STATUS_GROUPS: { label: string; values: string[] }[] = [
   { label: "Backlog", values: ["backlog"] },
   { label: "Todo", values: ["todo"] },
   { label: "In Progress", values: ["in_progress"] },
   { label: "Review", values: ["review"] },
-  { label: "Done", values: ["done"] },
-  { label: "Closed", values: ["closed"] },
+  { label: "Done", values: ["done", "closed"] },
 ];
 const STATUS_ICON: Record<string, { icon: typeof Circle; color: string }> = {
   backlog: { icon: CircleDashed, color: "text-amber-500" },
@@ -71,19 +71,14 @@ const STATUS_ICON: Record<string, { icon: typeof Circle; color: string }> = {
   done: { icon: CircleCheck, color: "text-teal-500" },
   closed: { icon: CircleCheck, color: "text-teal-500" },
 };
-const STATUS_LABEL: Record<string, string> = {
-  backlog: "Backlog",
-  todo: "Todo",
-  in_progress: "In Progress",
-  review: "Review",
-  done: "Done",
-  closed: "Closed",
-};
-
-export default function IssuesPage() {
+export default function IssuesPage({
+  projectId,
+  embedded,
+}: { projectId?: string; embedded?: boolean } = {}) {
   const { t } = useTranslation();
-  const { snap, lang, user, userName, projectName, label, comment, isLoading } =
-    useWorkspace();
+  const { snap, lang, userName, projectName, label, comment, isLoading } = useWorkspace();
+  const { user: authUser } = useAuth();
+  const currentUserId = authUser?.id;
   const [view, setView] = useState("List");
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -96,16 +91,21 @@ export default function IssuesPage() {
   const [collapsed, setCollapsed] = useState<string[]>([]);
   const [selected, setSelected] = useState<WsIssue | null>(null);
   const [creating, setCreating] = useState(false);
-  const all = useMemo(() => snap?.issues ?? [], [snap]);
+  const {
+    issues: all,
+    isLoading: issuesLoading,
+    create: createIssue,
+    update: updateIssue,
+  } = useIssues(projectId);
 
   const list = useMemo(() => {
     let out = all.filter((issue) =>
-      `${issue.title} #${issue.number} ${issue.description}`
+      `${issue.title} #Q${issue.number} ${issue.description}`
         .toLowerCase()
         .includes(query.toLowerCase())
     );
-    if (mineOnly) out = out.filter((issue) => issue.assigneeId === CURRENT_USER_ID);
-    if (createdByMe) out = out.filter((issue) => issue.reporterId === CURRENT_USER_ID);
+    if (mineOnly) out = out.filter((issue) => issue.assigneeId === currentUserId);
+    if (createdByMe) out = out.filter((issue) => issue.reporterId === currentUserId);
     if (unassignedOnly) out = out.filter((issue) => !issue.assigneeId);
     if (hideDone) out = out.filter((issue) => issue.status !== "done" && issue.status !== "closed");
     const sorted = [...out];
@@ -121,7 +121,7 @@ export default function IssuesPage() {
           (resolveDate(a.updatedAt)?.getTime() ?? 0)
       );
     return sorted;
-  }, [all, query, mineOnly, createdByMe, unassignedOnly, hideDone, sortBy]);
+  }, [all, query, mineOnly, createdByMe, currentUserId, unassignedOnly, hideDone, sortBy]);
 
   const groups = useMemo(() => {
     if (groupBy === "None") return [{ label: "All", items: list }];
@@ -132,13 +132,13 @@ export default function IssuesPage() {
   }, [groupBy, list]);
 
   const labelsOf = (issue: WsIssue) =>
-    issue.labelIds.slice(0, 2).map((id) => ({
+    (issue.labelIds ?? []).slice(0, 2).map((id) => ({
       name: label(id)?.name ?? id,
       color: label(id)?.color,
     }));
 
   const create = (values: NewIssueValues) => {
-    addIssue(values.projectId || getActiveProject(), {
+    void createIssue({
       title: values.title,
       description: values.description,
       status: "backlog",
@@ -146,11 +146,16 @@ export default function IssuesPage() {
       severity: values.severity,
       assigneeId: values.assigneeId || null,
       number: Math.max(500, ...all.map((item) => item.number)) + 1,
-    });
-    setCreating(false);
+      projectId: values.projectId || projectId || getActiveProject(),
+    }).then(() => setCreating(false));
   };
 
-  if (isLoading || !snap) return <div className="p-10 text-sm text-muted-foreground">…</div>;
+  if (isLoading || issuesLoading || !snap)
+    return (
+      <div className="flex min-h-40 items-center justify-center text-muted-foreground">
+        <SpinnerBars />
+      </div>
+    );
 
   const statusIcon = (status: string) => {
     const spec = STATUS_ICON[status] ?? STATUS_ICON.backlog;
@@ -162,6 +167,7 @@ export default function IssuesPage() {
     <PmsPage
       title={t("Issues")}
       count={t("N issues", { n: all.length })}
+      embedded={embedded}
       segmented={
         <PmsSegmented
           options={["List", "Board"]}
@@ -266,7 +272,7 @@ export default function IssuesPage() {
                     title={issue.title}
                     suffix={
                       <span className="shrink-0 text-xs text-muted-foreground">
-                        #{issue.number}
+                        #Q{issue.number}
                       </span>
                     }
                     onClick={() => setSelected(issue)}
@@ -277,50 +283,23 @@ export default function IssuesPage() {
                             {projectName(issue.projectId)}
                           </span>
                         </PmsCell>
-                        <PmsCell w="w-52">
-                          <div className="flex items-center gap-1 overflow-hidden">
-                            {labelsOf(issue).map((item) => (
-                              <PmsLabelChip key={item.name} {...item} />
-                            ))}
-                          </div>
-                        </PmsCell>
                         <PmsCell w="w-36">
-                          <button
-                            type="button"
-                            aria-haspopup="menu"
-                            aria-expanded={false}
-                            className="flex h-8 w-full cursor-pointer items-center justify-between gap-1.5 rounded-md border bg-background px-2 text-sm outline-none hover:bg-muted"
-                          >
-                            {t(STATUS_LABEL[issue.status])}
-                            <ChevronDown className="size-3.5 text-muted-foreground" />
-                          </button>
+                          <ItemStatusMenu
+                            value={issue.status}
+                            onChange={(status) => updateIssue(issue.id, { status })}
+                          />
                         </PmsCell>
                         <PmsCell w="w-28">
-                          <PmsPriority
+                          <ItemPriorityMenu
                             value={issue.priority}
-                            label={t(
-                              issue.priority.charAt(0).toUpperCase() + issue.priority.slice(1)
-                            )}
+                            onChange={(priority) => updateIssue(issue.id, { priority })}
                           />
                         </PmsCell>
                         <PmsCell w="w-40">
-                          <div className="flex items-center gap-2">
-                            {issue.assigneeId ? (
-                              <>
-                                <PmsAvatar
-                                  name={userName(issue.assigneeId)}
-                                  avatar={user(issue.assigneeId)?.avatar}
-                                />
-                                <span className="truncate text-sm">
-                                  {userName(issue.assigneeId)}
-                                </span>
-                              </>
-                            ) : (
-                              <span className="text-sm text-muted-foreground">
-                                {t("Unassigned")}
-                              </span>
-                            )}
-                          </div>
+                          <ItemAssigneeMenu
+                            value={issue.assigneeId}
+                            onChange={(assigneeId) => updateIssue(issue.id, { assigneeId })}
+                          />
                         </PmsCell>
                         <PmsCell w="w-40">
                           <span className="block truncate text-sm">
@@ -360,7 +339,7 @@ export default function IssuesPage() {
                   >
                     <div className="font-medium">{issue.title}</div>
                     <div className="mt-1 text-[11px] text-muted-foreground">
-                      #{issue.number} · {projectName(issue.projectId)}
+                      #Q{issue.number} · {projectName(issue.projectId)}
                     </div>
                     <div className="mt-2 flex flex-wrap gap-1">
                       {labelsOf(issue).map((item) => (
@@ -378,7 +357,7 @@ export default function IssuesPage() {
       <PmsSheet
         open={Boolean(selected)}
         onOpenChange={(open) => !open && setSelected(null)}
-        title={selected ? `#${selected.number} ${selected.title}` : ""}
+        title={selected ? `#Q${selected.number} ${selected.title}` : ""}
       >
         {selected ? (
           <>
@@ -417,7 +396,7 @@ export default function IssuesPage() {
                     · {activity.message}
                   </div>
                 ))}
-              {selected.commentIds.map((id) => {
+              {(selected.commentIds ?? []).map((id) => {
                 const item = comment(id);
                 return item ? (
                   <div key={id} className="text-[11px] text-muted-foreground">
@@ -436,6 +415,7 @@ export default function IssuesPage() {
         onSubmit={create}
         projects={snap.projects}
         users={snap.users}
+        defaultProjectId={projectId}
       />
     </PmsPage>
   );

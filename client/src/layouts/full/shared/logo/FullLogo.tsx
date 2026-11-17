@@ -23,7 +23,7 @@ const FullLogo = () => {
       <img
         src={omnixIcon}
         alt="Omnix"
-        className="hidden size-7 group-data-[state=collapsed]:block"
+        className="hidden size-7 shrink-0 object-contain group-data-[state=collapsed]:block"
       />
     </Link>
   );

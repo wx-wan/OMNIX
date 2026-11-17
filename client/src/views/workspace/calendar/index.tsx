@@ -177,8 +177,8 @@ export default function CalendarPage() {
 
           <div className="fc-view-harness min-h-0 flex-1 overflow-auto">
             {view === "Month" ? (
-              <div className="fc-scrollgrid fc-scrollgrid-liquid w-full">
-                <div role="row" className="fc-col-header flex border-b border-border">
+              <div className="fc-scrollgrid fc-scrollgrid-liquid flex h-full w-full flex-col">
+                <div role="row" className="fc-col-header flex shrink-0 border-b border-border">
                   {WEEKDAYS.map((day) => (
                     <div
                       key={day}
@@ -189,7 +189,7 @@ export default function CalendarPage() {
                     </div>
                   ))}
                 </div>
-                <div role="rowgroup" className="fc-daygrid-body grid grid-cols-7">
+                <div role="rowgroup" className="fc-daygrid-body grid min-h-0 flex-1 grid-cols-7 grid-rows-6">
                   {cells.map(({ date, outside }, index) => (
                     <div
                       key={index}

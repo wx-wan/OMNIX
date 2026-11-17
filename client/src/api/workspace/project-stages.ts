@@ -12,15 +12,21 @@ import type {
   WsTeam,
 } from "src/types/apps/workspace";
 import { CURRENT_USER_ID } from "./constants";
+import {
+  createProject as apiCreateProject,
+  removeProject as apiRemoveProject,
+  updateProject as apiUpdateProject,
+  type ProjectInput,
+} from "../projects/use-projects";
 
 /**
  * 业务工作区的「项目制」持久化仓库。
  *
- * 线上 PMS 快照由 /api/workspace/snapshot（MSW，只读）提供，作为存量基线；
- * 本仓库以 overlay 的形式记录所有写操作：新建/编辑/归档项目、九阶段流转、
- * 项目号、概览/问题/任务/迭代/成员/文件/动态七类项目记录、需求阶段表单。
- * 读取侧由 useWorkspace() 合并 base + overlay，因此所有工作区页面共享同一份状态，
- * 写入 localStorage 后刷新保留，任何操作都会自动落到项目的 Activity 时间线。
+ * 项目 / 任务 / 用户均由后端 API（/api/projects、/api/tasks、/api/auth/users）提供，
+ * 无 MSW 示例数据；本仓库仅以 overlay 记录尚未落库的项目制子记录写操作：
+ * 九阶段流转、项目号、概览/问题/迭代/成员/文件/动态等记录、需求阶段表单。
+ * 读取侧由 useWorkspace() 合并后端基线 + overlay，所有工作区页面共享同一份状态，
+ * 任何操作都会自动落到项目的 Activity 时间线。
  */
 export const STAGES = [
   { key: "requirement", en: "Requirement", zh: "需求" },
@@ -41,6 +47,43 @@ export const stageLabel = (key: StageKey, zh: boolean) => {
   const stage = STAGES.find((item) => item.key === key) ?? STAGES[0];
   return zh ? stage.zh : stage.en;
 };
+
+/** 各阶段默认持续天数；费用/售后贯穿整个业务阶段，无固定周期。 */
+export const STAGE_DAYS: Record<string, number | null> = {
+  requirement: 2,
+  quotation: 2,
+  sample: 7,
+  order: 90,
+  expense: null,
+  purchase: 7,
+  production: 30,
+  logistics: 7,
+  after_sales: null,
+};
+/** 费用/售后无固定周期，不展示时间。 */
+export const STAGE_NO_TIME = new Set(["expense", "after_sales"]);
+
+/** 按项目创建时间与前序阶段时长，推算某阶段起止（费用/售后返回 null）。 */
+export function stageTimeRange(
+  stageKey: string,
+  createdAt: string
+): { start: Date; end: Date } | null {
+  const days = STAGE_DAYS[stageKey];
+  if (days == null) return null;
+  const base = new Date(createdAt).getTime();
+  if (Number.isNaN(base)) return null;
+  let offset = 0;
+  for (const stage of STAGES) {
+    if (stage.key === stageKey) {
+      return {
+        start: new Date(base + offset * 86_400_000),
+        end: new Date(base + (offset + days) * 86_400_000),
+      };
+    }
+    offset += STAGE_DAYS[stage.key] ?? 0;
+  }
+  return null;
+}
 
 export const stageIndexOf = (key: StageKey) => STAGE_KEYS.indexOf(key);
 export const nextStage = (key: StageKey): StageKey =>
@@ -233,6 +276,30 @@ export const hydrateSeedProjects = (projects: WsProject[]) => {
   if (changed) commit({ ...state, nos, stages });
 };
 
+/**
+ * 后端项目（/api/projects）拉取后，把每个项目的阶段与编号同步进本地 stages/nos 缓存，
+ * 使 projectStage / projectNo 保持同步读取（数据源已切到 PostgreSQL）。
+ */
+export const hydrateBackendProjects = (
+  projects: Array<{ id: string; stage?: string; no?: string }>
+) => {
+  if (!projects.length) return;
+  const nos = { ...state.nos };
+  const stages = { ...state.stages };
+  let changed = false;
+  projects.forEach((project) => {
+    if (project.stage && stages[project.id] !== project.stage) {
+      stages[project.id] = project.stage as StageKey;
+      changed = true;
+    }
+    if (project.no && nos[project.id] !== project.no) {
+      nos[project.id] = project.no;
+      changed = true;
+    }
+  });
+  if (changed) commit({ ...state, nos, stages });
+};
+
 /** 当前项目上下文：进入任一项目详情即自动记录，跨模块新建记录时自动归属。 */
 const ACTIVE_PROJECT_KEY = "omnix-workspace-active-project";
 let activeProjectId =
@@ -344,10 +411,15 @@ export const mergeWorkspaceSnapshot = (
     labels: b.labels,
     comments: b.comments,
     teams: mergeTable("teams", b.teams, overlay.teams),
-    projects: [
-      ...b.projects.map((item) => patchProject(item, false)),
-      ...overlay.projects.map((item) => patchProject(item, true)),
-    ].filter((item) => !goneProjects.has(item.id)),
+    /**
+     * 项目已全部落库（/api/projects），列表唯一事实源就是后端。
+     * overlay.projects 是迁移前的本地遗留，若拼进来会与后端同名项目重复，
+     * 且遗留项带 MSW 假 id（leadId/memberIds），会显示成「? / 头像裂图」。
+     * 故此处完全忽略 overlay.projects，仅透视后端项目 + 本地软删 + projectEdits。
+     */
+    projects: b.projects
+      .map((item) => patchProject(item, false))
+      .filter((item) => !goneProjects.has(item.id)),
     issues,
     tasks,
     sprints,
@@ -390,66 +462,119 @@ export const nextTicketNo = () => {
   return ticketNo(new Date(), Math.max(0, ...used) + 1);
 };
 
-export const createProject = (
+/**
+ * 新建项目预置任务：按阶段初始化，经办人按「角色」自动分配。
+ * - lead：项目负责人（当前创建人）
+ * - design：设计部成员；engineering：技术部成员；purchase：采购负责人（暂无采购部则回退 lead）
+ * 任务真实入库 PostgreSQL，由 projects/index.tsx 创建项目后通过 /api/tasks 写入。
+ */
+export type SeedAssigneeRole = "lead" | "design" | "purchase" | "engineering";
+export type SeedTask = {
+  stage: StageKey;
+  title: string;
+  description: string;
+  assigneeRole: SeedAssigneeRole;
+};
+
+export const SEED_TASKS: SeedTask[] = [
+  // ── 需求阶段：经办人默认负责人 ──
+  {
+    stage: "requirement",
+    title: "建立客户画像",
+    description:
+      "梳理目标客户的行业背景、采购角色与决策链路，明确关键诉求与痛点，为后续方案与报价提供依据。",
+    assigneeRole: "lead",
+  },
+  {
+    stage: "requirement",
+    title: "梳理产品需求",
+    description:
+      "汇总客户对功能、规格、交付与验收的期望，形成可追踪的需求清单，作为打样与生产的输入。",
+    assigneeRole: "lead",
+  },
+  // ── 报价阶段：经办人负责人 ──
+  {
+    stage: "quotation",
+    title: "价格核算",
+    description: "核算材料、模具、人工与物流成本，形成报价基准。",
+    assigneeRole: "lead",
+  },
+  {
+    stage: "quotation",
+    title: "发送报价",
+    description: "向客户正式发送报价单并确认接收。",
+    assigneeRole: "lead",
+  },
+  {
+    stage: "quotation",
+    title: "报价反馈",
+    description: "跟进客户对报价的反馈并记录调整意见。",
+    assigneeRole: "lead",
+  },
+  // ── 样品阶段 · 经办人负责人 ──
+  { stage: "sample", title: "收取样品费用", description: "确认并收取客户样品费用。", assigneeRole: "lead" },
+  { stage: "sample", title: "下发设计单", description: "向设计团队下达设计任务单。", assigneeRole: "lead" },
+  { stage: "sample", title: "设计确认", description: "审核并确认设计方案。", assigneeRole: "lead" },
+  { stage: "sample", title: "下发工程单", description: "向工程团队下达工程任务单。", assigneeRole: "lead" },
+  { stage: "sample", title: "寄样", description: "安排样品寄送并跟踪物流。", assigneeRole: "lead" },
+  { stage: "sample", title: "客户确认", description: "跟进客户对样品的确认结果。", assigneeRole: "lead" },
+  // ── 样品阶段 · 经办人设计角色 ──
+  { stage: "sample", title: "画图+渲染", description: "完成产品结构设计图与效果图渲染。", assigneeRole: "design" },
+  { stage: "sample", title: "安排3D打印", description: "根据设计图安排 3D 打印验证。", assigneeRole: "design" },
+  { stage: "sample", title: "移交模具店", description: "将确认的设计移交模具供应商。", assigneeRole: "design" },
+  { stage: "sample", title: "安排下缸", description: "安排下缸试产并跟进首件。", assigneeRole: "design" },
+  { stage: "sample", title: "通知模种到厂", description: "协调模种到厂时间并通知相关方。", assigneeRole: "design" },
+  // ── 样品阶段 · 经办人采购角色 ──
+  { stage: "sample", title: "采购大货模", description: "采购大货生产所需模具。", assigneeRole: "purchase" },
+  { stage: "sample", title: "采购夹具", description: "采购生产夹具。", assigneeRole: "purchase" },
+  { stage: "sample", title: "采购钢板", description: "采购所需钢板原材料。", assigneeRole: "purchase" },
+  { stage: "sample", title: "包装辅材采购", description: "采购包装辅料。", assigneeRole: "purchase" },
+  { stage: "sample", title: "组装辅材采购", description: "采购组装所需辅料。", assigneeRole: "purchase" },
+  // ── 样品阶段 · 经办人工程角色 ──
+  { stage: "sample", title: "安排打样", description: "安排工程打样并跟进进度。", assigneeRole: "engineering" },
+  { stage: "sample", title: "创建成品档案", description: "建立成品技术档案。", assigneeRole: "engineering" },
+  { stage: "sample", title: "创建成品装配清单", description: "编制成品 BOM 与装配清单。", assigneeRole: "engineering" },
+];
+
+export const createProject = async (
   name: string,
   description: string,
   stage: StageKey = "requirement",
-  extra?: { status?: string; priority?: string; dueDate?: string }
-) => {
+  extra?: { status?: string; priority?: string; dueDate?: string; memberIds?: string[] }
+): Promise<WsProject> => {
   const id = `p-new-${uid()}`;
-  const now = nowIso();
-  const project: WsProject = {
+  const no = nextTicketNo();
+  // 项目真实落库后端（含阶段与编号），activity 仍留在本地 overlay 承载时间线
+  const created = await apiCreateProject({
     id,
     name,
     description,
     cover: "",
     status: extra?.status || "active",
     priority: extra?.priority || "medium",
-    dueDate: extra?.dueDate || "RELATIVE_DAYS_PLUS30",
-    memberIds: [CURRENT_USER_ID],
+    // 新建不设截止/下单日期（未下单）；仅创建副本时沿用原项目 dueDate。
+    dueDate: extra?.dueDate ?? null,
+    // 经办人由创建方按角色分配后传入；未传时至少含创建人。
+    memberIds: extra?.memberIds?.length
+      ? Array.from(new Set([CURRENT_USER_ID, ...extra.memberIds]))
+      : [CURRENT_USER_ID],
     leadId: CURRENT_USER_ID,
     progress: 0,
     archived: false,
-    teamId: "t1",
-    createdAt: now,
-    updatedAt: now,
-  };
-  const no = nextTicketNo();
-  commit(
-    withLog(
-      {
-        ...state,
-        projects: [...state.projects, project],
-        stages: { ...state.stages, [id]: stage },
-        nos: { ...state.nos, [id]: no },
-      },
-      activity(id, "created the project", id, "project", "created")
-    )
-  );
-  return project;
+    stage,
+    no,
+  });
+  commit(withLog({ ...state }, activity(id, "created the project", id, "project", "created")));
+  return created;
 };
 
-export const updateProject = (
+export const updateProject = async (
   id: string,
   patch: Partial<WsProject>,
   message = "updated project details"
 ) => {
-  commit(
-    withLog(
-      {
-        ...state,
-        projectEdits: {
-          ...state.projectEdits,
-          [id]: {
-            ...state.projectEdits[id],
-            ...patch,
-            updatedAt: nowIso(),
-          },
-        },
-      },
-      activity(id, message, id, "project")
-    )
-  );
+  await apiUpdateProject(id, patch as Partial<ProjectInput>);
+  commit(withLog({ ...state }, activity(id, message, id, "project")));
 };
 
 export const archiveProject = (id: string) =>
@@ -458,26 +583,21 @@ export const archiveProject = (id: string) =>
 export const restoreProject = (id: string) =>
   updateProject(id, { archived: false }, "restored the project");
 
-export const deleteProject = (id: string) => {
+export const deleteProject = async (id: string) => {
+  await apiRemoveProject(id);
   const gone = new Set(state.removed.projects ?? []);
   gone.add(id);
   commit({ ...state, removed: { ...state.removed, projects: [...gone] } });
 };
 
-export const setProjectStage = (id: string, stage: StageKey, message?: string) => {
-  if (state.stages[id] === stage && !message) return;
+export const setProjectStage = async (id: string, stage: StageKey, message?: string) => {
+  await apiUpdateProject(id, { stage });
   commit(
     withLog(
-      { ...state, stages: { ...state.stages, [id]: stage } },
+      { ...state },
       activity(id, message ?? `set stage to ${stageLabel(stage, false)}`, id, "project", "stage")
     )
   );
-};
-
-export const advanceStage = (id: string, current: StageKey) => {
-  const target = nextStage(current);
-  if (target === current) return;
-  setProjectStage(id, target, `moved the project to ${stageLabel(target, false)}`);
 };
 
 export const setProjectMembers = (
@@ -524,7 +644,7 @@ export const addIssue = (
   commit(
     withLog(
       { ...state, issues: [...state.issues, record] },
-      activity(projectId, `created issue #${record.number} ${record.title}`, id, "issue", "created")
+      activity(projectId, `created issue #Q${record.number} ${record.title}`, id, "issue", "created")
     )
   );
   return record;

@@ -38,6 +38,10 @@ export interface WsProject {
   status: string;
   priority: string;
   dueDate: string;
+  /** 项目当前所处阶段（九阶段 key），后端 Project.stage 落库。 */
+  stage?: string;
+  /** 项目编号（如 #2611001），后端 Project.no 落库。 */
+  no?: string;
   memberIds: string[];
   leadId: string;
   progress: number;
@@ -55,7 +59,8 @@ export interface WsIssue {
   status: string;
   priority: string;
   severity: string;
-  reporterId: string;
+  /** 创建人：后端按创建时的登录会话写入（存量数据可能为 null）。 */
+  reporterId: string | null;
   assigneeId: string | null;
   sprintId: string | null;
   milestone: string | null;

@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { toast } from "@/components/shadcn-dashboard/sonner/toast";
+import { createTask, updateTask } from "src/api/tasks/use-tasks";
+import { createIssue, updateIssue } from "src/api/issues/use-issues";
 import type {
   WsFile,
   WsIssue,
@@ -24,9 +26,7 @@ import { CURRENT_USER_ID, resolveDate } from "src/api/workspace/use-workspace";
 import {
   addActivityNote,
   addFile,
-  addIssue,
   addSprint,
-  addTask,
   archiveProject,
   setProjectMembers,
   updateProject,
@@ -294,7 +294,7 @@ function DialogBody({
     </PmsField>
   );
 
-  const submit = () => {
+  const submit = async () => {
     switch (dialog.kind) {
       case "edit":
         updateProject(project.id, {
@@ -313,57 +313,47 @@ function DialogBody({
       case "issue": {
         const rec = dialog.kind === "issue" ? dialog.record : undefined;
         if (rec)
-          updateRecord(
-            "issues",
-            rec.id,
-            {
-              title: draft.name.trim() || rec.title,
-              description: draft.description,
-              status: draft.status,
-              priority: draft.priority,
-              assigneeId: draft.assigneeId || null,
-              updatedAt: new Date().toISOString(),
-            },
-            project.id
-          );
+          await updateIssue(rec.id, {
+            title: draft.name.trim() || rec.title,
+            description: draft.description,
+            status: draft.status,
+            priority: draft.priority,
+            assigneeId: draft.assigneeId || null,
+          });
         else
-          addIssue(project.id, {
+          await createIssue({
             title: draft.name.trim(),
             description: draft.description,
             status: draft.status,
             priority: draft.priority,
             assigneeId: draft.assigneeId || null,
             number: nextIssueNumber,
+            projectId: project.id,
           });
         break;
       }
       case "task": {
         const rec = dialog.kind === "task" ? dialog.record : undefined;
         if (rec)
-          updateRecord(
-            "tasks",
-            rec.id,
-            {
-              title: draft.name.trim() || rec.title,
-              description: draft.description,
-              status: draft.status,
-              priority: draft.priority,
-              assigneeId: draft.assigneeId || null,
-              dueDate: draft.dueDate,
-              estimate: draft.estimate ? Number(draft.estimate) : null,
-              updatedAt: new Date().toISOString(),
-            },
-            project.id
-          );
+          await updateTask(rec.id, {
+            title: draft.name.trim() || rec.title,
+            description: draft.description,
+            status: draft.status,
+            priority: draft.priority,
+            assigneeId: draft.assigneeId || null,
+            dueDate: draft.dueDate || null,
+            estimate: draft.estimate ? Number(draft.estimate) : null,
+          });
         else
-          addTask(project.id, {
+          await createTask({
             title: draft.name.trim(),
             description: draft.description,
             status: draft.status,
             priority: draft.priority,
             assigneeId: draft.assigneeId || null,
-            dueDate: draft.dueDate,
+            dueDate: draft.dueDate || null,
             estimate: draft.estimate ? Number(draft.estimate) : null,
+            projectId: project.id,
           });
         break;
       }

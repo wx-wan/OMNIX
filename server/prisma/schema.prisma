@@ -64,6 +64,7 @@ model Contact {
   password  String? // 仅 type=user 用于登录
   role      String? // 仅 type=user：admin | user
   position  String? // 职位（设计 / 跟单 等；管理员可配置，用于设计单/打样单协助负责人筛选）
+  department String? @map("department") // 部门（如 销售部 / 技术部 / 设计部；设置-成员页展示）
   isSystem  Boolean @default(false) // 系统级机器人（如 ominXBot），拥有最高权限并负责记录操作历史
   botCharacter String? @default("mochi") // 系统机器人的 3D 形象（wobnimo 角色 id），仅 isSystem 使用
   avatarUrl String? @map("avatar_url") // 头像 URL（如 MCP 代理用户 Accio work 用 web 头像）
@@ -472,4 +473,76 @@ model Session {
 
   @@ignore
   @@map("session")
+}
+
+// 任务：项目制工作区的可执行事项（新建项目在需求阶段预置两条）。
+// projectId 存前端工作区的项目 id（工作区项目目前仍由前端快照承载，尚未入库，
+// 故此处仅做字符串关联、不建外键），任务本身走真实数据库 CRUD。
+model Task {
+  id          String    @id @default(cuid())
+  title       String
+  description String    @default("")
+  status      String    @default("todo") // todo | in_progress | review | done | closed
+  priority    String    @default("medium") // low | medium | high | urgent
+  labelIds    String[]  @default([]) @map("label_ids")
+  assigneeId  String?   @map("assignee_id")
+  dueDate     DateTime? @map("due_date")
+  sprintId    String?   @map("sprint_id")
+  estimate    Int?      // 预估工时（小时）
+  projectId   String    @map("project_id")
+  parentId    String?   @map("parent_id")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([projectId])
+  @@index([status])
+  @@map("tasks")
+}
+
+// 项目：工作区项目真实入库。id 沿用前端工作区项目 id（p1 / p-new-*），
+// 以便 Task.projectId 等字符串关联无需迁移；阶段与编号作为项目属性一并落库。
+// dueDate 保留前端相对占位符（RELATIVE_DAYS_PLUS30）或 ISO 字符串，故用 String。
+/// 项目问题（Issue）：阶段详情中与任务并列的事项，落库到 issues 表。
+model Issue {
+  id          String    @id @default(cuid())
+  number      Int       @default(1)
+  title       String
+  description String    @default("")
+  status      String    @default("backlog") // backlog | todo | in_progress | done | closed
+  priority    String    @default("medium") // low | medium | high | urgent
+  severity    String    @default("minor") // trivial | minor | major | critical
+  assigneeId  String?   @map("assignee_id")
+  /** 创建人：由后端按创建时的登录会话写入，前端不可指定或改写。 */
+  reporterId  String?   @map("reporter_id")
+  sprintId    String?   @map("sprint_id") // 阶段 key（requirement/quotation/...）
+  projectId   String    @map("project_id")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([projectId])
+  @@index([sprintId])
+  @@map("issues")
+}
+
+model Project {
+  id          String   @id
+  name        String
+  description String   @default("")
+  cover       String   @default("")
+  status      String   @default("active") // active | on_hold | completed
+  priority    String   @default("medium") // low | medium | high | urgent
+  dueDate     String?  @map("due_date")
+  memberIds   String[] @default([]) @map("member_ids")
+  leadId      String?  @map("lead_id")
+  progress    Int      @default(0)
+  archived    Boolean  @default(false)
+  teamId      String?  @map("team_id")
+  stage       String   @default("requirement")
+  no          String   @default("")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([stage])
+  @@index([archived])
+  @@map("projects")
 }

@@ -3,10 +3,12 @@ import useSWR from "swr";
 import { useTranslation } from "react-i18next";
 import { getFetcher } from "src/api/global-fetcher";
 import {
-  hydrateSeedProjects,
+  hydrateBackendProjects,
   mergeWorkspaceSnapshot,
   useProjectStageStore,
 } from "./project-stages";
+import type { ProjectRecord } from "../projects/use-projects";
+import type { MemberUser } from "../auth/use-users";
 import type {
   WorkspaceSnapshot,
   WsComment,
@@ -112,22 +114,57 @@ type Lookup = {
   teamName: (id?: string | null) => string;
 };
 
-/** 工作区快照：一次 MSW 请求，六个页面共享同一份真实 PMS 数据。 */
+/** 工作区快照：项目 / 任务 / 用户全部走后端 API，子记录来自本地 overlay，无示例数据。 */
 export function useWorkspace() {
   const { i18n } = useTranslation();
   const lang = i18n.language;
-  const { data, isLoading, error } = useSWR<{ data: WorkspaceSnapshot }>(
-    "/api/workspace/snapshot",
+  /** 项目真实入库：以后端 /api/projects 为准。 */
+  const { data: dbProjects, isLoading: projectsLoading, error: projectsError } = useSWR<ProjectRecord[]>(
+    "/api/projects",
+    getFetcher
+  );
+  /** 成员真实来源：后端 /api/auth/users（与团队/成员管理页同一份数据）。 */
+  const { data: dbMembers, isLoading: membersLoading, error: membersError } = useSWR<MemberUser[]>(
+    "/api/auth/users",
     getFetcher
   );
   const overlay = useProjectStageStore();
-  const base = data?.data;
-  /** 快照到达即固化存量项目编号/阶段，无需用户操作且幂等。 */
+  /** 后端项目到达即同步阶段/编号到本地缓存（projectStage / projectNo 同步读取）。 */
   useEffect(() => {
-    if (base?.projects?.length) hydrateSeedProjects(base.projects);
-  }, [base]);
-  /** 线上只读快照 + 本地项目制写入，合并后所有页面共享同一份状态。 */
-  const snap = useMemo(() => mergeWorkspaceSnapshot(base, overlay), [base, overlay]);
+    if (dbProjects?.length) hydrateBackendProjects(dbProjects);
+  }, [dbProjects]);
+
+  /** 空基线：无任何 MSW 示例数据，仅由后端项目 + 真实用户 + 本地 overlay 组成。 */
+  const base = useMemo<WorkspaceSnapshot>(
+    () => ({
+      users: (dbMembers ?? []).map<WsUser>((member) => ({
+        id: member.id,
+        name: member.name,
+        email: member.email,
+        avatar: member.avatarUrl,
+        role: member.role,
+        status: "active",
+        createdAt: member.createdAt,
+      })),
+      teams: [],
+      labels: [],
+      projects: dbProjects ?? [],
+      issues: [],
+      tasks: [],
+      sprints: [],
+      events: [],
+      milestones: [],
+      files: [],
+      comments: [],
+      activities: [],
+    }),
+    [dbMembers, dbProjects]
+  );
+  /** 后端数据 + 本地项目制子记录写入，合并后所有页面共享同一份状态。 */
+  const snap = useMemo(
+    () => mergeWorkspaceSnapshot(base, overlay),
+    [base, overlay]
+  );
 
   const lookup = useMemo<Lookup>(() => {
     const byId = <T extends { id: string }>(list: T[] = []) =>
@@ -149,13 +186,20 @@ export function useWorkspace() {
       sprint: (id) => get(sprints, id),
       comment: (id) => get(comments, id),
       userName: (id) => user(id)?.name ?? (isZh(lang) ? "未指派" : "Unassigned"),
-      firstName: (id) => user(id)?.name.split(" ")[0] ?? "—",
+      firstName: (id) => user(id)?.name.split(" ")[0] ?? (isZh(lang) ? "未指派" : "Unassigned"),
       projectName: (id) => get(projects, id)?.name ?? "—",
       teamName: (id) => get(teams, id)?.name ?? "—",
     };
   }, [snap, lang]);
 
-  return { snap, ...lookup, lang, zh: isZh(lang), isLoading, error };
+  return {
+    snap,
+    ...lookup,
+    lang,
+    zh: isZh(lang),
+    isLoading: projectsLoading || membersLoading,
+    error: projectsError ?? membersError,
+  };
 }
 
 export type UseWorkspace = ReturnType<typeof useWorkspace>;

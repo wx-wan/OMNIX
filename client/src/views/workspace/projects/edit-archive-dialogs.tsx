@@ -2,7 +2,6 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { resolveDate } from "src/api/workspace/use-workspace";
 import { Button } from "src/components/ui/button";
-import { Checkbox } from "src/components/ui/checkbox";
 import { DatePicker } from "src/components/ui/date-picker";
 import {
   Dialog,
@@ -23,8 +22,20 @@ import {
   SelectValue,
 } from "src/components/ui/select";
 import { Textarea } from "src/components/ui/textarea";
-import type { WsProject, WsTeam, WsUser } from "src/types/apps/workspace";
+import type { WsProject, WsUser } from "src/types/apps/workspace";
 import { PmsAvatar } from "../pms";
+import { roleLabelKey } from "./role-label";
+import SelectWithAvatars, { type SelectUser } from "@/components/shadcn-dashboard/select/select-07";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { ChevronDown } from "lucide-react";
 
 /**
  * 线上 PMS /projects/p1 的「Edit Project」与「Archive "…"?」两个居中弹窗 1:1 复刻。
@@ -89,30 +100,77 @@ function EnumSelect({
   );
 }
 
-function RecordSelect({
-  id,
+/** WsUser → SelectUser：接 select-07 block 的真实用户来源。 */
+const toSelectUser = (person: WsUser): SelectUser => ({
+  id: person.id,
+  src: person.avatar,
+  fallback: person.name?.[0]?.toUpperCase() || "?",
+  name: person.name,
+});
+
+/** 成员多选下拉：左侧头像 + 名称，右侧角色；复用 shadcn DropdownMenu 的复选项。 */
+function MemberMultiSelect({
+  users,
   value,
   onChange,
-  options,
 }: {
-  id: string;
-  value: string;
-  onChange: (value: string) => void;
-  options: Option[];
+  users: WsUser[];
+  value: string[];
+  onChange: (ids: string[]) => void;
 }) {
+  const { t } = useTranslation();
+  const selected = users.filter((person) => value.includes(person.id));
   return (
-    <Select value={value} onValueChange={(next) => next && onChange(next)}>
-      <SelectTrigger id={id} className="w-full">
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        {options.map((option) => (
-          <SelectItem key={option.value} value={option.value}>
-            {option.label}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <button
+            type="button"
+            className="flex w-full min-h-9 items-center justify-between gap-2 rounded-lg border border-input bg-background px-2.5 py-1 text-sm outline-none hover:bg-accent/40"
+          />
+        }
+      >
+        <span className="flex min-w-0 items-center -space-x-2">
+          {selected.length ? (
+            selected.slice(0, 5).map((person) => (
+              <PmsAvatar key={person.id} name={person.name} avatar={person.avatar} size={6} />
+            ))
+          ) : (
+            <span className="text-muted-foreground">{t("Select a member")}</span>
+          )}
+          {selected.length > 5 ? (
+            <span className="ms-2 text-xs text-muted-foreground">+{selected.length - 5}</span>
+          ) : null}
+        </span>
+        <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-72">
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>{t("Members")}</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          {users.map((person) => (
+            <DropdownMenuCheckboxItem
+              key={person.id}
+              checked={value.includes(person.id)}
+              onCheckedChange={(checked) =>
+                onChange(
+                  checked
+                    ? [...value, person.id]
+                    : value.filter((id) => id !== person.id)
+                )
+              }
+              className="flex items-center gap-2"
+            >
+              <PmsAvatar name={person.name} avatar={person.avatar} size={6} />
+              <span className="text-sm">{person.name}</span>
+              <span className="ms-auto text-xs text-muted-foreground">
+                {t(roleLabelKey(person.role))}
+              </span>
+            </DropdownMenuCheckboxItem>
+          ))}
+        </DropdownMenuGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -125,7 +183,6 @@ export type EditProjectValues = {
   priority: string;
   dueDate: string;
   leadId: string;
-  teamId: string;
   memberIds: string[];
 };
 
@@ -136,7 +193,6 @@ const editValues = (project: WsProject): EditProjectValues => ({
   priority: project.priority,
   dueDate: isoDay(project.dueDate),
   leadId: project.leadId,
-  teamId: project.teamId,
   memberIds: [...project.memberIds],
 });
 
@@ -145,14 +201,12 @@ export function EditProjectDialog({
   onOpenChange,
   project,
   users,
-  teams,
   onSubmit,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   project: WsProject;
   users: WsUser[];
-  teams: WsTeam[];
   onSubmit: (values: EditProjectValues) => void;
 }) {
   const { t } = useTranslation();
@@ -223,65 +277,35 @@ export function EditProjectDialog({
             </div>
 
             <Field>
-              <FieldLabel htmlFor="edit-project-due-date">{t("Due Date")}</FieldLabel>
+              <FieldLabel htmlFor="edit-project-order-date">{t("Created date")}</FieldLabel>
               <DatePicker
-                id="edit-project-due-date"
+                id="edit-project-order-date"
                 value={values.dueDate}
                 placeholder={t("Select a date")}
                 onChange={(value) => set("dueDate", value ?? "")}
               />
             </Field>
 
-            <div className="grid grid-cols-2 gap-4">
-              <Field>
-                <FieldLabel htmlFor="edit-project-lead">{t("Lead")}</FieldLabel>
-                <RecordSelect
+            <Field>
+              <FieldLabel htmlFor="edit-project-lead">{t("Lead")}</FieldLabel>
+              <div className="[&>div]:max-w-none">
+                <SelectWithAvatars
                   id="edit-project-lead"
+                  label=""
+                  users={users.map(toSelectUser)}
                   value={values.leadId}
                   onChange={(value) => set("leadId", value)}
-                  options={users.map((person) => ({ value: person.id, label: person.name }))}
                 />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="edit-project-team">{t("Team")}</FieldLabel>
-                <RecordSelect
-                  id="edit-project-team"
-                  value={values.teamId}
-                  onChange={(value) => set("teamId", value)}
-                  options={teams.map((team) => ({ value: team.id, label: team.name }))}
-                />
-              </Field>
-            </div>
+              </div>
+            </Field>
 
             <Field>
               <FieldLabel>{t("Members")}</FieldLabel>
-              <div className="max-h-40 overflow-y-auto rounded-lg border border-border">
-                {users.map((person, index) => (
-                  <label
-                    key={person.id}
-                    className={`flex cursor-pointer items-center gap-2 px-2 py-1.5 ${
-                      index > 0 ? "border-t border-border" : ""
-                    }`}
-                  >
-                    <Checkbox
-                      checked={values.memberIds.includes(person.id)}
-                      onCheckedChange={(checked) =>
-                        set(
-                          "memberIds",
-                          checked
-                            ? [...values.memberIds, person.id]
-                            : values.memberIds.filter((item) => item !== person.id)
-                        )
-                      }
-                    />
-                    <PmsAvatar name={person.name} avatar={person.avatar} size={6} />
-                    <span className="text-sm">{person.name}</span>
-                    <span className="ms-auto text-xs text-muted-foreground">
-                      {t(person.role.charAt(0).toUpperCase() + person.role.slice(1))}
-                    </span>
-                  </label>
-                ))}
-              </div>
+              <MemberMultiSelect
+                users={users}
+                value={values.memberIds}
+                onChange={(ids) => set("memberIds", ids)}
+              />
             </Field>
           </FieldGroup>
         </form>

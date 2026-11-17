@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "src/components/ui/button";
 import {
@@ -12,44 +12,22 @@ import {
 } from "src/components/ui/dialog";
 import { Field, FieldGroup, FieldLabel } from "src/components/ui/field";
 import { Input } from "src/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "src/components/ui/select";
 import { Textarea } from "src/components/ui/textarea";
-import { DatePicker } from "src/components/ui/date-picker";
 
 export type NewProjectValues = {
   name: string;
   description: string;
   status: string;
   priority: string;
-  dueDate: string;
 };
 
+/** 新建项目默认状态=进行中、优先级=中；字段在弹窗中隐藏，仅作为创建默认值。 */
 const EMPTY: NewProjectValues = {
   name: "",
   description: "",
   status: "active",
   priority: "medium",
-  dueDate: "",
 };
-
-const STATUS_OPTIONS = [
-  { value: "active", label: "Active" },
-  { value: "on_hold", label: "On Hold" },
-  { value: "completed", label: "Completed" },
-];
-
-const PRIORITY_OPTIONS = [
-  { value: "low", label: "Low" },
-  { value: "medium", label: "Medium" },
-  { value: "high", label: "High" },
-  { value: "urgent", label: "Urgent" },
-];
 
 /**
  * 线上 PMS /projects → New Project 弹窗的 1:1 复刻。
@@ -63,23 +41,34 @@ export function NewProjectDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (values: NewProjectValues) => void;
+  onSubmit: (values: NewProjectValues) => void | Promise<void>;
 }) {
   const { t } = useTranslation();
   const [values, setValues] = useState<NewProjectValues>(EMPTY);
+  const submitting = useRef(false);
 
   useEffect(() => {
-    if (open) setValues(EMPTY);
+    if (open) {
+      setValues(EMPTY);
+      submitting.current = false;
+    }
   }, [open]);
 
   const set = (key: keyof NewProjectValues, value: string) =>
     setValues((prev) => ({ ...prev, [key]: value }));
 
-  const submit = (event: FormEvent<HTMLFormElement>) => {
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (submitting.current) return;
     const name = values.name.trim();
     if (!name) return;
-    onSubmit({ ...values, name, description: values.description.trim() });
+    submitting.current = true;
+    try {
+      await onSubmit({ ...values, name, description: values.description.trim() });
+    } catch {
+      // 创建失败且弹窗仍开着时释放锁，允许重试；成功时页面跳转，锁随弹窗卸载
+      submitting.current = false;
+    }
   };
 
   return (
@@ -116,69 +105,6 @@ export function NewProjectDialog({
               />
             </Field>
 
-            <div className="grid grid-cols-2 gap-4">
-              <Field>
-                <FieldLabel htmlFor="project-status">{t("Status")}</FieldLabel>
-                <Select
-                  value={values.status}
-                  onValueChange={(value) => value && set("status", value)}
-                >
-                  <SelectTrigger id="project-status" className="w-full">
-                    <SelectValue>
-                      {(value) =>
-                        t(
-                          STATUS_OPTIONS.find((o) => o.value === value)?.label ??
-                            (value as string) ??
-                            ""
-                        )}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {STATUS_OPTIONS.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {t(option.label)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
-
-              <Field>
-                <FieldLabel htmlFor="project-priority">{t("Priority")}</FieldLabel>
-                <Select
-                  value={values.priority}
-                  onValueChange={(value) => value && set("priority", value)}
-                >
-                  <SelectTrigger id="project-priority" className="w-full">
-                    <SelectValue>
-                      {(value) =>
-                        t(
-                          PRIORITY_OPTIONS.find((o) => o.value === value)?.label ??
-                            (value as string) ??
-                            ""
-                        )}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {PRIORITY_OPTIONS.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {t(option.label)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
-            </div>
-
-            <Field>
-              <FieldLabel htmlFor="project-due-date">{t("Due Date")}</FieldLabel>
-              <DatePicker
-                id="project-due-date"
-                value={values.dueDate}
-                placeholder={t("Select a date")}
-                onChange={(value) => set("dueDate", value ?? "")}
-              />
-            </Field>
           </FieldGroup>
         </form>
 

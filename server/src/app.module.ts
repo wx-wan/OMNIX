@@ -20,6 +20,9 @@ import { QuotationTemplatesModule } from "./modules/quotation-templates/quotatio
 import { FeesModule } from "./modules/fees/fees.module";
 import { DesignOrderModule } from "./modules/design-order/design-order.module";
 import { SampleOrderModule } from "./modules/sample-order/sample-order.module";
+import { TasksModule } from "./modules/tasks/tasks.module";
+import { IssuesModule } from "./modules/issues/issues.module";
+import { ProjectsModule } from "./modules/projects/projects.module";
 
 @Module({
   imports: [
@@ -41,6 +44,9 @@ import { SampleOrderModule } from "./modules/sample-order/sample-order.module";
     FeesModule,
     DesignOrderModule,
     SampleOrderModule,
+    TasksModule,
+    IssuesModule,
+    ProjectsModule,
   ],
   controllers: [HealthController],
   providers: [
