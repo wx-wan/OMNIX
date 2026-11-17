@@ -6,6 +6,7 @@ import {
   CircleDashed,
   CircleDot,
   CircleDotDashed,
+  CircleX,
   Columns3,
   List,
   ListFilter,
@@ -55,21 +56,24 @@ const COLUMNS: PmsColumn[] = [
   { label: "Created by", w: "w-40" },
   { label: "Updated", w: "w-28" },
 ];
-/** 分组与任务列表一致：closed 与 done 同属完成。 */
+/** 问题列表分组：已关闭与完成分开，文案与行首红叉状态一致。 */
 const STATUS_GROUPS: { label: string; values: string[] }[] = [
   { label: "Backlog", values: ["backlog"] },
   { label: "Todo", values: ["todo"] },
   { label: "In Progress", values: ["in_progress"] },
   { label: "Review", values: ["review"] },
-  { label: "Done", values: ["done", "closed"] },
+  { label: "Done", values: ["done"] },
+  { label: "Closed", values: ["closed"] },
 ];
+/** 问题状态文案：closed 显示「已关闭」而非任务的「完成」。 */
+const ISSUE_STATUS_LABEL: Record<string, string> = { ...STATUS_LABEL, closed: "Closed" };
 const STATUS_ICON: Record<string, { icon: typeof Circle; color: string }> = {
   backlog: { icon: CircleDashed, color: "text-amber-500" },
   todo: { icon: Circle, color: "text-sky-500" },
   in_progress: { icon: CircleDot, color: "text-blue-500" },
   review: { icon: CircleDotDashed, color: "text-orange-500" },
   done: { icon: CircleCheck, color: "text-teal-500" },
-  closed: { icon: CircleCheck, color: "text-teal-500" },
+  closed: { icon: CircleX, color: "text-red-500" },
 };
 export default function IssuesPage({
   projectId,
@@ -286,6 +290,7 @@ export default function IssuesPage({
                         <PmsCell w="w-36">
                           <ItemStatusMenu
                             value={issue.status}
+                            labelMap={ISSUE_STATUS_LABEL}
                             onChange={(status) => updateIssue(issue.id, { status })}
                           />
                         </PmsCell>
@@ -366,7 +371,9 @@ export default function IssuesPage({
             </p>
             <div className="space-y-3 border-t border-border pt-4">
               <h3 className="text-xs font-semibold">{t("Properties")}</h3>
-              <PmsField label={t("Status")}>{t(STATUS_LABEL[selected.status])}</PmsField>
+              <PmsField label={t("Status")}>
+                {t(ISSUE_STATUS_LABEL[selected.status])}
+              </PmsField>
               <PmsField label={t("Priority")}>
                 {t(selected.priority.charAt(0).toUpperCase() + selected.priority.slice(1))}
               </PmsField>

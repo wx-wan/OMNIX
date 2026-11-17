@@ -67,13 +67,16 @@ export function ItemStatusMenu({
   value,
   onChange,
   variant = "field",
+  labelMap = STATUS_LABEL,
 }: {
   value: string;
   onChange: (status: string) => void;
   variant?: "field" | "chip";
+  /** 问题列表把 closed 显示为「已关闭」；任务仍沿用 done 口径的默认值。 */
+  labelMap?: Record<string, string>;
 }) {
   const { t } = useTranslation();
-  const label = t(STATUS_LABEL[value] ?? "Todo");
+  const label = t(labelMap[value] ?? "Todo");
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
