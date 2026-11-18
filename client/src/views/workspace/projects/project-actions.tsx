@@ -13,6 +13,7 @@ import type {
 import { ArrowUpRight, Pencil, Plus, Trash2 } from "lucide-react";
 import { Button } from "src/components/ui/button";
 import { Input } from "src/components/ui/input";
+import { DatePicker } from "src/components/ui/date-picker";
 import { Textarea } from "src/components/ui/textarea";
 import {
   Select,
@@ -448,10 +449,9 @@ function DialogBody({
           {selectField(t("Status"), "status", STATUS_OPTIONS)}
           {selectField(t("Priority"), "priority", PRIORITY_OPTIONS)}
           <PmsField label={t("Due date")}>
-            <Input
-              type="date"
-              value={draft.dueDate}
-              onChange={(event) => set("dueDate", event.target.value)}
+            <DatePicker
+              value={draft.dueDate || undefined}
+              onChange={(value) => set("dueDate", value ?? "")}
               className="h-9 text-sm"
             />
           </PmsField>
@@ -510,10 +510,9 @@ function DialogBody({
           {dialog.kind === "task" ? (
             <>
               <PmsField label={t("Due date")}>
-                <Input
-                  type="date"
-                  value={draft.dueDate}
-                  onChange={(event) => set("dueDate", event.target.value)}
+                <DatePicker
+                  value={draft.dueDate || undefined}
+                  onChange={(value) => set("dueDate", value ?? "")}
                   className="h-9 text-sm"
                 />
               </PmsField>
@@ -529,18 +528,16 @@ function DialogBody({
           {field(t("Goal"), "goal")}
           {selectField(t("Status"), "status", SPRINT_STATUS)}
           <PmsField label={t("Start date")}>
-            <Input
-              type="date"
-              value={draft.startDate}
-              onChange={(event) => set("startDate", event.target.value)}
+            <DatePicker
+              value={draft.startDate || undefined}
+              onChange={(value) => set("startDate", value ?? "")}
               className="h-9 text-sm"
             />
           </PmsField>
           <PmsField label={t("End date")}>
-            <Input
-              type="date"
-              value={draft.endDate}
-              onChange={(event) => set("endDate", event.target.value)}
+            <DatePicker
+              value={draft.endDate || undefined}
+              onChange={(value) => set("endDate", value ?? "")}
               className="h-9 text-sm"
             />
           </PmsField>

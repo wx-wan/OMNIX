@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import Loading from "@/components/shadcn-dashboard/spinner/loading";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { resolveDate, useWorkspace } from "src/api/workspace/use-workspace";
 import { addEvent } from "src/api/workspace/project-stages";
@@ -100,7 +101,7 @@ export default function CalendarPage() {
     setCreating(false);
   };
 
-  if (isLoading || !snap) return <div className="p-10 text-sm text-muted-foreground">…</div>;
+  if (isLoading || !snap) return <Loading />;
 
   const fcButton =
     "fc-button fc-button-primary inline-flex h-7 cursor-pointer items-center justify-center rounded-md border border-border bg-background px-2 text-xs font-medium hover:bg-muted";

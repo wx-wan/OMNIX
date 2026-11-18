@@ -11,6 +11,7 @@ import {
   Users,
 } from "lucide-react";
 import { toast } from "@/components/shadcn-dashboard/sonner/toast";
+import Loading from "@/components/shadcn-dashboard/spinner/loading";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -212,7 +213,7 @@ const ContactsApp = () => {
               </div>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto">
-              {isLoading && <p className="px-4 py-3 text-sm text-muted-foreground">{t("Loading contacts...")}</p>}
+              {isLoading && <Loading className="min-h-24" />}
               {!isLoading && error && <p className="px-4 py-3 text-sm text-destructive">{t("Failed to load contacts")}</p>}
               {visible.map((c) => (
                 <div

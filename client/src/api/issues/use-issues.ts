@@ -7,8 +7,12 @@ export type IssueInput = {
   description?: string;
   status?: string;
   priority?: string;
+  type?: string;
+  action?: string | null;
   severity?: string;
   assigneeId?: string | null;
+  /** 创建人：可由下拉改派，后端按 PATCH 更新。 */
+  reporterId?: string | null;
   sprintId?: string | null;
   number: number;
   projectId: string;

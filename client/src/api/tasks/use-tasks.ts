@@ -8,6 +8,8 @@ export type TaskInput = {
   description?: string;
   status?: string;
   priority?: string;
+  type?: string;
+  action?: string | null;
   labelIds?: string[];
   assigneeId?: string | null;
   dueDate?: string | null;

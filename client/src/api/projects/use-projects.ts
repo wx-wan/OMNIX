@@ -19,6 +19,8 @@ export type ProjectInput = {
   teamId?: string | null;
   stage?: string;
   no?: string;
+  /** 阶段日程：预估起止 + 实际完成时间，见 WsProject.stageSchedule。 */
+  stageSchedule?: Record<string, Record<string, string>> | null;
   createdAt?: string;
 };
 

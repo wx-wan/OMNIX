@@ -38,6 +38,7 @@ export class ProjectsService {
         teamId: dto.teamId ?? null,
         stage: dto.stage ?? "requirement",
         no: dto.no ?? "",
+        stageSchedule: dto.stageSchedule ?? undefined,
       },
     });
   }
@@ -60,6 +61,9 @@ export class ProjectsService {
         ...(dto.teamId !== undefined ? { teamId: dto.teamId ?? null } : {}),
         ...(dto.stage !== undefined ? { stage: dto.stage } : {}),
         ...(dto.no !== undefined ? { no: dto.no } : {}),
+        ...(dto.stageSchedule !== undefined
+          ? { stageSchedule: dto.stageSchedule ?? undefined }
+          : {}),
         ...(dto.createdAt !== undefined ? { createdAt: new Date(dto.createdAt) } : {}),
       },
     });

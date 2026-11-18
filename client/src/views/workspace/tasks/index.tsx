@@ -17,6 +17,8 @@ import {
   UserRound,
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
+import { DatePicker } from "@/components/ui/date-picker";
+import { PeopleField } from "../people-field";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -39,7 +41,7 @@ import {
   type StageKey,
 } from "src/api/workspace/project-stages";
 import { useTasks } from "src/api/tasks/use-tasks";
-import SpinnerBars from "@/components/shadcn-dashboard/spinner/spinner-06";
+import Loading from "@/components/shadcn-dashboard/spinner/loading";
 import { NewTaskDialog, type NewTaskValues } from "../create-dialogs";
 import type { WsTask } from "src/types/apps/workspace";
 import {
@@ -50,6 +52,7 @@ import {
   PmsOptionGroup,
   PmsPage,
   PmsPopover,
+  PriorityMenu,
   PmsSegmented,
   PmsSheet,
 } from "../pms";
@@ -107,7 +110,7 @@ export default function TasksPage({
   embedded,
 }: { projectId?: string; embedded?: boolean } = {}) {
   const { t } = useTranslation();
-  const { snap, lang, userName, projectName, isLoading: wsLoading } = useWorkspace();
+  const { snap, lang, projectName, isLoading: wsLoading } = useWorkspace();
   useProjectStageStore();
   const {
     tasks: all,
@@ -222,12 +225,7 @@ export default function TasksPage({
     setCreating(false);
   };
 
-  if (wsLoading || tasksLoading)
-    return (
-      <div className="flex min-h-40 items-center justify-center text-muted-foreground">
-        <SpinnerBars />
-      </div>
-    );
+  if (wsLoading || tasksLoading) return <Loading />;
 
   return (
     <PmsPage
@@ -473,22 +471,20 @@ export default function TasksPage({
                             </DropdownMenu>
                           </td>
                           <td className="p-2 px-3 py-3 align-middle whitespace-nowrap">
-                            <input
-                              type="date"
-                              aria-label={`Due date: ${task.title}`}
+                            <DatePicker
+                              id={`task-due-${task.id}`}
+                              variant="cell"
                               value={
                                 task.dueDate
                                   ? new Date(task.dueDate).toISOString().slice(0, 10)
-                                  : ""
+                                  : undefined
                               }
-                              onChange={(event) =>
+                              placeholder={t("Select a date")}
+                              onChange={(value) =>
                                 updateTask(task.id, {
-                                  dueDate: event.target.value
-                                    ? new Date(event.target.value).toISOString()
-                                    : null,
+                                  dueDate: value ? new Date(value).toISOString() : null,
                                 })
                               }
-                              className="h-8 w-32 rounded-md border bg-background px-2 text-sm text-muted-foreground outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
                             />
                           </td>
                           <td className="p-2 px-3 py-3 align-middle whitespace-nowrap">
@@ -580,10 +576,10 @@ export default function TasksPage({
             <div className="space-y-3 border-t border-border pt-4">
               <PmsField label={t("Status")}>{t(STATUS_LABEL[selected.status])}</PmsField>
               <PmsField label={t("Priority")}>
-                {t(selected.priority.charAt(0).toUpperCase() + selected.priority.slice(1))}
+                <PriorityMenu value={selected.priority} />
               </PmsField>
               <PmsField label={t("Assignee")}>
-                {selected.assigneeId ? userName(selected.assigneeId) : t("Unassigned")}
+                <PeopleField users={snap?.users ?? []} value={selected.assigneeId} />
               </PmsField>
               <PmsField label={t("Estimate")}>
                 {selected.estimate ? `${selected.estimate}h` : "—"}

@@ -3,6 +3,7 @@ import {
   IsBoolean,
   IsDateString,
   IsInt,
+  IsObject,
   IsOptional,
   IsString,
   MaxLength,
@@ -68,4 +69,12 @@ export class UpdateProjectDto {
   @IsOptional()
   @IsDateString()
   createdAt?: string;
+
+  /**
+   * 阶段日程：{ [stageKey]: { estimatedStart?, estimatedEnd?, completedAt? } }。
+   * estimatedStart/estimatedEnd = 用户填写的预估起止；completedAt = 点击完成阶段的实际完成时间。
+   */
+  @IsOptional()
+  @IsObject()
+  stageSchedule?: Record<string, Record<string, string>> | null;
 }

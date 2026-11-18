@@ -42,6 +42,14 @@ export interface WsProject {
   stage?: string;
   /** 项目编号（如 #2611001），后端 Project.no 落库。 */
   no?: string;
+  /**
+   * 阶段日程（后端 Project.stageSchedule 落库）：
+   * - estimatedStart/estimatedEnd = 阶段详情里人工填写的预估开始/预估结束时间；
+   * - completedAt = 点击「完成阶段」时写入的实际完成时间。
+   */
+  stageSchedule?: Record<string, { estimatedStart?: string; estimatedEnd?: string; completedAt?: string }>;
+  /** 兼容旧本地缓存；读取优先 stageSchedule[*].completedAt。 */
+  stageCompletedAt?: Record<string, string>;
   memberIds: string[];
   leadId: string;
   progress: number;
@@ -58,6 +66,10 @@ export interface WsIssue {
   description: string;
   status: string;
   priority: string;
+  /** 事项类型：output 输出 | prompt 提示 | input 输入。 */
+  type: string;
+  /** 操作列记录的预设操作 id（仅记录，不执行）。 */
+  action?: string | null;
   severity: string;
   /** 创建人：后端按创建时的登录会话写入（存量数据可能为 null）。 */
   reporterId: string | null;
@@ -78,6 +90,10 @@ export interface WsTask {
   description: string;
   status: string;
   priority: string;
+  /** 事项类型：output 输出 | prompt 提示 | input 输入。 */
+  type: string;
+  /** 操作列记录的预设操作 id（仅记录，不执行）。 */
+  action?: string | null;
   labelIds: string[];
   assigneeId: string | null;
   dueDate: string | null;

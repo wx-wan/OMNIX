@@ -36,6 +36,8 @@ export class TasksService {
         description: dto.description ?? "",
         status: dto.status ?? "todo",
         priority,
+        type: dto.type ?? "output",
+        action: dto.action ?? "",
         labelIds: dto.labelIds ?? [],
         assigneeId: dto.assigneeId ?? null,
         // undefined → 到期 = 创建时间 + 预估工时；显式 null → 不赋值（待规划任务用）
@@ -86,6 +88,8 @@ export class TasksService {
         ...(dto.description !== undefined ? { description: dto.description } : {}),
         ...(dto.status !== undefined ? { status: dto.status } : {}),
         ...(dto.priority !== undefined ? { priority: dto.priority } : {}),
+        ...(dto.type !== undefined ? { type: dto.type } : {}),
+        ...(dto.action !== undefined ? { action: dto.action ?? "" } : {}),
         ...(dto.labelIds !== undefined ? { labelIds: dto.labelIds } : {}),
         ...(dto.assigneeId !== undefined ? { assigneeId: dto.assigneeId ?? null } : {}),
         ...(dueDate !== undefined ? { dueDate } : {}),

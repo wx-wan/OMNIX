@@ -63,24 +63,75 @@ export const STAGE_DAYS: Record<string, number | null> = {
 /** 费用/售后无固定周期，不展示时间。 */
 export const STAGE_NO_TIME = new Set(["expense", "after_sales"]);
 
-/** 按项目创建时间与前序阶段时长，推算某阶段起止（费用/售后返回 null）。 */
-export function stageTimeRange(
+export type StageScheduleEntry = {
+  estimatedStart?: string;
+  estimatedEnd?: string;
+  completedAt?: string;
+};
+export type StageSchedule = Record<string, StageScheduleEntry>;
+
+/** 解析阶段日期：兼容 ISO(yyyy-mm-dd) 与英文长日期(April 1, 2025)。 */
+export const parseStageDate = (value?: string | null): Date | null => {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+/** 本地日历日 key，用于预估结束 vs 实际完成的「提前/相符/延后」比较。 */
+const dayKey = (date: Date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+
+export type StageDateInfo = {
+  /** 本阶段开始：人工预估开始优先，否则 = 上一阶段完成时间（链式）。 */
+  start: Date;
+  /** 本阶段预估结束：人工预估结束优先，否则 = 开始 + 本阶段天数。 */
+  estimatedEnd: Date;
+  /** 实际完成时间（点击完成阶段时写入），未完成为 null。 */
+  completedAt: Date | null;
+  /** 按日历日比较实际完成 vs 预估结束：提前 -1 / 相符 0 / 延后 1 / 未完成 null。 */
+  variance: -1 | 0 | 1 | null;
+};
+
+/**
+ * 阶段日期统一推导：需求阶段 = 创建时间 ~ +2 天；后续阶段起点 = 上一阶段完成时间
+ * （未完成时按上一阶段预估结束时间）~ + 本阶段天数。人工填写的预估起止优先。
+ * 费用/售后无固定周期，返回 null 且不占用游标天数。
+ */
+export function stageDateInfo(
   stageKey: string,
-  createdAt: string
-): { start: Date; end: Date } | null {
-  const days = STAGE_DAYS[stageKey];
-  if (days == null) return null;
+  createdAt: string,
+  schedule?: StageSchedule | null
+): StageDateInfo | null {
+  if (STAGE_DAYS[stageKey] == null) return null;
   const base = new Date(createdAt).getTime();
   if (Number.isNaN(base)) return null;
-  let offset = 0;
+
+  let cursor = base;
   for (const stage of STAGES) {
-    if (stage.key === stageKey) {
-      return {
-        start: new Date(base + offset * 86_400_000),
-        end: new Date(base + (offset + days) * 86_400_000),
-      };
+    const stageDays = STAGE_DAYS[stage.key];
+    if (stageDays == null) {
+      if (stage.key === stageKey) return null;
+      continue;
     }
-    offset += STAGE_DAYS[stage.key] ?? 0;
+
+    const entry = schedule?.[stage.key];
+    const estimatedStart = parseStageDate(entry?.estimatedStart);
+    const estimatedEnd = parseStageDate(entry?.estimatedEnd);
+    const completedAt = parseStageDate(entry?.completedAt);
+    const start = estimatedStart ?? new Date(cursor);
+    const end = estimatedEnd ?? new Date(start.getTime() + stageDays * 86_400_000);
+
+    if (stage.key === stageKey) {
+      let variance: -1 | 0 | 1 | null = null;
+      if (completedAt) {
+        const actualKey = dayKey(completedAt);
+        const estimatedKey = dayKey(end);
+        variance = actualKey < estimatedKey ? -1 : actualKey > estimatedKey ? 1 : 0;
+      }
+      return { start, estimatedEnd: end, completedAt, variance };
+    }
+
+    cursor = completedAt ? completedAt.getTime() : end.getTime();
   }
   return null;
 }
@@ -140,6 +191,9 @@ export type StageView = { order: string[]; hidden: string[] };
 export type WorkspaceState = OverlayTables & {
   projects: WsProject[];
   stages: Record<string, StageKey>;
+  /** 项目 → 阶段日程（预估起止 + 实际完成）；与表单计划到期日 dueDate 分开存储。 */
+  completions: Record<string, Record<string, string>>;
+  schedules: Record<string, StageSchedule>;
   nos: Record<string, string>;
   forms: Record<string, StageForm>;
   projectEdits: Record<string, Partial<WsProject>>;
@@ -152,6 +206,8 @@ const STORAGE_KEY = "omnix-workspace-project-stages-v1";
 const EMPTY_STATE: WorkspaceState = {
   projects: [],
   stages: {},
+  completions: {},
+  schedules: {},
   nos: {},
   forms: {},
   projectEdits: {},
@@ -181,6 +237,8 @@ const readState = (): WorkspaceState => {
       ...parsed,
       projects: Array.isArray(parsed.projects) ? parsed.projects : [],
       stages: parsed.stages ?? {},
+      completions: parsed.completions ?? {},
+      schedules: parsed.schedules ?? {},
       nos: parsed.nos ?? {},
       forms: parsed.forms ?? {},
       projectEdits: parsed.projectEdits ?? {},
@@ -385,7 +443,21 @@ export const mergeWorkspaceSnapshot = (
   };
   const patchProject = (item: WsProject, created: boolean): WsProject => {
     const edits = overlay.projectEdits[item.id];
-    const patched = { ...item, ...edits };
+    const local = overlay.schedules[item.id] ?? {};
+    const backend = item.stageSchedule ?? {};
+    const merged: StageSchedule = { ...backend };
+    Object.entries(local).forEach(([stage, entry]) => {
+      merged[stage] = { ...merged[stage], ...entry };
+    });
+    Object.entries(overlay.completions[item.id] ?? {}).forEach(([stage, completedAt]) => {
+      merged[stage] = { ...merged[stage], completedAt };
+    });
+    const patched = {
+      ...item,
+      ...edits,
+      stageSchedule: merged,
+      stageCompletedAt: overlay.completions[item.id] ?? {},
+    };
     if (!created || edits?.progress !== undefined) return patched;
     return { ...patched, progress: deriveProgress(item.id) };
   };
@@ -474,6 +546,10 @@ export type SeedTask = {
   title: string;
   description: string;
   assigneeRole: SeedAssigneeRole;
+  /** 事项类型预设：默认 output；建立客户画像为 input。 */
+  type?: "input" | "output" | "prompt";
+  /** 操作记录预设：建立客户画像记录「新建联系人」。 */
+  action?: string;
 };
 
 export const SEED_TASKS: SeedTask[] = [
@@ -484,6 +560,8 @@ export const SEED_TASKS: SeedTask[] = [
     description:
       "梳理目标客户的行业背景、采购角色与决策链路，明确关键诉求与痛点，为后续方案与报价提供依据。",
     assigneeRole: "lead",
+    type: "input",
+    action: "contact",
   },
   {
     stage: "requirement",
@@ -587,14 +665,48 @@ export const deleteProject = async (id: string) => {
   await apiRemoveProject(id);
   const gone = new Set(state.removed.projects ?? []);
   gone.add(id);
-  commit({ ...state, removed: { ...state.removed, projects: [...gone] } });
+  const completions = { ...state.completions };
+  delete completions[id];
+  const schedules = { ...state.schedules };
+  delete schedules[id];
+  commit({ ...state, completions, schedules, removed: { ...state.removed, projects: [...gone] } });
 };
 
-export const setProjectStage = async (id: string, stage: StageKey, message?: string) => {
-  await apiUpdateProject(id, { stage });
+export const setProjectStage = async (
+  id: string,
+  stage: StageKey,
+  message?: string,
+  completedStage?: StageKey
+) => {
+  /** 阶段推进时记录「离开的阶段」实际完成时间，并同步到后端 stageSchedule。 */
+  const completedAt = completedStage ? nowIso() : null;
+  const scheduleEntry = completedStage
+    ? { ...state.schedules[id]?.[completedStage], completedAt: completedAt! }
+    : null;
+  const patch: Partial<ProjectInput> = { stage };
+  if (completedStage && scheduleEntry) {
+    patch.stageSchedule = {
+      ...state.schedules[id],
+      [completedStage]: scheduleEntry,
+    };
+  }
+  await apiUpdateProject(id, patch);
+
+  const completions = completedAt && completedStage
+    ? {
+        ...state.completions,
+        [id]: { ...state.completions[id], [completedStage]: completedAt },
+      }
+    : state.completions;
+  const schedules = scheduleEntry && completedStage
+    ? {
+        ...state.schedules,
+        [id]: { ...state.schedules[id], [completedStage]: scheduleEntry },
+      }
+    : state.schedules;
   commit(
     withLog(
-      { ...state },
+      { ...state, completions, schedules },
       activity(id, message ?? `set stage to ${stageLabel(stage, false)}`, id, "project", "stage")
     )
   );
@@ -615,6 +727,8 @@ export const addIssue = (
     description?: string;
     status?: string;
     priority?: string;
+    type?: string;
+    action?: string | null;
     severity?: string;
     assigneeId?: string | null;
     number?: number;
@@ -629,6 +743,8 @@ export const addIssue = (
     description: input.description ?? "",
     status: input.status ?? "todo",
     priority: input.priority ?? "medium",
+    type: input.type ?? "output",
+    action: input.action ?? "",
     severity: input.severity ?? "minor",
     reporterId: CURRENT_USER_ID,
     assigneeId: input.assigneeId ?? null,
@@ -657,6 +773,8 @@ export const addTask = (
     description?: string;
     status?: string;
     priority?: string;
+    type?: string;
+    action?: string | null;
     assigneeId?: string | null;
     dueDate?: string | null;
     estimate?: number | null;
@@ -670,6 +788,8 @@ export const addTask = (
     description: input.description ?? "",
     status: input.status ?? "todo",
     priority: input.priority ?? "medium",
+    type: input.type ?? "output",
+    action: input.action ?? "",
     labelIds: [],
     assigneeId: input.assigneeId ?? null,
     dueDate: input.dueDate || "RELATIVE_DAYS_PLUS7",
@@ -875,6 +995,26 @@ export const stageFormKey = (projectNo: string, stage: StageKey) =>
 
 export const getStageForm = (key: string): StageForm | undefined => state.forms[key];
 
+/** 保存阶段的预估起止：写本地表单 + 同步后端 stageSchedule 的 estimatedStart/estimatedEnd。 */
+export const saveStageEstimatedDates = (
+  projectId: string,
+  stage: StageKey,
+  estimatedStart: string,
+  estimatedEnd: string
+) => {
+  const entry: StageScheduleEntry = {
+    ...state.schedules[projectId]?.[stage],
+    estimatedStart,
+    estimatedEnd,
+  };
+  const schedules = {
+    ...state.schedules,
+    [projectId]: { ...state.schedules[projectId], [stage]: entry },
+  };
+  commit(withLog({ ...state, schedules }, undefined));
+  void apiUpdateProject(projectId, { stageSchedule: schedules[projectId] });
+};
+
 export const saveStageForm = (
   key: string,
   form: StageForm,
@@ -908,7 +1048,8 @@ export const completeStageForm = (key: string, form: StageForm, projectId?: stri
   setProjectStage(
     projectId,
     target,
-    `auto-advanced to ${stageLabel(target, false)} after ${key} form`
+    `auto-advanced to ${stageLabel(target, false)} after ${key} form`,
+    current
   );
 };
 

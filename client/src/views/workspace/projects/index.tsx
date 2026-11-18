@@ -2,16 +2,11 @@ import { Fragment, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router";
 import { toast } from "@/components/shadcn-dashboard/sonner/toast";
+import Loading from "@/components/shadcn-dashboard/spinner/loading";
 import {
-  ArrowDown,
-  ArrowUp,
-  Check,
-  ChevronDown,
-  ChevronsUp,
   Columns3,
   List,
   ListFilter,
-  Minus,
   Search,
   SlidersHorizontal,
   UserRound,
@@ -39,7 +34,6 @@ import { useUsers } from "src/api/auth/use-users";
 import type { SeedAssigneeRole } from "src/api/workspace/project-stages";
 import type { WsProject } from "src/types/apps/workspace";
 import {
-  PmsAvatar,
   PmsCard,
   PmsCell,
   PmsDate,
@@ -50,25 +44,22 @@ import {
   PmsOptionGroup,
   PmsPage,
   PmsPopover,
-  PmsPriority,
+  PriorityMenu,
   PmsProgress,
   PmsRow,
   PmsSegmented,
   type PmsColumn,
 } from "../pms";
 import {
-  DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuGroup,
-  DropdownMenuItem,
   DropdownMenuLabel,
-  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { NewProjectDialog, type NewProjectValues } from "./new-project-dialog";
 import { SetupSteps, type StepItem } from "@/components/shadcn-dashboard/animated-list/animated-list-02";
 import { ProjectRowActions, statusVisual } from "./project-row-actions";
-import AvatarDemo, { type AvatarMember } from "@/components/shadcn-dashboard/avatar/avatar-11";
+import { PeopleField } from "../people-field";
 
 /**
  * 列宽平衡：项目列 w-48（比原 w-56 短，保留名称可读性）；
@@ -83,15 +74,6 @@ const COLUMNS: PmsColumn[] = [
   { label: "Priority", w: "w-32" },
   { label: "Created", w: "w-40" },
 ];
-/** 优先级下拉：与任务列表一致的降序与图标，选择后写入后端。 */
-const PRIORITY_MENU = [
-  { value: "urgent", label: "Urgent", icon: ChevronsUp, tone: "text-red-500" },
-  { value: "high", label: "High", icon: ArrowUp, tone: "text-orange-500" },
-  { value: "medium", label: "Medium", icon: Minus, tone: "text-muted-foreground" },
-  { value: "low", label: "Low", icon: ArrowDown, tone: "text-sky-500" },
-  { value: "none", label: "none", icon: Minus, tone: "text-muted-foreground" },
-] as const;
-
 const PRIORITY_RANK: Record<string, number> = {
   urgent: 4,
   high: 3,
@@ -118,7 +100,7 @@ const BOARD_TONES = [
 
 export default function ProjectsPage() {
   const { t } = useTranslation();
-  const { snap, zh, user, firstName, isLoading } = useWorkspace();
+  const { snap, zh, isLoading } = useWorkspace();
   const { tasks: allTasks } = useTasks();
   const { users: members } = useUsers();
   const [view, setView] = useState("List");
@@ -193,6 +175,8 @@ export default function ProjectsPage() {
           projectId: created.id,
           sprintId: seed.stage,
           assigneeId,
+          type: seed.type ?? "output",
+          action: seed.action ?? "",
           // 待规划：不赋值预估工时与到期日
           status: "backlog",
           dueDate: null,
@@ -274,17 +258,6 @@ export default function ProjectsPage() {
     [list, store]
   );
 
-  const membersOf = (project: WsProject): AvatarMember[] =>
-    project.memberIds.map((id) => {
-      const person = user(id);
-      return {
-        name: person?.name ?? id,
-        image: person?.avatar,
-        initials: person?.name?.[0]?.toUpperCase() ?? id[0]?.toUpperCase(),
-        role: person?.role,
-      };
-    });
-
   /** 下单日期 = 订单阶段开始日期，当前由 dueDate 承载（创建项目时设定）。 */
   const orderDateOf = (project: WsProject) => project.dueDate;
   /** 看板卡片时间沿用项目创建时刻（下单仅有日期粒度）。 */
@@ -298,7 +271,7 @@ export default function ProjectsPage() {
   const createdText = (project: WsProject) => formatDate(project.createdAt, "ch", "full");
 
 
-  if (isLoading || !snap) return <div className="p-10 text-sm text-muted-foreground">…</div>;
+  if (isLoading || !snap) return <Loading />;
 
   const visible = (label: string) => !hidden.includes(label);
   const columns = COLUMNS.filter((c) => c.label === "Project" || visible(c.label));
@@ -459,25 +432,16 @@ export default function ProjectsPage() {
                       <Fragment>
                         {visible("Lead") ? (
                           <PmsCell w="w-32">
-                            <div className="flex items-center gap-2">
-                              <PmsAvatar
-                                name={user(project.leadId)?.name}
-                                avatar={user(project.leadId)?.avatar}
-                              />
-                              <span className="truncate text-sm">
-                                {firstName(project.leadId)}
-                              </span>
-                            </div>
+                            <PeopleField users={snap?.users ?? []} value={project.leadId} />
                           </PmsCell>
                         ) : null}
                         {visible("Members") ? (
                           <PmsCell w="w-28">
-                            <AvatarDemo
-                              members={membersOf(project)}
-                              visible={3}
-                              showHint={false}
-                              size="sm"
-                              align="start"
+                            <PeopleField
+                              users={snap?.users ?? []}
+                              value={project.memberIds}
+                              multiple
+                              max={3}
                             />
                           </PmsCell>
                         ) : null}
@@ -491,32 +455,10 @@ export default function ProjectsPage() {
                         ) : null}
                         {visible("Priority") ? (
                           <PmsCell w="w-32">
-                            <DropdownMenu>
-                              <DropdownMenuTrigger
-                                aria-label={`Priority: ${project.priority}`}
-                                className="flex items-center gap-1 rounded-md px-1 py-1 text-sm outline-none hover:bg-muted"
-                              >
-                                <PmsPriority value={project.priority} />
-                                <ChevronDown className="size-3 text-muted-foreground" />
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="start" className="w-40">
-                                <div className="px-2 py-1.5 text-xs text-muted-foreground">
-                                  {t("Change priority")}
-                                </div>
-                                {PRIORITY_MENU.map(({ value, label, icon: Icon, tone }) => (
-                                  <DropdownMenuItem
-                                    key={value}
-                                    onClick={() => updateProject(project.id, { priority: value })}
-                                  >
-                                    <Icon className={`size-3.5 ${tone}`} />
-                                    {t(label)}
-                                    {project.priority === value ? (
-                                      <Check className="ml-auto size-4" />
-                                    ) : null}
-                                  </DropdownMenuItem>
-                                ))}
-                              </DropdownMenuContent>
-                            </DropdownMenu>
+                            <PriorityMenu
+                              value={project.priority}
+                              onChange={(priority) => updateProject(project.id, { priority })}
+                            />
                           </PmsCell>
                         ) : null}
                         {visible("Created") ? (
@@ -577,10 +519,7 @@ export default function ProjectsPage() {
                           <span className="text-[11px] text-muted-foreground">
                             {formatDate(orderDateOf(project), "en", "full")} · {cardTime(project)}
                           </span>
-                          <PmsAvatar
-                            name={user(project.leadId)?.name}
-                            avatar={user(project.leadId)?.avatar}
-                          />
+                          <PeopleField users={snap?.users ?? []} value={project.leadId} />
                         </div>
                       </Link>
                     </div>

@@ -1,13 +1,10 @@
 import { useEffect, type ReactNode } from "react";
 import { Navigate, Outlet, useLocation } from "react-router";
 import { useAuth } from "@/context/AuthContext";
+import Loading from "@/components/shadcn-dashboard/spinner/loading";
 
 export function AuthLoading() {
-  return (
-    <div className="flex min-h-screen items-center justify-center">
-      <span className="size-5 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-foreground" />
-    </div>
-  );
+  return <Loading fullScreen />;
 }
 
 /**

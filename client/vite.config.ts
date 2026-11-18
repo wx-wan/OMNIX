@@ -18,6 +18,9 @@ export default defineConfig({
     // 监听所有网卡（0.0.0.0），允许同一 WiFi 下的其他设备通过局域网 IP 访问。
     // 否则默认只绑 localhost，局域网设备连不上 192.168.x.x:5173。
     host: true,
+    // 局域网设备用机器名（如 STRA.local）访问时，Vite 的 host 校验会返回 403；
+    // 显式放行 .local / 机器名 / 局域网 IP 段，IP 直连本身已可用。
+    allowedHosts: ['.local', 'STRA', '192.168.2.76'],
     // 把浏览器实际访问的 Host/协议透传给后端（X-Forwarded-Host/Proto），
     // 否则 OAuth 元数据 / 401 头里的 issuer 会写成后端的 localhost:4000，跨设备失效。
     proxy: {

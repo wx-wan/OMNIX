@@ -1,5 +1,6 @@
 import { Fragment, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import Loading from "@/components/shadcn-dashboard/spinner/loading";
 import { ListFilter, Search, SlidersHorizontal } from "lucide-react";
 import {
   formatDate,
@@ -116,7 +117,7 @@ export default function SprintsPage() {
     setCreating(false);
   };
 
-  if (isLoading || !snap) return <div className="p-10 text-sm text-muted-foreground">…</div>;
+  if (isLoading || !snap) return <Loading />;
 
   return (
     <PmsPage title={t("Sprints")} count={t("N sprints", { n: all.length })}>

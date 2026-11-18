@@ -30,7 +30,6 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { WsUser } from "src/types/apps/workspace";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -56,9 +55,8 @@ import {
 import {
   STAGES,
   STAGE_NO_TIME,
-  stageTimeRange,
+  stageDateInfo,
   archiveProject,
-  getStageForm,
   getStageView,
   projectNo,
   projectStage,
@@ -67,26 +65,24 @@ import {
   saveStageOrder,
   setActiveProject,
   setProjectMembers,
-  stageFormKey,
   stageIndexOf,
   stageLabel,
   updateProject,
   useProjectStageStore,
 } from "src/api/workspace/project-stages";
-import { PmsAssignee, PmsAvatar, PRIORITY_META } from "../pms";
+import { PmsAvatar, PriorityMenu } from "../pms";
+import { PeopleField } from "../people-field";
 import { taskNo } from "src/api/workspace/task-no";
 import { projectProgress } from "src/api/workspace/project-progress";
 import { ProgressTicker } from "./progress-ticker";
 import { StackRipple } from "@/components/shadcn-dashboard/animated-list/animated-list-03";
-import SpinnerBars from "@/components/shadcn-dashboard/spinner/spinner-06";
-import AvatarDemo, { type AvatarMember } from "@/components/shadcn-dashboard/avatar/avatar-11";
+import Loading from "@/components/shadcn-dashboard/spinner/loading";
 import { DurationTimer } from "./duration-timer";
 import { LeadSelect } from "./lead-select";
 import { ArchiveProjectDialog } from "./edit-archive-dialogs";
 import { STATUS_ITEMS, statusVisual } from "./project-row-actions";
 import { InlineEdit } from "@/components/shadcn-dashboard/input/inline-edit";
-import { DateRangePicker } from "@/components/shadcn-dashboard/date-picker/date-picker-02";
-import type { DateRange } from "react-day-picker";
+import { DatePicker } from "@/components/ui/date-picker";
 import {
   ProjectDialogs,
   RowActions,
@@ -162,14 +158,6 @@ const STATUS_LABEL: Record<string, string> = {
 const labelOf = (value: string) =>
   STATUS_LABEL[value] ?? value.charAt(0).toUpperCase() + value.slice(1);
 
-/** 标题旁优先级 badge 沿用同一套状态色板，与选择项文案一一对应。 */
-const PRIORITY_BADGE: Record<string, string> = {
-  none: "bg-muted text-muted-foreground",
-  low: "bg-sky-400/10 text-sky-500",
-  medium: "bg-amber-500/10 text-amber-500",
-  high: "bg-orange-400/10 text-orange-500",
-  urgent: "bg-red-500/10 text-red-500",
-};
 /** 状态 tag 背景/文字色，与 STATUS_ITEMS 的 icon tone 保持一致。 */
 const STATUS_TONE_BADGE: Record<string, string> = {
   active: "bg-blue-500/10 text-blue-500",
@@ -339,12 +327,7 @@ export default function ProjectDetailPage() {
     };
   }, [snap, id, dbTasks, dbIssues]);
 
-  if (isLoading || !snap)
-    return (
-      <div className="flex min-h-40 items-center justify-center text-muted-foreground">
-        <SpinnerBars />
-      </div>
-    );
+  if (isLoading || !snap) return <Loading />;
 
   if (!project || !data)
     return (
@@ -369,17 +352,6 @@ export default function ProjectDetailPage() {
   const members = project.memberIds
     .map((memberId) => user(memberId))
     .filter(Boolean);
-  /** WsUser → AvatarMember：可编辑成员组需要 id 做增删。 */
-  const toAvatarMember = (person: WsUser): AvatarMember => ({
-    id: person.id,
-    name: person.name,
-    image: person.avatar,
-    initials: person.name?.[0]?.toUpperCase() ?? "?",
-    role: person.role,
-  });
-  const memberAvatars = members.map((member) => toAvatarMember(member!));
-  const allUserAvatars = snap.users.map(toAvatarMember);
-
   const tabs: { key: string; label: string; icon: LucideIcon }[] = [
     { key: "Overview", label: t("Overview"), icon: LayoutDashboard },
     { key: "Sprints", label: `${t("Sprints")} (${STAGES.length + data.sprints.length})`, icon: Zap },
@@ -496,15 +468,25 @@ export default function ProjectDetailPage() {
       title: stageLabel(stage.key, zh),
       subtitle: (() => {
         if (STAGE_NO_TIME.has(stage.key)) return "\u00A0"; // 保留占位，保持卡片高度一致
-        const saved = getStageForm(stageFormKey(no, stage.key));
-        if (saved?.createDate && saved?.dueDate) {
-          return `${fullDate(saved.createDate)} – ${fullDate(saved.dueDate)}`;
+        const info = stageDateInfo(stage.key, project.createdAt, project.stageSchedule);
+        if (!info) return "\u00A0";
+        const startText = fullDate(info.start.toISOString());
+        if (!info.completedAt) {
+          return `${startText} – ${fullDate(info.estimatedEnd.toISOString())}`;
         }
-        if (i > stageIndexOf(currentStage)) return tr("To be planned", "待规划");
-        const range = stageTimeRange(stage.key, project.createdAt);
-        return range
-          ? `${fullDate(range.start.toISOString())} – ${fullDate(range.end.toISOString())}`
-          : "\u00A0";
+        return (
+          <span
+            className={
+              info.variance === 0
+                ? "text-foreground"
+                : info.variance === -1
+                  ? "text-green-600"
+                  : "text-red-500"
+            }
+          >
+            {startText} – {fullDate(info.completedAt.toISOString())}
+          </span>
+        );
       })(),
       statusText: finished
         ? tr("Done", "完成")
@@ -650,8 +632,8 @@ export default function ProjectDetailPage() {
       {t(labelOf(value))}
     </span>
   );
-  const personCell = (name?: string, avatar?: string) => (
-    <PmsAssignee name={name} avatar={avatar} />
+  const personCell = (id?: string | null) => (
+    <PeopleField users={snap.users} value={id ?? null} />
   );
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-6 rounded-xl bg-background p-6">
@@ -725,44 +707,7 @@ export default function ProjectDetailPage() {
                 })}
               </DropdownMenuContent>
             </DropdownMenu>
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={
-                  <button
-                    type="button"
-                    className={cn(
-                      "inline-flex h-5 w-fit shrink-0 cursor-pointer items-center justify-center rounded-4xl border-0 px-2 py-0.5 text-xs font-medium whitespace-nowrap shadow-none hover:opacity-80",
-                      PRIORITY_BADGE[project.priority] ?? "bg-muted text-muted-foreground"
-                    )}
-                  />
-                }
-              >
-                <span className="flex items-center gap-1.5">
-                  {(() => {
-                    const meta = PRIORITY_META[project.priority] ?? PRIORITY_META.none;
-                    const PriorityIcon = meta.icon;
-                    return <PriorityIcon className={cn("size-3.5", meta.color)} />;
-                  })()}
-                  {t(project.priority)}
-                </span>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-40">
-                {["none", "low", "medium", "high", "urgent"].map((priority) => {
-                  const meta = PRIORITY_META[priority] ?? PRIORITY_META.none;
-                  const PriorityIcon = meta.icon;
-                  return (
-                  <DropdownMenuItem
-                    key={priority}
-                    onClick={() => saveField({ priority })}
-                  >
-                    <PriorityIcon className={cn("size-3.5", meta.color)} />
-                    {t(priority)}
-                    {project.priority === priority ? <Check className="ml-auto size-4" /> : null}
-                  </DropdownMenuItem>
-                  );
-                })}
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <PriorityMenu value={project.priority} onChange={(priority) => saveField({ priority })} />
           </div>
           <InlineEdit
             as="p"
@@ -858,10 +803,7 @@ export default function ProjectDetailPage() {
                                   {tr(`Overdue ${days}d`, `逾期 ${days} 天`)}
                                 </span>
                                 <span className="hidden shrink-0 sm:block">
-                                  {personCell(
-                                    task.assigneeId ? userName(task.assigneeId) : undefined,
-                                    task.assigneeId ? user(task.assigneeId)?.avatar : undefined
-                                  )}
+                                  {personCell(task.assigneeId)}
                                 </span>
                               </button>
                             </li>
@@ -882,10 +824,7 @@ export default function ProjectDetailPage() {
                                 {t("High priority")}
                               </span>
                               <span className="hidden shrink-0 sm:block">
-                                {personCell(
-                                  issue.assigneeId ? userName(issue.assigneeId) : undefined,
-                                  issue.assigneeId ? user(issue.assigneeId)?.avatar : undefined
-                                )}
+                                {personCell(issue.assigneeId)}
                               </span>
                             </button>
                           </li>
@@ -1292,7 +1231,6 @@ export default function ProjectDetailPage() {
               {detailRow(
                 t("Lead"),
                 <LeadSelect
-                  users={snap.users}
                   value={project.leadId}
                   onChange={(leadId) => {
                     void updateProject(id, { leadId }).then(() =>
@@ -1303,16 +1241,15 @@ export default function ProjectDetailPage() {
               )}
               {detailRow(
                 t("Members"),
-                <AvatarDemo
-                  members={memberAvatars}
-                  allUsers={allUserAvatars}
+                <PeopleField
+                  users={snap.users}
+                  value={project.memberIds}
+                  multiple
                   editable
-                  visible={4}
-                  showHint={false}
-                  size="sm"
-                  align="start"
+                  max={4}
+                  label={t("Members")}
                   onChange={(ids) => {
-                    void setProjectMembers(id, ids).then(() =>
+                    void setProjectMembers(id, ids as string[]).then(() =>
                       toast.success(t("Saved successfully"))
                     );
                   }}
@@ -1320,24 +1257,16 @@ export default function ProjectDetailPage() {
               )}
               {detailRow(
                 t("Started"),
-                <DateRangePicker
-                  single
+                <DatePicker
+                  variant="inline"
                   zh={zh}
                   value={
                     project.createdAt
-                      ? {
-                          from: new Date(new Date(project.createdAt).toISOString().slice(0, 10)),
-                          to: new Date(new Date(project.createdAt).toISOString().slice(0, 10)),
-                        }
+                      ? new Date(project.createdAt).toISOString().slice(0, 10)
                       : undefined
                   }
-                  onCommit={(range: DateRange) =>
-                    range.from &&
-                    saveField({
-                      createdAt: new Date(
-                        `${range.from.getFullYear()}-${String(range.from.getMonth() + 1).padStart(2, "0")}-${String(range.from.getDate()).padStart(2, "0")}`
-                      ).toISOString(),
-                    })
+                  onChange={(value) =>
+                    value && saveField({ createdAt: new Date(value).toISOString() })
                   }
                 />
               )}

@@ -2,7 +2,7 @@
 // @ts-ignore
 
 import { Suspense, ComponentType, FC } from 'react';
-import Spinner from '../../../../views/spinner/Spinner';
+import Loading from '@/components/shadcn-dashboard/spinner/loading';
 
 // ===========================|| LOADABLE - LAZY LOADING ||=========================== //
 
@@ -10,7 +10,7 @@ const Loadable =
   <P extends object>(Component: ComponentType<P>): FC<P> =>
   (props: P) =>
     (
-      <Suspense fallback={<Spinner />}>
+      <Suspense fallback={<Loading fullScreen />}>
         <Component {...props} />
       </Suspense>
     );

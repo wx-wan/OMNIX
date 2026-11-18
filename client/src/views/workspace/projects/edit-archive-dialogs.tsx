@@ -23,19 +23,7 @@ import {
 } from "src/components/ui/select";
 import { Textarea } from "src/components/ui/textarea";
 import type { WsProject, WsUser } from "src/types/apps/workspace";
-import { PmsAvatar } from "../pms";
-import { roleLabelKey } from "./role-label";
-import SelectWithAvatars, { type SelectUser } from "@/components/shadcn-dashboard/select/select-07";
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { ChevronDown } from "lucide-react";
+import { PeopleField } from "../people-field";
 
 /**
  * 线上 PMS /projects/p1 的「Edit Project」与「Archive "…"?」两个居中弹窗 1:1 复刻。
@@ -97,80 +85,6 @@ function EnumSelect({
         ))}
       </SelectContent>
     </Select>
-  );
-}
-
-/** WsUser → SelectUser：接 select-07 block 的真实用户来源。 */
-const toSelectUser = (person: WsUser): SelectUser => ({
-  id: person.id,
-  src: person.avatar,
-  fallback: person.name?.[0]?.toUpperCase() || "?",
-  name: person.name,
-});
-
-/** 成员多选下拉：左侧头像 + 名称，右侧角色；复用 shadcn DropdownMenu 的复选项。 */
-function MemberMultiSelect({
-  users,
-  value,
-  onChange,
-}: {
-  users: WsUser[];
-  value: string[];
-  onChange: (ids: string[]) => void;
-}) {
-  const { t } = useTranslation();
-  const selected = users.filter((person) => value.includes(person.id));
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        render={
-          <button
-            type="button"
-            className="flex w-full min-h-9 items-center justify-between gap-2 rounded-lg border border-input bg-background px-2.5 py-1 text-sm outline-none hover:bg-accent/40"
-          />
-        }
-      >
-        <span className="flex min-w-0 items-center -space-x-2">
-          {selected.length ? (
-            selected.slice(0, 5).map((person) => (
-              <PmsAvatar key={person.id} name={person.name} avatar={person.avatar} size={6} />
-            ))
-          ) : (
-            <span className="text-muted-foreground">{t("Select a member")}</span>
-          )}
-          {selected.length > 5 ? (
-            <span className="ms-2 text-xs text-muted-foreground">+{selected.length - 5}</span>
-          ) : null}
-        </span>
-        <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-72">
-        <DropdownMenuGroup>
-          <DropdownMenuLabel>{t("Members")}</DropdownMenuLabel>
-          <DropdownMenuSeparator />
-          {users.map((person) => (
-            <DropdownMenuCheckboxItem
-              key={person.id}
-              checked={value.includes(person.id)}
-              onCheckedChange={(checked) =>
-                onChange(
-                  checked
-                    ? [...value, person.id]
-                    : value.filter((id) => id !== person.id)
-                )
-              }
-              className="flex items-center gap-2"
-            >
-              <PmsAvatar name={person.name} avatar={person.avatar} size={6} />
-              <span className="text-sm">{person.name}</span>
-              <span className="ms-auto text-xs text-muted-foreground">
-                {t(roleLabelKey(person.role))}
-              </span>
-            </DropdownMenuCheckboxItem>
-          ))}
-        </DropdownMenuGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
   );
 }
 
@@ -289,22 +203,27 @@ export function EditProjectDialog({
             <Field>
               <FieldLabel htmlFor="edit-project-lead">{t("Lead")}</FieldLabel>
               <div className="[&>div]:max-w-none">
-                <SelectWithAvatars
-                  id="edit-project-lead"
-                  label=""
-                  users={users.map(toSelectUser)}
+                <PeopleField
+                  users={users}
                   value={values.leadId}
-                  onChange={(value) => set("leadId", value)}
+                  onChange={(value) => set("leadId", (value as string) ?? "")}
+                  editable
+                  label={t("Lead")}
                 />
               </div>
             </Field>
 
             <Field>
               <FieldLabel>{t("Members")}</FieldLabel>
-              <MemberMultiSelect
+              <PeopleField
                 users={users}
                 value={values.memberIds}
-                onChange={(ids) => set("memberIds", ids)}
+                onChange={(ids) => set("memberIds", ids as string[])}
+                multiple
+                editable
+                max={5}
+                label={t("Members")}
+                className="min-h-9"
               />
             </Field>
           </FieldGroup>

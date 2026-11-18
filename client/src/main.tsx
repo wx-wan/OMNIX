@@ -2,7 +2,7 @@ import { Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
 import '../src/css/globals.css';
 import App from './App.tsx';
-import Spinner from './views/spinner/Spinner.tsx';
+import Loading from './components/shadcn-dashboard/spinner/loading';
 
 import { ThemeProvider } from './context/shadcntheme/ThemeContext.tsx';
 import { CustomizerProvider } from './context/CustomizerContext.tsx';
@@ -19,7 +19,7 @@ deferRender().then(() => {
   createRoot(document.getElementById('root')!).render(
     <ThemeProvider defaultTheme="light" storageKey="theme">
       <CustomizerProvider>
-        <Suspense fallback={<Spinner />}>
+        <Suspense fallback={<Loading fullScreen />}>
           <App />
         </Suspense>
       </CustomizerProvider>

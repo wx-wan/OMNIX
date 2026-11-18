@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "@/components/shadcn-dashboard/sonner/toast";
+import Loading from "@/components/shadcn-dashboard/spinner/loading";
 import { useAuth } from "@/context/AuthContext";
 import {
   ChevronDown,
@@ -150,8 +151,8 @@ export default function SettingsMembers() {
               <TableBody>
                 {isLoading && (
                   <TableRow>
-                    <TableCell colSpan={isAdmin ? 5 : 4} className="px-3 py-6 text-center text-sm text-muted-foreground">
-                      {t("Loading...")}
+                    <TableCell colSpan={isAdmin ? 5 : 4} className="px-3">
+                      <Loading className="min-h-24" />
                     </TableCell>
                   </TableRow>
                 )}

@@ -52,6 +52,8 @@ const InboxApp = Loadable(lazy(() => import('../views/inbox')));
 const ProjectsPage = Loadable(lazy(() => import('../views/workspace/projects')));
 const ProjectDetailPage = Loadable(lazy(() => import('../views/workspace/projects/detail')));
 const StageDetailPage = Loadable(lazy(() => import('../views/workspace/projects/stage-detail')));
+const ItemDetailPage = Loadable(lazy(() => import('../views/workspace/item-detail')));
+const TeamPage = Loadable(lazy(() => import('../views/workspace/team')));
 const SprintsPage = Loadable(lazy(() => import('../views/workspace/sprints')));
 const CalendarWorkspacePage = Loadable(lazy(() => import('../views/workspace/calendar')));
 // PMS 设置页：5 个子页逐项 1:1 复刻自 pms-audit/dom/23-settings-*.html
@@ -151,6 +153,8 @@ const Router = [
           { path: '/projects', element: <ProjectsPage /> },
           { path: '/projects/:id', element: <ProjectDetailPage /> },
           { path: '/projects/:id/stages/:stage', element: <StageDetailPage /> },
+          { path: '/issues/:id', element: <ItemDetailPage /> },
+          { path: '/team', element: <TeamPage /> },
           { path: '/apps/requirements/:stage', element: <RequirementStagePage /> },
           { path: '/apps/invoice/edit', element: <RequirementEditPage /> },
           { path: '/apps/invoice/edit/:projectNo', element: <RequirementEditPage /> },

@@ -484,6 +484,10 @@ model Task {
   description String    @default("")
   status      String    @default("todo") // todo | in_progress | review | done | closed
   priority    String    @default("medium") // low | medium | high | urgent
+  /// 事项类型：output 输出 | prompt 提示 | input 输入。
+  type        String    @default("output")
+  /// 操作列记录：所选预设操作 id（contact / product-requirement / ...），仅记录不执行。
+  action      String?   @default("")
   labelIds    String[]  @default([]) @map("label_ids")
   assigneeId  String?   @map("assignee_id")
   dueDate     DateTime? @map("due_date")
@@ -511,6 +515,10 @@ model Issue {
   status      String    @default("backlog") // backlog | todo | in_progress | done | closed
   priority    String    @default("medium") // low | medium | high | urgent
   severity    String    @default("minor") // trivial | minor | major | critical
+  /// 事项类型：output 输出 | prompt 提示 | input 输入。
+  type        String    @default("output")
+  /// 操作列记录：所选预设操作 id（contact / product-requirement / ...），仅记录不执行。
+  action      String?   @default("")
   assigneeId  String?   @map("assignee_id")
   /** 创建人：由后端按创建时的登录会话写入，前端不可指定或改写。 */
   reporterId  String?   @map("reporter_id")
@@ -539,6 +547,9 @@ model Project {
   teamId      String?  @map("team_id")
   stage       String   @default("requirement")
   no          String   @default("")
+  /// 九阶段日程：每阶段 { estimatedStart, estimatedEnd, completedAt }。
+  /// estimatedStart/estimatedEnd 为人工填写的预估起止；completedAt 为点击「完成阶段」时写入的实际完成时间。
+  stageSchedule Json? @map("stage_schedule")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

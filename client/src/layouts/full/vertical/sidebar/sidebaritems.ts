@@ -57,7 +57,7 @@ import {
 /**
  * 导航结构（参考 PMS Workspace 复刻）：
  * - Home：Dashboard / Inbox / Chats（Inbox 在聊天上方，PMS Home 组口径）
- * - Workspace：Projects / Calendar（Issues / Tasks / Sprints 入口按各自任务隐藏，路由保留）
+ * - Workspace：Projects / Calendar / Team（Issues / Tasks / Sprints 入口按各自任务隐藏，路由保留）
  * - Apps：保留既有 Apps 模块（已移除 Chats、Calendar、Notes、Blogs、Tickets）
  * heading 使用英文 key，走导航层 i18n，英文界面不再硬显示中文。
  */
@@ -99,6 +99,12 @@ const SidebarContent: MenuItem[] = [
         name: "Calendar",
         icon: CalendarDays,
         url: "/calendar",
+      },
+      {
+        id: uniqueId(),
+        name: "Team",
+        icon: Users,
+        url: "/team",
       },
     ],
   },

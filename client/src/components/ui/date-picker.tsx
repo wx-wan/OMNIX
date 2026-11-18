@@ -2,7 +2,7 @@ import * as React from "react";
 import { CalendarIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
+import { formatDate } from "src/api/workspace/use-workspace";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
@@ -14,6 +14,10 @@ export interface DatePickerProps {
   placeholder?: string;
   className?: string;
   disabled?: boolean;
+  /** 表单内为带边框按钮；cell 为表格紧凑样式；inline 为详情页纯文字+图标。 */
+  variant?: "field" | "cell" | "inline";
+  /** inline 变体的日期按中文/英文短日期展示。 */
+  zh?: boolean;
 }
 
 const toISODate = (date: Date): string => {
@@ -41,6 +45,8 @@ export function DatePicker({
   placeholder = "Select a date",
   className,
   disabled,
+  variant = "field",
+  zh = false,
 }: DatePickerProps) {
   const [open, setOpen] = React.useState(false);
   const date = fromISODate(value);
@@ -51,21 +57,38 @@ export function DatePicker({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
         render={
-          <Button
+          <button
             id={id}
             type="button"
-            variant="outline"
             disabled={disabled}
             className={cn(
-              "w-full justify-start text-left font-normal",
+              "w-full justify-start text-left font-normal outline-none",
               !date && "text-muted-foreground",
+              variant === "field"
+                ? "inline-flex h-9 items-center rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring"
+                : null,
+              variant === "cell"
+                ? "inline-flex h-8 w-32 items-center rounded-md border bg-background px-2 text-sm text-muted-foreground hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
+                : null,
+              variant === "inline"
+                ? "inline-flex h-auto w-auto items-center gap-1.5 rounded-md border-0 bg-transparent p-0 font-medium hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
+                : null,
               className
             )}
           />
         }
       >
-        {date ? date.toLocaleDateString() : <span>{placeholder}</span>}
-        <CalendarIcon className="ml-auto h-4 w-4 opacity-60" />
+        {date
+          ? variant === "inline"
+            ? formatDate(toISODate(date), zh ? "ch" : "en", "short")
+            : date.toLocaleDateString()
+          : <span>{placeholder}</span>}
+        <CalendarIcon
+          className={cn(
+            "h-4 w-4 opacity-60",
+            variant === "inline" ? "ml-0 opacity-70" : "ml-auto"
+          )}
+        />
       </PopoverTrigger>
       <PopoverContent className="w-auto overflow-hidden p-0" align="start">
         <Calendar

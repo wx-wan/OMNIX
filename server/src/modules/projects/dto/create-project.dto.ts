@@ -3,6 +3,7 @@ import {
   IsBoolean,
   IsInt,
   IsNotEmpty,
+  IsObject,
   IsOptional,
   IsString,
   MaxLength,
@@ -68,4 +69,9 @@ export class CreateProjectDto {
   @IsOptional()
   @IsString()
   no?: string; // 项目编号，如 #2611002
+
+  /** 阶段日程：预估起止 estimatedStart/estimatedEnd 与实际完成 completedAt，按阶段 key 存 ISO 字符串。 */
+  @IsOptional()
+  @IsObject()
+  stageSchedule?: Record<string, Record<string, string>> | null;
 }

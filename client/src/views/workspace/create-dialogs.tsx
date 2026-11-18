@@ -23,15 +23,7 @@ import {
 import { Switch } from "src/components/ui/switch";
 import { Textarea } from "src/components/ui/textarea";
 import type { WsProject, WsUser } from "src/types/apps/workspace";
-import SelectWithAvatars, { type SelectUser } from "@/components/shadcn-dashboard/select/select-07";
-
-/** WsUser → SelectUser：经办人下拉复用 select-07 的真实用户来源。 */
-const toSelectUser = (person: WsUser): SelectUser => ({
-  id: person.id,
-  src: person.avatar,
-  fallback: person.name?.[0]?.toUpperCase() || "?",
-  name: person.name,
-});
+import { PeopleField } from "./people-field";
 
 /**
  * 线上 PMS 五个「新建」弹窗的 1:1 复刻。
@@ -315,13 +307,12 @@ export function NewIssueDialog({
       <Field>
         <FieldLabel htmlFor="issue-assignee">{t("Assignee")}</FieldLabel>
         <div className="[&>div]:max-w-none">
-          <SelectWithAvatars
-            id="issue-assignee"
-            label=""
-            labelText={t("Assign to")}
-            users={users.map(toSelectUser)}
+          <PeopleField
+            users={users}
             value={values.assigneeId}
-            onChange={(value) => set("assigneeId", value)}
+            onChange={(value) => set("assigneeId", (value as string) ?? "")}
+            editable
+            label={t("Assign to")}
           />
         </div>
       </Field>
@@ -454,13 +445,13 @@ export function NewTaskDialog({
         <Field>
           <FieldLabel htmlFor="task-assignee">{t("Assignee")}</FieldLabel>
           <div className="[&>div]:max-w-none">
-            <SelectWithAvatars
-              id="task-assignee"
-              label=""
-              labelText={t("Assign to")}
-              users={users.map(toSelectUser)}
+            <PeopleField
+              users={users}
               value={values.assigneeId}
-              onChange={(value) => set("assigneeId", value)}
+              onChange={(value) => set("assigneeId", (value as string) ?? "")}
+              editable
+              mode="select"
+              label={t("Assign to")}
             />
           </div>
         </Field>

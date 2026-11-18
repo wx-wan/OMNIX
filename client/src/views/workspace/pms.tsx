@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import {
   ArrowDown,
   ArrowUp,
+  Check,
   ChevronDown,
   ChevronsUp,
   CirclePlus,
@@ -10,7 +11,6 @@ import {
   Minus,
   MoreHorizontal,
   Plus,
-  UserRound,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -22,6 +22,8 @@ import {
 } from "@/components/ui/popover";
 import {
   DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -434,72 +436,6 @@ export function PmsAvatar({
   );
 }
 
-/** 未指派占位：虚线头像圈 + 文案，全项目共用同一套（负责人列 / 详情 / 下拉项）。 */
-export function PmsUnassigned({
-  size = "sm",
-  withAvatar = true,
-  className,
-}: {
-  size?: "xs" | "sm";
-  withAvatar?: boolean;
-  className?: string;
-}) {
-  const { t } = useTranslation();
-  return (
-    <span className={cn("flex items-center gap-2", size === "xs" ? "text-xs" : "text-sm", className)}>
-      {withAvatar ? (
-        <span className="flex size-6 shrink-0 items-center justify-center rounded-full border border-dashed text-muted-foreground">
-          <UserRound className="size-3.5" />
-        </span>
-      ) : null}
-      <span className="text-muted-foreground">{t("Unassigned")}</span>
-    </span>
-  );
-}
-
-/**
- * 经办人单元格：头像 + firstName（名字首段），未指派复用 PmsUnassigned。
- * 项目详情 / 阶段详情 / 任务 / 问题等所有列表共用同一套。
- */
-export function PmsAssignee({
-  name,
-  avatar,
-  size = "sm",
-}: {
-  name?: string | null;
-  avatar?: string;
-  size?: "xs" | "sm";
-}) {
-  if (!name) return <PmsUnassigned size={size} />;
-  return (
-    <span className={cn("flex items-center gap-2", size === "xs" ? "text-xs" : "text-sm")}>
-      <PmsAvatar name={name} avatar={avatar} />
-      <span className="truncate">{name.split(" ")[0]}</span>
-    </span>
-  );
-}
-
-export function PmsAvatarGroup({
-  people,
-  max = 3,
-}: {
-  people: { name: string; avatar?: string }[];
-  max?: number;
-}) {
-  return (
-    <div className="flex -space-x-2 [&>*]:ring-2 [&>*]:ring-background">
-      {people.slice(0, max).map((person, index) => (
-        <PmsAvatar key={`${person.name}-${index}`} {...person} />
-      ))}
-      {people.length > max ? (
-        <span className="relative flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] text-muted-foreground ring-2 ring-background">
-          +{people.length - max}
-        </span>
-      ) : null}
-    </div>
-  );
-}
-
 const PROGRESS_COLOR: Record<string, string> = {
   completed: "bg-teal-400",
   on_hold: "bg-amber-300",
@@ -547,31 +483,81 @@ export function PmsProgress({
   );
 }
 
-/** 优先级图标、配色与文案的单一数据源，列表与详情共用。 */
+/** 优先级唯一数据源：顺序、图标、配色、文案键集中在此，列表 / 详情 / 事项页共用。 */
+export const PRIORITY_ORDER = ["none", "low", "medium", "high", "urgent"] as const;
+
 export const PRIORITY_META: Record<
   string,
-  { icon: LucideIcon; color: string; labelKey: string }
+  { icon: LucideIcon; color: string; badge: string; labelKey: string }
 > = {
-  urgent: { icon: ChevronsUp, color: "text-red-500", labelKey: "Urgent" },
-  high: { icon: ArrowUp, color: "text-orange-500", labelKey: "High" },
-  medium: { icon: Minus, color: "text-amber-500", labelKey: "Medium" },
-  low: { icon: ArrowDown, color: "text-sky-500", labelKey: "Low" },
-  none: { icon: Minus, color: "text-muted-foreground", labelKey: "none" },
+  urgent: { icon: ChevronsUp, color: "text-red-500", badge: "bg-red-500/10", labelKey: "Urgent" },
+  high: { icon: ArrowUp, color: "text-orange-500", badge: "bg-orange-400/10", labelKey: "High" },
+  medium: { icon: Minus, color: "text-amber-500", badge: "bg-amber-500/10", labelKey: "Medium" },
+  low: { icon: ArrowDown, color: "text-sky-500", badge: "bg-sky-400/10", labelKey: "Low" },
+  none: { icon: Minus, color: "text-muted-foreground", badge: "bg-muted", labelKey: "none" },
 };
 
-/** 优先级展示：icon + 文本，列表、详情共用同一套图标与配色。 */
-export function PmsPriority({ value, className }: { value: string; className?: string }) {
+/**
+ * 优先级唯一组件：浅色胶囊 + icon + 文案。
+ * 传 onChange 时可点击，下拉按「无 → 低 → 中 → 高 → 紧急」升序，当前项打勾；
+ * 不传则只读展示同一胶囊。所有优先级区域统一走这里。
+ */
+export function PriorityMenu({
+  value,
+  onChange,
+  className,
+}: {
+  value: string;
+  onChange?: (priority: string) => void;
+  className?: string;
+}) {
   const { t } = useTranslation();
   const meta = PRIORITY_META[value] ?? PRIORITY_META.none;
   const Icon = meta.icon;
-  return (
+  const badge = (
     <span
-      className={cn("inline-flex items-center gap-1.5 whitespace-nowrap", meta.color, className ?? "text-sm")}
+      className={cn(
+        "inline-flex h-5 w-fit shrink-0 items-center justify-center gap-1 rounded-4xl border-0 px-2 py-0.5 text-xs font-medium whitespace-nowrap shadow-none",
+        meta.badge,
+        meta.color,
+        className,
+      )}
     >
       <Icon className="size-3.5 shrink-0" />
-      <span>{t(meta.labelKey)}</span>
+      {t(meta.labelKey)}
     </span>
   );
+
+  if (!onChange) return badge;
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        aria-label={`Priority: ${value}`}
+        render={<button type="button" className="cursor-pointer hover:opacity-80" />}
+      >
+        {badge}
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-40">
+        {PRIORITY_ORDER.map((priority) => {
+          const item = PRIORITY_META[priority];
+          const ItemIcon = item.icon;
+          return (
+            <DropdownMenuItem key={priority} onClick={() => onChange(priority)}>
+              <ItemIcon className={cn("size-3.5", item.color)} />
+              {t(item.labelKey)}
+              {value === priority ? <Check className="ml-auto size-4" /> : null}
+            </DropdownMenuItem>
+          );
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+/** @deprecated 兼容旧引用；优先级显示统一走 PriorityMenu。 */
+export function PmsPriority({ value, className }: { value: string; className?: string }) {
+  return <PriorityMenu value={value} className={className} />;
 }
 
 export function PmsDate({ text }: { text: string }) {

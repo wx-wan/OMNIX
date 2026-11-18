@@ -3,12 +3,22 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { useTranslation } from "react-i18next";
-import { ArrowLeft, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
+import { Link } from "react-router";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
 import type { DateRange } from "react-day-picker";
 import { differenceInCalendarDays } from "date-fns";
 import { toast } from "@/components/shadcn-dashboard/sonner/toast";
+import Loading from "@/components/shadcn-dashboard/spinner/loading";
 import { DateRangePicker } from "@/components/shadcn-dashboard/date-picker/date-picker-02";
-import { useWorkspace } from "src/api/workspace/use-workspace";
+import { formatDate, useWorkspace } from "src/api/workspace/use-workspace";
 import { useTasks, bulkCompleteTasks } from "src/api/tasks/use-tasks";
 import { useIssues, bulkCompleteIssues } from "src/api/issues/use-issues";
 import { NewIssueDialog, NewTaskDialog, type NewIssueValues, type NewTaskValues } from "../create-dialogs";
@@ -16,13 +26,14 @@ import {
   STAGES,
   STAGE_KEYS,
   STAGE_NO_TIME,
-  stageTimeRange,
+  stageDateInfo,
   nextStage,
   setProjectStage,
   getStageForm,
   stageFormKey,
   stageLabel,
   saveStageForm,
+  saveStageEstimatedDates,
   type StageForm,
   type StageKey,
 } from "src/api/workspace/project-stages";
@@ -30,7 +41,9 @@ import {
   ItemAssigneeMenu,
   ItemPriorityMenu,
   ItemStatusMenu,
+  ItemTypeMenu,
 } from "../item-fields";
+import { ItemActionMenu } from "../item-actions";
 import {
   Select,
   SelectContent,
@@ -64,12 +77,6 @@ const STAGE_GOAL: Record<string, { en: string; zh: string }> = {
   sample: { en: "Develop and confirm samples.", zh: "打样并确认样品。" },
 };
 
-/** 表单日期字符串 → Date；兼容 ISO(yyyy-mm-dd) 与英文长日期(April 1, 2025)。 */
-const toDate = (value?: string): Date | undefined => {
-  if (!value) return undefined;
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? undefined : parsed;
-};
 /** Date → ISO 日期 yyyy-mm-dd（用本地年月日，避免 UTC 偏移）。 */
 const toISODate = (date: Date): string =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -118,21 +125,22 @@ export default function StageDetailPage() {
   const active = stageKey === currentStage;
   const finished = STAGE_KEYS.indexOf(stageKey) < STAGE_KEYS.indexOf(currentStage);
 
-  /** 阶段日期：优先持久化的 stageForm，无则与项目阶段卡片一致按创建时间推算；费用/售后为空。 */
-  const resolveRange = (key: string, formKeyValue: string): DateRange | undefined => {
+  /** 预估起止（用户可编辑）与实际完成时间（点击完成时写入）分开呈现。 */
+  const dateInfo = stageDateInfo(
+    stageKey,
+    project?.createdAt ?? "",
+    project?.stageSchedule
+  );
+  const resolveRange = (key: string): DateRange | undefined => {
     if (STAGE_NO_TIME.has(key)) return undefined;
-    const saved = getStageForm(formKeyValue);
-    const from = toDate(saved?.createDate);
-    const to = toDate(saved?.dueDate);
-    if (from || to) return { from, to };
-    const range = stageTimeRange(key, project?.createdAt ?? "");
-    return range ? { from: range.start, to: range.end } : undefined;
+    const info = stageDateInfo(key, project?.createdAt ?? "", project?.stageSchedule);
+    return info ? { from: info.start, to: info.estimatedEnd } : undefined;
   };
   const [dateRange, setDateRange] = useState<DateRange | undefined>(() =>
-    resolveRange(stageKey, formKey)
+    resolveRange(stageKey)
   );
   useEffect(() => {
-    setDateRange(resolveRange(stageKey, formKey));
+    setDateRange(resolveRange(stageKey));
   }, [formKey, stageKey]);
 
   /** 进度提示：距开始天数 / 总天数 / 剩余天数（按日历日）。 */
@@ -159,20 +167,22 @@ export default function StageDetailPage() {
       items: [],
       updatedAt: "",
     };
+    const estimatedStart = toISODate(range.from ?? new Date());
+    const estimatedEnd = toISODate(range.to ?? range.from ?? new Date());
     saveStageForm(
       formKey,
       {
         ...nextForm,
-        createDate: toISODate(range.from ?? new Date()),
-        dueDate: toISODate(range.to ?? range.from ?? new Date()),
+        createDate: estimatedStart,
+        dueDate: estimatedEnd,
       },
       id
     );
+    saveStageEstimatedDates(id!, stageKey, estimatedStart, estimatedEnd);
     toast.success(t("Saved successfully"));
   };
 
-  if (wsLoading || tasksLoading || !project)
-    return <div className="p-10 text-sm text-muted-foreground">…</div>;
+  if (wsLoading || tasksLoading || !project) return <Loading />;
 
   const handleComplete = async () => {
     if (!active) return;
@@ -188,10 +198,12 @@ export default function StageDetailPage() {
         .map((issue) => issue.id);
       if (openIssueIds.length) await bulkCompleteIssues(openIssueIds);
       const next = nextStage(currentStage);
-      if (next !== currentStage) await setProjectStage(id!, next);
+      if (next !== currentStage)
+        await setProjectStage(id!, next, undefined, currentStage);
       toast.success(t("Saved successfully"));
       setConfirmOpen(false);
-      navigate(`/projects/${id}`);
+      // 完成后停留在阶段详情，直接切到下一阶段页；最后一阶段则留在当前页。
+      if (next !== currentStage) navigate(`/projects/${id}/stages/${next}`);
     } finally {
       setCompleting(false);
     }
@@ -199,6 +211,19 @@ export default function StageDetailPage() {
 
   const handleStatus = (taskId: string, status: string) => {
     void updateTask(taskId, { status }).then(() => toast.success(t("Saved successfully")));
+  };
+  /** 事项标题跳转统一详情页：/issues/:id?kind=task|issue。 */
+  const openItem = (kind: "task" | "issue", itemId: string) =>
+    navigate(`/issues/${itemId}?kind=${kind}`);
+
+  /** 可选操作只记录：写回事项 action 字段，不创建、不发消息、不跳转。 */
+  const handleAction = (
+    kind: "task" | "issue",
+    itemId: string,
+    actionId: string | null
+  ) => {
+    if (kind === "issue") void updateIssue(itemId, { action: actionId });
+    else void updateTask(itemId, { action: actionId });
   };
   const handleCreateIssue = (values: NewIssueValues) => {
     const nextNumber = Math.max(500, ...projectIssues.map((i) => i.number)) + 1;
@@ -234,23 +259,34 @@ export default function StageDetailPage() {
   return (
     <>
     <div className="flex min-w-0 flex-1 flex-col gap-5 rounded-xl bg-background p-6">
-      {/* Header */}
+      {/* Header：面包屑 Projects / 项目 / 阶段（点击项目返回项目详情） */}
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold">{t("Sprints")}</h1>
+        <div className="min-w-0">
+          <Breadcrumb>
+            <BreadcrumbList>
+              <BreadcrumbItem>
+                <BreadcrumbLink render={<Link to="/projects" />}>
+                  {t("Projects")}
+                </BreadcrumbLink>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator />
+              <BreadcrumbItem>
+                <BreadcrumbLink render={<Link to={`/projects/${id}`} />}>
+                  {project?.name ?? "—"}
+                </BreadcrumbLink>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator />
+              <BreadcrumbItem>
+                <BreadcrumbPage>{stageName}</BreadcrumbPage>
+              </BreadcrumbItem>
+            </BreadcrumbList>
+          </Breadcrumb>
+          <h1 className="mt-2 text-xl font-semibold">{stageName}</h1>
           <p className="text-sm text-muted-foreground">
             {zh ? "展示当前阶段的事项，跟踪阶段进度。" : "View items in the current stage and track its progress."}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => navigate(`/projects/${id}`)}
-            className="inline-flex h-8 items-center gap-1.5 rounded-[10px] border bg-card px-2.5 text-sm font-medium hover:bg-muted"
-          >
-            <ArrowLeft className="size-4" />
-            {t("Back to project")}
-          </button>
           <Select
             value={stageKey}
             onValueChange={(next) => {
@@ -276,14 +312,18 @@ export default function StageDetailPage() {
         <div className="min-w-0 flex-1 overflow-hidden rounded-xl border border-border bg-card">
           <table className="w-full table-fixed border-collapse">
             <colgroup>
-              <col className="w-[55%]" />
-              <col className="w-[15%]" />
-              <col className="w-[15%]" />
-              <col className="w-[15%]" />
+              <col className="w-[35%]" />
+              <col className="w-[12%]" />
+              <col className="w-[16%]" />
+              <col className="w-[14%]" />
+              <col className="w-[12%]" />
+              <col className="w-[11%]" />
             </colgroup>
             <thead>
               <tr className="border-b border-border text-sm font-medium text-foreground">
                 <th className="px-3 py-3 text-left font-medium">{t("Item")}</th>
+                <th className="px-3 py-3 text-left font-medium">{t("Type")}</th>
+                <th className="px-3 py-3 text-left font-medium">{t("Actions")}</th>
                 <th className="px-3 py-3 text-left font-medium">{t("Status")}</th>
                 <th className="px-3 py-3 text-left font-medium">{t("Priority")}</th>
                 <th className="px-3 py-3 text-left font-medium">{t("Assignee")}</th>
@@ -303,9 +343,14 @@ export default function StageDetailPage() {
                     items={items}
                     allTasks={projectTasks}
                     onStatus={handleStatus}
+                    onType={(taskId, type) => void updateTask(taskId, { type })}
                     onPriority={(taskId, priority) => void updateTask(taskId, { priority })}
                     onAssignee={(taskId, assigneeId) =>
                       void updateTask(taskId, { assigneeId })
+                    }
+                    onOpen={(taskId) => openItem("task", taskId)}
+                    onAction={(taskId, actionId) =>
+                      handleAction("task", taskId, actionId)
                     }
                   />
                 );
@@ -313,7 +358,7 @@ export default function StageDetailPage() {
               {stageIssues.length ? (
                 <>
                   <tr className="border-b border-border bg-muted/30">
-                    <td colSpan={4} className="px-3 py-2.5 text-xs text-muted-foreground">
+                    <td colSpan={6} className="px-3 py-2.5 text-xs text-muted-foreground">
                       <span className="font-semibold text-foreground">{t("Issues")}</span>{" "}
                       {stageIssues.length} · {t("Open issues")}
                     </td>
@@ -321,12 +366,32 @@ export default function StageDetailPage() {
                   {stageIssues.map((issue) => (
                     <tr key={issue.id} className="border-b border-border last:border-0">
                       <td className="px-3 py-3">
-                        <p className="text-sm font-medium">{issue.title}</p>
+                        <button
+                          type="button"
+                          onClick={() => openItem("issue", issue.id)}
+                          className="text-start text-sm font-medium outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-ring"
+                        >
+                          {issue.title}
+                        </button>
                         <p className="text-xs text-muted-foreground">#Q{issue.number}</p>
                       </td>
                       <td className="px-3 py-3">
+                        <ItemTypeMenu
+                          value={issue.type ?? "output"}
+                          onChange={(type) => void updateIssue(issue.id, { type })}
+                        />
+                      </td>
+                      <td className="px-3 py-3">
+                        <ItemActionMenu
+                          type={issue.type}
+                          value={issue.action}
+                          onChange={(actionId) =>
+                            handleAction("issue", issue.id, actionId)
+                          }
+                        />
+                      </td>
+                      <td className="px-3 py-3">
                         <ItemStatusMenu
-                          variant="chip"
                           value={issue.status}
                           onChange={(status) => void updateIssue(issue.id, { status })}
                         />
@@ -351,7 +416,7 @@ export default function StageDetailPage() {
               ) : null}
               {stageTasks.length === 0 && stageIssues.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                  <td colSpan={6} className="px-4 py-10 text-center text-sm text-muted-foreground">
                     {t("No items")}
                   </td>
                 </tr>
@@ -430,7 +495,7 @@ export default function StageDetailPage() {
                 <span className="max-w-36 truncate font-medium">{project.name}</span>
               </div>
               <div className="flex items-center justify-between px-5 py-3">
-                <span className="text-muted-foreground">{t("Dates")}</span>
+                <span className="text-muted-foreground">{t("Estimated dates")}</span>
                 <DateRangePicker
                   value={dateRange}
                   onChange={setDateRange}
@@ -438,6 +503,24 @@ export default function StageDetailPage() {
                   zh={zh}
                 />
               </div>
+              {dateInfo?.completedAt ? (
+                <div className="flex items-center justify-between px-5 py-3">
+                  <span className="text-muted-foreground">{t("Actual completion")}</span>
+                  <span
+                    className={cn(
+                      "font-medium",
+                      dateInfo.variance === 0
+                        ? "text-foreground"
+                        : dateInfo.variance === -1
+                          ? "text-green-600"
+                          : "text-red-500"
+                    )}
+                  >
+                    {formatDate(dateInfo.start.toISOString(), zh ? "zh" : "en", "short")} –{" "}
+                    {formatDate(dateInfo.completedAt.toISOString(), zh ? "zh" : "en", "short")}
+                  </span>
+                </div>
+              ) : null}
               <div className="flex items-center justify-between px-5 py-3">
                 <span className="text-muted-foreground">{t("Items")}</span>
                 <span className="font-medium">{stageTasks.length}</span>
@@ -516,33 +599,57 @@ function GroupRows({
   items,
   allTasks,
   onStatus,
+  onType,
   onPriority,
   onAssignee,
+  onOpen,
+  onAction,
 }: {
   title: string;
   hint: string;
   items: WsTask[];
   allTasks: WsTask[];
   onStatus: (id: string, status: string) => void;
+  onType: (id: string, type: string) => void;
   onPriority: (id: string, priority: string) => void;
   onAssignee: (id: string, assigneeId: string | null) => void;
+  onOpen: (id: string) => void;
+  onAction: (taskId: string, actionId: string | null) => void;
 }) {
   return (
     <>
       <tr className="border-b border-border bg-muted/30">
-        <td colSpan={4} className="px-3 py-2.5 text-xs text-muted-foreground">
+        <td colSpan={6} className="px-3 py-2.5 text-xs text-muted-foreground">
           <span className="font-semibold text-foreground">{title}</span> {items.length} · {hint}
         </td>
       </tr>
       {items.map((task) => (
         <tr key={task.id} className="border-b border-border last:border-0">
           <td className="px-3 py-3">
-            <p className="text-sm font-medium">{task.title}</p>
+            <button
+              type="button"
+              onClick={() => onOpen(task.id)}
+              className="text-start text-sm font-medium outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              {task.title}
+            </button>
             <p className="text-xs text-muted-foreground">{taskNo(task, allTasks)}</p>
           </td>
           <td className="px-3 py-3">
+            <ItemTypeMenu
+              value={task.type ?? "output"}
+              onChange={(type) => onType(task.id, type)}
+            />
+          </td>
+          <td className="px-3 py-3">
+            <ItemActionMenu
+              type={task.type}
+              value={task.action}
+              onChange={(actionId) => onAction(task.id, actionId)}
+            />
+          </td>
+          <td className="px-3 py-3">
             <ItemStatusMenu
-              variant="chip"
               value={task.status}
               onChange={(status) => onStatus(task.id, status)}
             />

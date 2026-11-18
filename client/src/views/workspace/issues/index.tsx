@@ -20,13 +20,14 @@ import { useAuth } from "@/context/AuthContext";
 import { agoLabel, resolveDate, useWorkspace } from "src/api/workspace/use-workspace";
 import { getActiveProject } from "src/api/workspace/project-stages";
 import { useIssues } from "src/api/issues/use-issues";
+import { PeopleField } from "../people-field";
 import {
   ItemAssigneeMenu,
   ItemPriorityMenu,
   ItemStatusMenu,
-  STATUS_LABEL,
+  ISSUE_STATUS_LABEL,
 } from "../item-fields";
-import SpinnerBars from "@/components/shadcn-dashboard/spinner/spinner-06";
+import Loading from "@/components/shadcn-dashboard/spinner/loading";
 import { NewIssueDialog, type NewIssueValues } from "../create-dialogs";
 import type { WsIssue } from "src/types/apps/workspace";
 import {
@@ -41,6 +42,7 @@ import {
   PmsOptionGroup,
   PmsPage,
   PmsPopover,
+  PriorityMenu,
   PmsSegmented,
   PmsSheet,
   PmsRow,
@@ -65,8 +67,6 @@ const STATUS_GROUPS: { label: string; values: string[] }[] = [
   { label: "Done", values: ["done"] },
   { label: "Closed", values: ["closed"] },
 ];
-/** 问题状态文案：closed 显示「已关闭」而非任务的「完成」。 */
-const ISSUE_STATUS_LABEL: Record<string, string> = { ...STATUS_LABEL, closed: "Closed" };
 const STATUS_ICON: Record<string, { icon: typeof Circle; color: string }> = {
   backlog: { icon: CircleDashed, color: "text-amber-500" },
   todo: { icon: Circle, color: "text-sky-500" },
@@ -80,7 +80,7 @@ export default function IssuesPage({
   embedded,
 }: { projectId?: string; embedded?: boolean } = {}) {
   const { t } = useTranslation();
-  const { snap, lang, userName, projectName, label, comment, isLoading } = useWorkspace();
+  const { snap, lang, projectName, label, comment, isLoading } = useWorkspace();
   const { user: authUser } = useAuth();
   const currentUserId = authUser?.id;
   const [view, setView] = useState("List");
@@ -154,12 +154,7 @@ export default function IssuesPage({
     }).then(() => setCreating(false));
   };
 
-  if (isLoading || issuesLoading || !snap)
-    return (
-      <div className="flex min-h-40 items-center justify-center text-muted-foreground">
-        <SpinnerBars />
-      </div>
-    );
+  if (isLoading || issuesLoading || !snap) return <Loading />;
 
   const statusIcon = (status: string) => {
     const spec = STATUS_ICON[status] ?? STATUS_ICON.backlog;
@@ -307,9 +302,16 @@ export default function IssuesPage({
                           />
                         </PmsCell>
                         <PmsCell w="w-40">
-                          <span className="block truncate text-sm">
-                            {userName(issue.reporterId)}
-                          </span>
+                          <PeopleField
+                            users={snap?.users ?? []}
+                            value={issue.reporterId}
+                            onChange={(next) =>
+                              updateIssue(issue.id, { reporterId: (next as string | null) ?? null })
+                            }
+                            editable
+                            label={t("Created by")}
+                            align="end"
+                          />
                         </PmsCell>
                         <PmsCell w="w-28">
                           <span className="text-sm text-muted-foreground">
@@ -375,10 +377,22 @@ export default function IssuesPage({
                 {t(ISSUE_STATUS_LABEL[selected.status])}
               </PmsField>
               <PmsField label={t("Priority")}>
-                {t(selected.priority.charAt(0).toUpperCase() + selected.priority.slice(1))}
+                <PriorityMenu value={selected.priority} />
               </PmsField>
               <PmsField label={t("Assignee")}>
-                {selected.assigneeId ? userName(selected.assigneeId) : t("Unassigned")}
+                <PeopleField users={snap?.users ?? []} value={selected.assigneeId} />
+              </PmsField>
+              <PmsField label={t("Created by")}>
+                <PeopleField
+                  users={snap?.users ?? []}
+                  value={selected.reporterId}
+                  onChange={(next) =>
+                    updateIssue(selected.id, { reporterId: (next as string | null) ?? null })
+                  }
+                  editable
+                  label={t("Created by")}
+                  align="end"
+                />
               </PmsField>
               <PmsField label={t("Labels")}>
                 <div className="flex flex-wrap gap-1">

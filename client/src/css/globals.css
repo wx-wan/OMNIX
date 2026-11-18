@@ -313,14 +313,3 @@ html[data-card-shadow="false"] [data-slot="card"] {
 
 
 }
-
-/* shadcn-dashboard/spinner/spinner-06 — 三条跳动加载条 */
-.spinner-bars-bar {
-  height: 6px;
-  animation: spinner-bars 0.8s ease-in-out infinite;
-}
-
-@keyframes spinner-bars {
-  0%, 100% { height: 6px; }
-  50% { height: 20px; }
-}
