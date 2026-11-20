@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Plus, Search } from "lucide-react";
+import { Plus } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { SearchField } from "@/components/ui/search-field";
 import gmail from "src/assets/images/inetegrationpage/Gmail.svg";
 import googleMeet from "src/assets/images/inetegrationpage/Google Meet.svg";
 import zoom from "src/assets/images/inetegrationpage/Zoom.svg";
@@ -75,15 +75,12 @@ export default function SettingsIntegrations() {
               ))}
             </div>
             <div className="flex items-center gap-2.5">
-              <div className="relative w-full sm:w-60">
-                <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  className="pl-8"
-                  placeholder={t("Search integrations")}
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                />
-              </div>
+              <SearchField
+                containerClassName="w-full sm:w-60"
+                placeholder={t("Search integrations")}
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+              />
             </div>
           </div>
 

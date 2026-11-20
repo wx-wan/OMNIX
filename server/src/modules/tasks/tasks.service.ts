@@ -105,9 +105,39 @@ export class TasksService {
     return new Date(Date.now() + (estimate ?? 8) * 60 * 60 * 1000);
   }
 
+  /** 任务关联的联系人 id（Setting KV：task.contact.<id>），用于事项详情表单回填。 */
+  private static contactKey(id: string) {
+    return `task.contact.${id}`;
+  }
+
+  async getContactId(id: string) {
+    const row = await this.prisma.setting.findUnique({
+      where: { key: TasksService.contactKey(id) },
+    });
+    return { contactId: row?.value || null };
+  }
+
+  async setContactId(id: string, contactId: string | null) {
+    await this.ensureExists(id);
+    const key = TasksService.contactKey(id);
+    if (!contactId) {
+      await this.prisma.setting.deleteMany({ where: { key } });
+    } else {
+      await this.prisma.setting.upsert({
+        where: { key },
+        create: { key, value: contactId },
+        update: { value: contactId },
+      });
+    }
+    return { contactId };
+  }
+
   async remove(id: string) {
     await this.ensureExists(id);
-    await this.prisma.task.delete({ where: { id } });
+    await this.prisma.$transaction([
+      this.prisma.setting.deleteMany({ where: { key: TasksService.contactKey(id) } }),
+      this.prisma.task.delete({ where: { id } }),
+    ]);
   }
 
   private async ensureExists(id: string) {

@@ -1,10 +1,13 @@
+import { Type } from "class-transformer";
 import {
   IsEmail,
   IsOptional,
   IsString,
   IsNotEmpty,
   MaxLength,
+  ValidateNested,
 } from "class-validator";
+import { BusinessCardFileDto } from "./business-card.dto";
 
 // 统一往来单位 / 联系人 编辑字段（均可选）
 // type / password / role 不在其中：账号管理走 /api/auth/users，避免联系人接口提权。
@@ -64,4 +67,22 @@ export class UpdateContactDto {
   @IsString()
   @MaxLength(40)
   botCharacter?: string; // 系统机器人的 3D 形象（wobnimo 角色 id）
+
+  // —— 联系人表单字段 ——
+  @IsOptional() @IsString() @MaxLength(60) source?: string;
+  @IsOptional() @IsString() @MaxLength(40) landline?: string;
+  @IsOptional() @IsString() @MaxLength(60) nickname?: string;
+  @IsOptional() @IsString() @MaxLength(60) socialPlatform?: string;
+  @IsOptional() @IsString() @MaxLength(120) socialAccount?: string;
+  @IsOptional() @IsString() @MaxLength(40) mobile?: string;
+  @IsOptional() @IsString() @MaxLength(60) jobRank?: string;
+  @IsOptional() @IsString() birthday?: string; // YYYY-MM-DD
+  @IsOptional() @IsString() @MaxLength(20) gender?: string;
+  @IsOptional() @IsString() @MaxLength(1000) contactNotes?: string;
+
+  @IsOptional() @ValidateNested() @Type(() => BusinessCardFileDto)
+  businessCardFront?: BusinessCardFileDto | null;
+
+  @IsOptional() @ValidateNested() @Type(() => BusinessCardFileDto)
+  businessCardBack?: BusinessCardFileDto | null;
 }

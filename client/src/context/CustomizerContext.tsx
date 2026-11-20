@@ -177,7 +177,18 @@ export function CustomizerProvider({ children }: { children: React.ReactNode }) 
     } else {
       root.style.removeProperty("--radius");
     }
-  }, [state]);
+  // 只依赖本节用到的主题/布局字段：切语言时不要重跑，否则 style-* 类被移除再添加
+  // 会触发 CSS 层叠重算，导致登录卡片等页面的皮肤样式（圆角/内边距）被改写。
+  }, [
+    state.activeDir,
+    state.activeTheme,
+    state.activeLayout,
+    state.isLayout,
+    state.isCardShadow,
+    state.isCollapse,
+    state.activeStyle,
+    state.isBorderRadius,
+  ]);
 
   const value = useMemo(
     () => ({ state, set, reset, setPrimaryColor, setSecondaryColor }),

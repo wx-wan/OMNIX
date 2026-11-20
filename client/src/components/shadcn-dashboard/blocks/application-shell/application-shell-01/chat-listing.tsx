@@ -17,9 +17,8 @@ import {
   EllipsisVertical,
   Keyboard,
   LogOut,
-  SearchIcon,
 } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { SearchField } from "@/components/ui/search-field";
 import {
   Chat,
   CURRENT_USER_ID,
@@ -110,18 +109,12 @@ const ChatListing = ({
         {/* Search Box */}
         <div className="shrink-0 px-6">
           <div className="flex gap-3 py-4 items-center">
-            <div className="relative w-full">
-              <SearchIcon
-                size={18}
-                className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground"
-              />
-              <Input
-                className="pl-8"
-                value={chatSearch}
-                onChange={(e) => setChatSearch(e.target.value)}
-                placeholder="Search Chats..."
-              />
-            </div>
+            <SearchField
+              containerClassName="w-full"
+              value={chatSearch}
+              onChange={(e) => setChatSearch(e.target.value)}
+              placeholder="Search Chats..."
+            />
           </div>
 
           <div className="sorting mb-3">

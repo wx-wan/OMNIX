@@ -1,4 +1,3 @@
-import { http, HttpResponse } from "msw";
 import { InboxNotification } from "src/types/apps/inbox";
 
 /**
@@ -238,10 +237,4 @@ export const InboxData: InboxNotification[] = [
       activityTime: "10月25日",
     },
   },
-];
-
-export const InboxHandlers = [
-  http.get("/api/inbox/notifications", () => {
-    return HttpResponse.json({ status: 200, msg: "Success", data: InboxData });
-  }),
 ];

@@ -27,7 +27,7 @@ const Header = () => {
 
   return (
     <>
-      <header className={cn(isHorizontal ? "container mx-auto bg-background" : "sticky top-0 z-2 bg-background border-b border-border")}>
+      <header className={cn(isHorizontal ? "container mx-auto bg-background" : "sticky top-0 z-30 bg-background border-b border-border")}>
         <nav>
           <div className="mx-auto flex flex-wrap items-center justify-between p-2">
             <div className="flex gap-2 items-center">

@@ -64,6 +64,8 @@ const SettingsIntegrationsPage = Loadable(lazy(() => import('../views/workspace/
 const SettingsApiKeysPage = Loadable(lazy(() => import('../views/workspace/settings/api-keys')));
 // 布局页：右下角 Customizer 收口进设置模块（用户 2026-11-15 要求）
 const SettingsLayoutPage = Loadable(lazy(() => import('../views/workspace/settings/layout')));
+// 工作区默认值：事项类型 / 操作 / 阶段与天数
+const SettingsDefaultsPage = Loadable(lazy(() => import('../views/workspace/settings/defaults')));
 // PMS 个人设置页：1:1 复刻自 pms-audit/dom/11-profile.*
 const ProfilePage = Loadable(lazy(() => import('../views/workspace/profile')));
 // 业务需求模块：九阶段空白表单占位 + 复刻 demo 的发票编辑页
@@ -168,6 +170,7 @@ const Router = [
           { path: '/settings/integrations', element: <SettingsIntegrationsPage /> },
           { path: '/settings/api-keys', element: <SettingsApiKeysPage /> },
           { path: '/settings/layout', element: <SettingsLayoutPage /> },
+          { path: '/settings/defaults', element: <SettingsDefaultsPage /> },
           { path: '/profile', element: <ProfilePage /> },
           { path: '/faq', element: <FaqPage /> },
           { path: '/apps/contacts', element: <ContactsApp /> },

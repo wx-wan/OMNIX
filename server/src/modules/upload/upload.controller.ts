@@ -43,8 +43,14 @@ export class UploadController {
       limits: { fileSize: 20 * 1024 * 1024 },
     }),
   )
-  upload(@UploadedFile() file?: { filename: string }) {
+  upload(@UploadedFile() file?: { filename: string; originalname?: string }) {
     if (!file) throw new BadRequestException("未收到文件");
-    return { url: `/uploads/${file.filename}` };
+    const url = `/uploads/${file.filename}`;
+    return {
+      id: file.filename.replace(/\.[^.]+$/, ""),
+      url,
+      thumbnailUrl: url, // 当前无缩略图生成；原图即缩略图，避免落 Base64。
+      filename: file.originalname ?? file.filename,
+    };
   }
 }

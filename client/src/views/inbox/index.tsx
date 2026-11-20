@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
-import useSWR from "swr";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Archive,
@@ -20,7 +19,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getFetcher } from "src/api/global-fetcher";
+import { InboxData } from "src/api/inbox/inbox-data";
 import {
   InboxNotification,
   InboxViewOptions,
@@ -118,22 +117,13 @@ function OptionRow({
 
 export default function Inbox() {
   const { t } = useTranslation();
-  const { data } = useSWR<{ data: InboxNotification[] }>(
-    "/api/inbox/notifications",
-    getFetcher
-  );
-
-  const [items, setItems] = useState<InboxNotification[]>([]);
+  const [items, setItems] = useState<InboxNotification[]>(InboxData);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [activeFilter, setActiveFilter] = useState<FilterKey>("all");
   const [unreadOnly, setUnreadOnly] = useState(false);
   const [query, setQuery] = useState("");
   const [view, setView] = useState<InboxViewOptions>(DEFAULT_VIEW);
   const [showFilters, setShowFilters] = useState(false);
-
-  useEffect(() => {
-    if (data?.data) setItems(data.data);
-  }, [data]);
 
   const unreadCount = useMemo(
     () => items.filter((n) => n.unread).length,

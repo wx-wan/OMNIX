@@ -7,14 +7,13 @@ import {
   Plus,
   Reply,
   Forward,
-  Search,
   Send,
   Star,
   Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { SearchField } from "@/components/ui/search-field";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AppShell, AttachmentChip, avatarSrc } from "../shared";
 import type { EmailType } from "src/types/apps/email";
@@ -124,10 +123,7 @@ const EmailApp = () => {
           {/* 340px 邮件列表 */}
           <div className="left-part flex max-w-full flex-col border-e border-border lg:max-w-[340px]">
             <div className="p-4">
-              <div className="relative">
-                <Search className="absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input placeholder="Search Mail..." className="ps-9" />
-              </div>
+              <SearchField placeholder="Search Mail..." />
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto">
               {mails.map((m, i) => (

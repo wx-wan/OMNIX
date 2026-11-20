@@ -3,7 +3,6 @@ import { random } from 'lodash';
 import { sub } from 'date-fns';
 import { uniqueId } from 'lodash';
 import { BlogType, BlogPostType } from 'src/types/apps/blog';
-import { http, HttpResponse } from 'msw';
 
 import blogImg1 from '@/assets/images/blog/blog-img1.png';
 import blogImg2 from '@/assets/images/blog/blog-img2.png';
@@ -70,7 +69,7 @@ const BlogComment: BlogType[] = [
   },
 ]
 
-const BlogPost: BlogPostType[] = [
+export const BlogPost: BlogPostType[] = [
   {
     id: uniqueId(),
     title: 'Garmins Instinct Crossover is a rugged hybrid smartwatch',
@@ -273,35 +272,4 @@ const BlogPost: BlogPostType[] = [
   },
 ]
 // Mocked Apis
-export const Bloghandlers = [
-  // Mock api endpoint to fetch all blogposts
-  http.get('/api/data/blog/BlogPosts', () => {
-    try {
-      return HttpResponse.json({ status: 200, data: BlogPost, msg: 'success' });
-    } catch (error) {
-      return HttpResponse.json({ status: 400, msg: 'something went wrong' });
-    }
-  }),
 
-  // Mock api endpoint to add post info
-  http.post('/api/data/blog/post/add', async ({ request }) => {
-    try {
-      const { postId, comment } = (await request.json()) as { postId: number; comment: any };
-      const postIndex = BlogPost.findIndex((x) => x.id === postId);
-      const post = BlogPost[postIndex];
-      const cComments = post.comments || [];
-      post.comments = [comment, ...cComments];
-      return HttpResponse.json({
-        status: 200,
-        data: { posts: [...BlogPost] },
-        msg: 'success',
-      });
-    } catch (error) {
-      return HttpResponse.json({
-        status: 400,
-        msg: 'something went wrong',
-        error,
-      });
-    }
-  }),
-];

@@ -21,6 +21,7 @@ const TABS = [
   { label: "Billing", to: "/settings/billing" },
   { label: "Integrations", to: "/settings/integrations" },
   { label: "API Keys", to: "/settings/api-keys" },
+  { label: "Preferences", to: "/settings/defaults" },
   { label: "Layout", to: "/settings/layout" },
 ];
 

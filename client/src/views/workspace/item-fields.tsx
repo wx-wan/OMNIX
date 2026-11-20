@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { useWorkspace } from "src/api/workspace/use-workspace";
 import { PriorityMenu } from "./pms";
 import { PeopleField } from "./people-field";
+export { ItemActionMenu } from "./item-actions";
 
 /**
  * 任务与问题共用的可编辑字段控件（唯一实现）。

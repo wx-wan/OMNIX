@@ -28,10 +28,10 @@ import {
   useProjectStageStore,
   type StageKey,
 } from "src/api/workspace/project-stages";
-import { createTask, useTasks } from "src/api/tasks/use-tasks";
+import { useTasks } from "src/api/tasks/use-tasks";
 import { projectCounts, projectProgress } from "src/api/workspace/project-progress";
 import { useUsers } from "src/api/auth/use-users";
-import type { SeedAssigneeRole } from "src/api/workspace/project-stages";
+import { useWorkspaceDefaults } from "src/api/settings/use-workspace-defaults";
 import type { WsProject } from "src/types/apps/workspace";
 import {
   PmsCard,
@@ -114,6 +114,7 @@ export default function ProjectsPage() {
   const [collapsed, setCollapsed] = useState<string[]>([]);
   const [hidden, setHidden] = useState<string[]>([]);
   const store = useProjectStageStore();
+  const { defaults } = useWorkspaceDefaults();
   const navigate = useNavigate();
   const [creatingStage, setCreatingStage] = useState<StageKey | null>(null);
   const [initializing, setInitializing] = useState(false);
@@ -129,33 +130,27 @@ export default function ProjectsPage() {
     [zh]
   );
 
-  /** 弹窗里填写项目基本信息后创建并进详情；客户与产品信息在迭代 → 需求阶段 → 需求详情表单里补录。 */
+  /** 弹窗里填写项目基本信息后创建并进详情；默认 task / issue 由后端按首选项落库。 */
   const create = async (values: NewProjectValues, stage: StageKey) => {
-    // 先按角色（部门）确定每个预置任务的经办人，再把所有经办人勾进项目成员。
+    // 经办成员按首选项默认任务的「职位」解析（Contact.position），与部门无关。
     const people = members ?? [];
-    const byDepartment = (keyword: string) =>
-      people.find((person) => person.department?.includes(keyword))?.id ?? CURRENT_USER_ID;
-    const assigneeOf = (role: SeedAssigneeRole): string => {
-      switch (role) {
-        case "design":
-          return byDepartment("设计");
-        case "engineering":
-          return byDepartment("技术");
-        case "purchase":
-          // 当前工作区暂无采购部成员，回退给项目负责人。
-          return byDepartment("采购");
-        case "lead":
-        default:
-          return CURRENT_USER_ID;
-      }
+    const POSITION_LABEL: Record<string, string> = {
+      lead: "", // 负责人不按职位匹配，直接用项目负责人
+      design: "设计", art: "美工", operations: "运营",
+      shipping: "出运", purchase: "采购", engineering: "工程对接人",
     };
-    const assignees = SEED_TASKS.map((seed) => ({
-      seed,
-      assigneeId: assigneeOf(seed.assigneeRole),
-    }));
-    const memberIds = Array.from(new Set(assignees.map((item) => item.assigneeId)));
+    const byPosition = (role?: string) => {
+      const label = role ? POSITION_LABEL[role] : undefined;
+      return label ? people.find((p) => p.position?.includes(label))?.id ?? CURRENT_USER_ID : CURRENT_USER_ID;
+    };
+    const memberIds = Array.from(
+      new Set(
+        defaults.stages.flatMap((stageDefault) =>
+          (stageDefault.defaultTasks ?? []).map((task) => byPosition(task.assigneeRole))
+        )
+      )
+    );
 
-    // 关闭表单，展示阶段初始化进度（SetupSteps）：从第一个阶段开始
     setCreatingStage(null);
     setInitPointer(0);
     setInitDone(false);
@@ -165,30 +160,14 @@ export default function ProjectsPage() {
         status: values.status,
         priority: values.priority,
         memberIds,
+        stageDefaults: defaults.stages,
       });
-      // 按 SEED_TASKS 的阶段顺序逐个落库：createdAt 严格递增，taskNo 才会连续
-      // T001 / T002 / T003……；并发 Promise.all 会让 createdAt 乱序导致编号跳号。
-      for (const { seed, assigneeId } of assignees) {
-        await createTask({
-          title: seed.title,
-          description: seed.description,
-          projectId: created.id,
-          sprintId: seed.stage,
-          assigneeId,
-          type: seed.type ?? "output",
-          action: seed.action ?? "",
-          // 待规划：不赋值预估工时与到期日
-          status: "backlog",
-          dueDate: null,
-          estimate: null,
-          // 预置任务优先级跟随新项目
-          priority: created.priority ?? "medium",
-        });
-        // 按当前任务所属阶段推进受控 pointer，动画随真实落库串行前进。
-        const stageIdx = initSteps.findIndex((step) => step.id === seed.stage);
-        if (stageIdx >= 0) setInitPointer(stageIdx);
+      // 后端已在项目创建事务里按首选项建好各阶段默认 task / issue；
+      // 前端仅按阶段推进初始化动画，不再逐个写库。
+      for (let i = 0; i < initSteps.length; i++) {
+        setInitPointer(i);
+        await new Promise((resolve) => window.setTimeout(resolve, 60));
       }
-      // 最后一个阶段建完：收起步骤列表，显示紧凑完成态后跳转。
       setInitPointer(initSteps.length);
       setInitDone(true);
       await new Promise((resolve) => window.setTimeout(resolve, 1400));

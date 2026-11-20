@@ -618,10 +618,28 @@ export const createProject = async (
   name: string,
   description: string,
   stage: StageKey = "requirement",
-  extra?: { status?: string; priority?: string; dueDate?: string; memberIds?: string[] }
+  extra?: {
+    status?: string;
+    priority?: string;
+    dueDate?: string;
+    memberIds?: string[];
+    /** 工作区默认阶段与天数；传入时预写每阶段预估起止到 stageSchedule。 */
+    stageDefaults?: { key: string; en: string; zh: string; days: number | null }[];
+  }
 ): Promise<WsProject> => {
   const id = `p-new-${uid()}`;
   const no = nextTicketNo();
+  const now = new Date();
+  const iso = (date: Date) => date.toISOString().slice(0, 10);
+  const schedule: Record<string, Record<string, string>> = {};
+  let cursor = now.getTime();
+  for (const item of extra?.stageDefaults ?? []) {
+    if (item.days == null) continue;
+    const start = new Date(cursor);
+    const end = new Date(cursor + item.days * 86_400_000);
+    schedule[item.key] = { estimatedStart: iso(start), estimatedEnd: iso(end) };
+    cursor = end.getTime();
+  }
   // 项目真实落库后端（含阶段与编号），activity 仍留在本地 overlay 承载时间线
   const created = await apiCreateProject({
     id,
@@ -641,6 +659,7 @@ export const createProject = async (
     archived: false,
     stage,
     no,
+    stageSchedule: Object.keys(schedule).length ? schedule : null,
   });
   commit(withLog({ ...state }, activity(id, "created the project", id, "project", "created")));
   return created;
@@ -859,6 +878,50 @@ export const addFile = (
   );
   return record;
 };
+
+/**
+ * 阶段完成时间计入里程碑：每个已完成的阶段（stageSchedule[key].completedAt）
+ * 生成一条已完成里程碑，date 取实际完成时间，description 标注计划完成时间用于对照。
+ * 费用/售后无固定周期，不参与。与本地手动里程碑由调用方合并。
+ */
+export function stageMilestones(
+  project: WsProject | undefined | null,
+  zh = false
+): WsMilestone[] {
+  if (!project?.createdAt) return [];
+  const result: WsMilestone[] = [];
+  for (const stage of STAGES) {
+    if (STAGE_NO_TIME.has(stage.key)) continue;
+    const info = stageDateInfo(stage.key, project.createdAt, project.stageSchedule);
+    const completedAt = info?.completedAt;
+    if (!completedAt) continue;
+    const variance = info?.variance ?? null;
+    const diff = zh
+      ? variance === -1
+        ? "提前完成"
+        : variance === 1
+          ? "延后完成"
+          : "按期完成"
+      : variance === -1
+        ? "Completed early"
+        : variance === 1
+          ? "Completed late"
+          : "Completed on time";
+    result.push({
+      id: `stage-milestone-${project.id}-${stage.key}`,
+      title: zh ? `${stage.zh}阶段完成` : `${stage.en} completed`,
+      description: `${zh ? "计划" : "Planned"} ${formatMilestoneDate(info!.estimatedEnd)} · ${diff}`,
+      date: completedAt.toISOString(),
+      projectId: project.id,
+      completed: true,
+      createdAt: completedAt.toISOString(),
+    });
+  }
+  return result;
+}
+
+const formatMilestoneDate = (date: Date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 
 export const addMilestone = (
   projectId: string,

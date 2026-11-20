@@ -56,6 +56,7 @@ import {
   STAGES,
   STAGE_NO_TIME,
   stageDateInfo,
+  stageMilestones,
   archiveProject,
   getStageView,
   projectNo,
@@ -277,7 +278,15 @@ export default function ProjectDetailPage() {
           (resolveDate(b.timestamp)?.getTime() ?? 0) -
           (resolveDate(a.timestamp)?.getTime() ?? 0)
       );
-    const milestones = snap.milestones.filter((item) => item.projectId === id);
+    /** 阶段完成时间计入里程碑，与手动里程碑合并后按日期升序。 */
+    const milestones = [
+      ...stageMilestones(project, zh),
+      ...snap.milestones.filter((item) => item.projectId === id),
+    ].sort((a, b) => {
+      const da = resolveDate(a.date)?.getTime() ?? 0;
+      const db = resolveDate(b.date)?.getTime() ?? 0;
+      return da - db;
+    });
     const closedIssues = issues.filter(
       (item) => item.status === "done" || item.status === "closed"
     ).length;
@@ -852,7 +861,11 @@ export default function ProjectDetailPage() {
                               <div key={milestone.id} className="flex gap-x-3">
                                 <div className="relative">
                                   <div className="relative z-10 flex h-5 w-7 items-center justify-center">
-                                    <div className="size-3 rounded-full bg-card outline-2 outline-muted-foreground" />
+                                    {milestone.completed ? (
+                                      <CircleCheck className="size-4 text-teal-500" />
+                                    ) : (
+                                      <div className="size-3 rounded-full bg-card outline-2 outline-muted-foreground" />
+                                    )}
                                   </div>
                                   {index < data.milestones.length - 1 ? (
                                     <div className="ms-3.5 -mt-2 h-full border-s border-border" />
@@ -860,13 +873,24 @@ export default function ProjectDetailPage() {
                                 </div>
                                 <div className="min-w-0 grow pt-0.5 pb-5">
                                   <div className="flex flex-wrap items-center justify-between gap-2">
-                                    <p className="text-sm font-medium">{milestone.title}</p>
+                                    <p
+                                      className={cn(
+                                        "text-sm font-medium",
+                                        milestone.completed && "text-muted-foreground"
+                                      )}
+                                    >
+                                      {milestone.title}
+                                    </p>
                                     <span className="text-xs text-muted-foreground">
-                                      {tr(`${days}d left`, `剩 ${days} 天`)}
+                                      {milestone.completed
+                                        ? t("Completed")
+                                        : tr(`${days}d left`, `剩 ${days} 天`)}
                                     </span>
                                   </div>
                                   <p className="text-xs text-muted-foreground">
-                                    {milestone.description} · {fullDate(milestone.date)}
+                                    {milestone.description}
+                                    {milestone.description ? " · " : ""}
+                                    {fullDate(milestone.date)}
                                   </p>
                                 </div>
                               </div>

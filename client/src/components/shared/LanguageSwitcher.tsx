@@ -1,11 +1,11 @@
 import flagCn from "src/assets/images/flag/icon-flag-cn.svg";
-import flagEn from "src/assets/images/flag/icon-flag-en.svg";
+import flagEn from "src/assets/images/flag/icon-flag-us.svg";
 import { useCustomizer } from "../../context/CustomizerContext";
 import { LANGUAGES } from "../../i18n/resources";
 
 /**
  * 顶栏语言切换：单按钮直接在中 / 英之间切换，不做下拉菜单。
- * 图标用项目自带的 icon-flag-cn / icon-flag-en SVG（28x20），不再用 emoji 国旗。
+ * 图标用项目自带的 icon-flag-cn / icon-flag-us SVG（28x20），不再用 emoji 国旗。
  * 语言与 dir 是互相独立的状态：切语言不会改变阅读方向。
  */
 const LanguageSwitcher = () => {

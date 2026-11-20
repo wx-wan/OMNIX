@@ -209,12 +209,15 @@ export type PmsColumn = { label: string; w: string };
 export function PmsHeader({
   columns,
   showColumnsButton = true,
+  reserveActions = false,
   onColumnsClick,
   columnsMenu,
   titleW = "w-56 min-w-56",
 }: {
   columns: PmsColumn[];
   showColumnsButton?: boolean;
+  /** 隐藏列按钮但行仍有 actions 列时占位，避免 flex-1 标题列吃掉 44px 造成列头与单元格错位。 */
+  reserveActions?: boolean;
   onColumnsClick?: () => void;
   columnsMenu?: ReactNode;
   /** 首列（标题列）宽度，默认 w-56；个别页面可按需收窄。 */
@@ -261,6 +264,8 @@ export function PmsHeader({
             </button>
           )}
         </div>
+      ) : reserveActions ? (
+        <div className="w-9 shrink-0" />
       ) : null}
     </div>
   );
@@ -340,6 +345,7 @@ export function PmsRow({
   onClick,
   href,
   titleW = "w-56 min-w-56",
+  titleContent,
 }: {
   icon?: ReactNode;
   title: string;
@@ -351,6 +357,8 @@ export function PmsRow({
   href?: string;
   /** 标题列宽度，需与 PmsHeader 的 titleW 保持一致。 */
   titleW?: string;
+  /** 可选：标题列自定义内容（如可编辑 Input）；提供时不包裹 button，避免嵌套交互元素。 */
+  titleContent?: ReactNode;
 }) {
   const content = (
     <>
@@ -369,7 +377,9 @@ export function PmsRow({
       <div className="flex w-8 shrink-0 items-center justify-center">{icon}</div>
       <div className={cn("flex-1", titleW)}>
         <div className="flex min-w-0 items-center gap-2">
-          {href ? (
+          {titleContent !== undefined ? (
+            <div className="flex min-w-0 flex-1 items-center">{titleContent}</div>
+          ) : href ? (
             <Link to={href} className="flex min-w-0 items-baseline gap-2">
               {content}
             </Link>

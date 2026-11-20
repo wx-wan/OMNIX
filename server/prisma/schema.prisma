@@ -61,6 +61,16 @@ model Contact {
   phone     String?
   country   String? // 国家地区
   website   String? // 官网
+  source     String? @map("source") // 客户来源（公司常用信息）
+  landline   String? @map("landline") // 座机（公司常用信息，区别于个人 phone）
+  nickname   String? @map("nickname") // 昵称
+  socialPlatform String? @map("social_platform") // 社交平台
+  socialAccount  String? @map("social_account") // 社交账号
+  mobile     String? @map("mobile") // 联系电话（手机）
+  jobRank    String? @map("job_rank") // 职级
+  birthday   DateTime? @map("birthday") // 生日
+  gender     String? @map("gender") // 性别
+  contactNotes String? @map("contact_notes") // 联系人备注（区别于设置 KV 的 notes）
   password  String? // 仅 type=user 用于登录
   role      String? // 仅 type=user：admin | user
   position  String? // 职位（设计 / 跟单 等；管理员可配置，用于设计单/打样单协助负责人筛选）
@@ -68,6 +78,9 @@ model Contact {
   isSystem  Boolean @default(false) // 系统级机器人（如 ominXBot），拥有最高权限并负责记录操作历史
   botCharacter String? @default("mochi") // 系统机器人的 3D 形象（wobnimo 角色 id），仅 isSystem 使用
   avatarUrl String? @map("avatar_url") // 头像 URL（如 MCP 代理用户 Accio work 用 web 头像）
+  // 名片正反面：JSON 存 { id, url, thumbnailUrl, filename }，不存 Base64。
+  businessCardFront Json? @map("business_card_front")
+  businessCardBack  Json? @map("business_card_back")
   aiGenerated Boolean @default(false) @map("ai_generated") // 是否由 Accio AI 抓取生成（信息不保真，待核实）
   archived  Boolean @default(false) @map("archived") // 归档：关联了商机的往来单位不允许删除，只能归档隐藏
   // 在线状态（后端状态机维护）：online 登录态 | away 长时间无操作 | busy 用户手动「请勿打扰」| offline 离线

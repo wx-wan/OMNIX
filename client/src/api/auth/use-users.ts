@@ -9,6 +9,7 @@ export type MemberUser = {
   role: string; // super_admin | admin | user | viewer
   avatarUrl: string; // 真实头像路径
   department: string | null; // 部门，成员页「部门」列
+  position: string | null; // 职位（设计/美工/运营/出运/采购/工程），与部门无关
   createdAt: string; // ISO，加入时间列
 };
 

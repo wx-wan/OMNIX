@@ -1,13 +1,13 @@
 
 import { useState, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { Component, Search as SearchIcon } from 'lucide-react';
+import { Component } from 'lucide-react';
 
 import SimpleBar from "simplebar-react";
 import SidebarContent from "../../vertical/sidebar/sidebaritems";
 
 
-import { Input } from "@/components/ui/input";
+import { SearchField } from "@/components/ui/search-field";
 import { Link } from "react-router";
 
 function Search() {
@@ -55,13 +55,9 @@ function Search() {
 
   return (
     <div className="relative w-full">
-      <div className="flex items-center relative w-xs mx-auto ">
-        <SearchIcon size={16}
-          className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-        />
-        <Input
+      <div className="mx-auto w-xs">
+        <SearchField
           placeholder={t("Search....")}
-          className="rounded-lg pl-10!"
           required
           value={query}
           onChange={(e) => setQuery(e.target.value)}

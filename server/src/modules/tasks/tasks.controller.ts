@@ -38,6 +38,17 @@ export class TasksController {
     return this.svc.bulkComplete(dto.ids);
   }
 
+  @Get(":id/contact")
+  getContact(@Param("id") id: string) {
+    return this.svc.getContactId(id);
+  }
+
+  @Patch(":id/contact")
+  @UseGuards(MemberGuard)
+  setContact(@Param("id") id: string, @Body() dto: { contactId: string | null }) {
+    return this.svc.setContactId(id, dto.contactId);
+  }
+
   @Patch(":id")
   @UseGuards(MemberGuard)
   update(@Param("id") id: string, @Body() dto: UpdateTaskDto) {

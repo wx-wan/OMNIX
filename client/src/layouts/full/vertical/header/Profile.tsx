@@ -1,9 +1,8 @@
+import { useTranslation } from "react-i18next";
 import { Avatar, AvatarBadge, AvatarFallback, AvatarImage } from "src/components/ui/avatar";
 import { useNavigate } from "react-router";
 import { useAuth } from "@/context/AuthContext";
 import { avatarSrc } from "@/views/apps/shared";
-import { toast } from "@/components/shadcn-dashboard/sonner/toast";
-import { useTranslation } from "react-i18next";
 import { Dropdown } from "@/components/shadcn-dashboard/dropdown-menu/dropdown-menu-01";
 import { presenceStyles } from "@/lib/presence";
 
@@ -29,10 +28,6 @@ export default function ProfileSheet() {
         break;
       case "Account Settings":
         navigate("/settings/general");
-        break;
-      case "My Subscription":
-      case "My Invoice":
-        toast.info(t("This section is not available yet."));
         break;
       case "Signout":
         handleLogout();

@@ -5,14 +5,13 @@ import {
   Mic,
   Paperclip,
   Plus,
-  Search,
   Settings,
   SquarePen,
   WandSparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { SearchField } from "@/components/ui/search-field";
 import { AppShell } from "../shared";
 import aiLogo from "src/assets/images/backgrounds/chat-ai-logo.png";
 
@@ -61,10 +60,7 @@ const ChatAI = () => {
           <aside className="hidden w-full max-w-[350px] lg:block">
             <div className="flex h-full w-full flex-col border-e p-0">
               <div className="p-4">
-                <div className="relative">
-                  <Search className="absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input placeholder="Search Chat History..." className="ps-9" />
-                </div>
+                <SearchField placeholder="Search Chat History..." />
               </div>
               <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-2">
                 {HISTORY.map((h) => (

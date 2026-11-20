@@ -5,7 +5,6 @@ import {
   Monitor,
   Pencil,
   Plus,
-  Search,
   Star,
   Trash2,
   Users,
@@ -15,7 +14,7 @@ import Loading from "@/components/shadcn-dashboard/spinner/loading";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { SearchField } from "@/components/ui/search-field";
 import { useContacts, type Contact, type ContactInput } from "@/api/contacts/use-contacts";
 import { AppShell, avatarSrc } from "../shared";
 
@@ -201,16 +200,11 @@ const ContactsApp = () => {
           {/* 340px 联系人列表 */}
           <div className="flex flex-col border-e">
             <div className="p-4">
-              <div className="relative">
-                <Search className="absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder={t("Search Contacts...")}
-                  className="ps-9"
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                />
-                <span className="sr-only">{t("Search Contacts...")}</span>
-              </div>
+              <SearchField
+                placeholder={t("Search Contacts...")}
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+              />
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto">
               {isLoading && <Loading className="min-h-24" />}

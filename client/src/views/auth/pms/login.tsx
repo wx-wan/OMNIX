@@ -11,6 +11,7 @@ import {
   FieldLabel,
 } from "@/components/ui/field";
 import { useAuth } from "@/context/AuthContext";
+import LanguageSwitcher from "@/components/shared/LanguageSwitcher";
 import { AuthCard } from "./shared";
 
 const REMEMBERED_EMAIL_KEY = "pms.rememberedEmail";
@@ -57,7 +58,11 @@ export default function PmsLogin() {
   }
 
   return (
-    <AuthCard
+    <>
+      <div className="fixed top-4 right-4 z-50 sm:top-6 sm:right-6">
+        <LanguageSwitcher />
+      </div>
+      <AuthCard
       title={t("Welcome back")}
       description={t("Don't have an account?")}
       linkText={t("Sign up for free")}
@@ -138,6 +143,7 @@ export default function PmsLogin() {
           </Button>
         </FieldGroup>
       </form>
-    </AuthCard>
+      </AuthCard>
+    </>
   );
 }

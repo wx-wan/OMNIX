@@ -1,7 +1,6 @@
 
 import { Chance } from 'chance';
 import { TicketType } from 'src/types/apps/ticket';
-import { http, HttpResponse } from 'msw';
 
 import userImg2 from '@/assets/images/profile/user-2.png';
 import userImg3 from '@/assets/images/profile/user-3.png';
@@ -14,7 +13,7 @@ import userImg10 from '@/assets/images/profile/user-10.png';
 
 const chance = new Chance();
 
-let TicketData: TicketType[] = [
+export let TicketData: TicketType[] = [
   {
     Id: 1,
     ticketTitle: 'Sed ut perspiciatis unde omnis iste',
@@ -114,48 +113,4 @@ let TicketData: TicketType[] = [
 ]
 
 
-export const TicketHandlers = [
-  // Mock GET request to retrieve Ticket data
-  http.get('/api/data/ticket/TicketData', () => {
-    try {
-      return HttpResponse.json({ status: 200, msg: 'Success', data: TicketData });
-    } catch (error) {
-      return HttpResponse.json({
-        status: 400,
-        msg: 'Internal server error',
-        error,
-      });
-    }
-  }),
 
-  // Mock DELETE endpoint for deleting a ticket
-  http.delete('/api/data/ticket/delete', async ({ request }) => {
-    try {
-      const { id } = (await request.json()) as { id: string | number };
-      const remainingTickets = TicketData.filter((ticket) => ticket.Id !== id);
-      TicketData = remainingTickets;
-      return HttpResponse.json({ status: 200, msg: 'Success', data: TicketData });
-    } catch (error) {
-      return HttpResponse.json({
-        status: 400,
-        msg: 'Internal server error',
-        error,
-      });
-    }
-  }),
-
-  // Mock POST endpoint for adding a ticket
-  http.post('/api/data/ticket/add', async ({ request }) => {
-    try {
-      const newTicket = (await request.json()) as TicketType;
-      TicketData.push(newTicket);
-      return HttpResponse.json({ status: 200, msg: 'Success', data: TicketData });
-    } catch (error) {
-      return HttpResponse.json({
-        status: 400,
-        msg: 'Internal server error',
-        error,
-      });
-    }
-  }),
-];

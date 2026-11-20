@@ -9,6 +9,13 @@ import { isContactComplete } from "./contact-complete";
 export class ContactsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  /** 生日由表单以 YYYY-MM-DD 字符串提交，转成 Date；空串按清空处理。 */
+  private static normalizeBirthday<T extends { birthday?: string }>(dto: T) {
+    const { birthday, ...rest } = dto;
+    if (birthday === undefined) return rest;
+    return { ...rest, birthday: birthday ? new Date(birthday) : null };
+  }
+
   /** 往来单位 / 联系人列表：可按 type / isCompany / parentId 过滤、q 关键字搜索、限制条数。含关联商机数。
    *  系统机器人（isSystem）不出现在管理列表，避免被编辑/删除。
    *  archived 默认过滤已归档项；includeArchived=true 时一并返回。
@@ -116,7 +123,7 @@ export class ContactsService {
   }
 
   async create(dto: CreateContactDto) {
-    const data: Prisma.ContactCreateInput = { ...dto };
+    const data = ContactsService.normalizeBirthday(dto) as Prisma.ContactCreateInput;
     // 新建默认带「待完善」标签；若必填字段（姓名/邮箱/电话/客户类型/国家地区，
     // 个人还需关联公司 parentId）已全部满足，则走完善逻辑立即清除 aiGenerated。
     data.aiGenerated = isContactComplete(data) ? false : true;
@@ -127,7 +134,7 @@ export class ContactsService {
     const existing = await this.prisma.contact.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException(`Contact ${id} not found`);
     if (existing.isSystem) throw new ForbiddenException("系统机器人不可编辑");
-    const data: Prisma.ContactUpdateInput = { ...dto };
+    const data = ContactsService.normalizeBirthday(dto) as Prisma.ContactUpdateInput;
     // 信息完善（除官网外核心字段齐全）→ 标记「已核实」，清除 aiGenerated 并持久化
     if (isContactComplete({ ...existing, ...dto })) data.aiGenerated = false;
     return this.prisma.contact.update({ where: { id }, data });

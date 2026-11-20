@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactElement } from "react";
+import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -13,8 +14,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {
   CircleUserRound,
-  CreditCard,
-  ReceiptText,
   Settings,
   LogOut,
   type LucideIcon,
@@ -46,8 +45,6 @@ type MenuItem = {
 
 const PROFILE_ITEMS: MenuItem[] = [
   { label: "My Profile", icon: CircleUserRound },
-  { label: "My Subscription", icon: CreditCard },
-  { label: "My Invoice", icon: ReceiptText },
 ];
 
 const SETTINGS_ITEMS: MenuItem[] = [
@@ -147,7 +144,10 @@ const Dropdown = ({
 
           {/* Logout */}
           <DropdownMenuItem
-            className={itemClass}
+            className={cn(
+              itemClass,
+              "text-red-500 data-highlighted:bg-red-500/10 data-highlighted:text-red-600"
+            )}
             onClick={() => onSelect?.(LOGOUT_ITEM.label)}
           >
             <LOGOUT_ITEM.icon size={20} />

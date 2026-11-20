@@ -20,6 +20,7 @@ import { useAuth } from "@/context/AuthContext";
 import { agoLabel, resolveDate, useWorkspace } from "src/api/workspace/use-workspace";
 import { getActiveProject } from "src/api/workspace/project-stages";
 import { useIssues } from "src/api/issues/use-issues";
+import { useWorkspaceDefaults } from "src/api/settings/use-workspace-defaults";
 import { PeopleField } from "../people-field";
 import {
   ItemAssigneeMenu,
@@ -81,6 +82,7 @@ export default function IssuesPage({
 }: { projectId?: string; embedded?: boolean } = {}) {
   const { t } = useTranslation();
   const { snap, lang, projectName, label, comment, isLoading } = useWorkspace();
+  const { defaults } = useWorkspaceDefaults();
   const { user: authUser } = useAuth();
   const currentUserId = authUser?.id;
   const [view, setView] = useState("List");
@@ -151,6 +153,8 @@ export default function IssuesPage({
       assigneeId: values.assigneeId || null,
       number: Math.max(500, ...all.map((item) => item.number)) + 1,
       projectId: values.projectId || projectId || getActiveProject(),
+      type: defaults.defaultItemType,
+      action: defaults.defaultAction || undefined,
     }).then(() => setCreating(false));
   };
 

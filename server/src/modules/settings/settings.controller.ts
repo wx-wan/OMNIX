@@ -33,4 +33,29 @@ export class SettingsController {
   updateDesign(@Body() body: { autoDecompose?: boolean }) {
     return this.settings.updateDesignSettings(body);
   }
+
+  @Get("workspace")
+  getWorkspace() {
+    return this.settings.getWorkspaceDefaults();
+  }
+
+  @Put("workspace")
+  updateWorkspace(
+    @Body()
+    body: {
+      defaultItemType?: string;
+      defaultAction?: string;
+      stages?: {
+        key: string;
+        en: string;
+        zh: string;
+        description?: string;
+        days: number | null;
+        defaultTasks?: { title: string; description?: string; type?: string; action?: string }[];
+        defaultIssues?: { title: string; description?: string; type?: string; action?: string }[];
+      }[];
+    }
+  ) {
+    return this.settings.updateWorkspaceDefaults(body as never);
+  }
 }

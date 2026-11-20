@@ -1,0 +1,143 @@
+.animated-beam-02-pulse {
+  stroke-dasharray: 18 200;
+  stroke-dashoffset: 18;
+  animation-duration: 4s;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+/* Each segment fires after the previous stage finishes */
+.animated-beam-02-segment-1 {
+  animation-name: animated-beam-02-flow-1;
+}
+
+.animated-beam-02-segment-2 {
+  animation-name: animated-beam-02-flow-2;
+}
+
+.animated-beam-02-segment-3 {
+  animation-name: animated-beam-02-flow-3;
+}
+
+@keyframes animated-beam-02-flow-1 {
+  0% {
+    stroke-dashoffset: 18;
+  }
+  20%,
+  100% {
+    stroke-dashoffset: -100;
+  }
+}
+
+@keyframes animated-beam-02-flow-2 {
+  0%,
+  25% {
+    stroke-dashoffset: 18;
+  }
+  45%,
+  100% {
+    stroke-dashoffset: -100;
+  }
+}
+
+@keyframes animated-beam-02-flow-3 {
+  0%,
+  50% {
+    stroke-dashoffset: 18;
+  }
+  70%,
+  100% {
+    stroke-dashoffset: -100;
+  }
+}
+
+/* Stage tiles light up as the pulse reaches them */
+.animated-beam-02-stage {
+  animation-duration: 4s;
+  animation-timing-function: ease-out;
+  animation-iteration-count: infinite;
+}
+
+.animated-beam-02-stage-1 {
+  animation-name: animated-beam-02-glow-1;
+}
+
+.animated-beam-02-stage-2 {
+  animation-name: animated-beam-02-glow-2;
+}
+
+.animated-beam-02-stage-3 {
+  animation-name: animated-beam-02-glow-3;
+}
+
+.animated-beam-02-stage-4 {
+  animation-name: animated-beam-02-glow-4;
+}
+
+@keyframes animated-beam-02-glow-1 {
+  0%,
+  15% {
+    opacity: 1;
+  }
+  25%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes animated-beam-02-glow-2 {
+  0%,
+  18% {
+    opacity: 0;
+  }
+  22%,
+  40% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes animated-beam-02-glow-3 {
+  0%,
+  43% {
+    opacity: 0;
+  }
+  47%,
+  65% {
+    opacity: 1;
+  }
+  75%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes animated-beam-02-glow-4 {
+  0%,
+  68% {
+    opacity: 0;
+  }
+  72%,
+  95% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animated-beam-02-pulse {
+    animation: none;
+    stroke-dasharray: none;
+    opacity: 0.4;
+  }
+
+  .animated-beam-02-stage {
+    animation: none;
+    opacity: 0;
+  }
+}

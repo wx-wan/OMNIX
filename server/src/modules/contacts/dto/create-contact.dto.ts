@@ -1,10 +1,13 @@
+import { Type } from "class-transformer";
 import {
   IsEmail,
   IsNotEmpty,
   IsOptional,
   IsString,
   MaxLength,
+  ValidateNested,
 } from "class-validator";
+import { BusinessCardFileDto } from "./business-card.dto";
 
 // 统一往来单位 / 联系人 新建字段
 // 注意：type / password / role 不在这里开放，防止联系人接口被用于提权创建管理员。
@@ -55,4 +58,22 @@ export class CreateContactDto {
   @IsString()
   @MaxLength(200)
   website?: string; // 官网
+
+  // —— 联系人表单：公司常用信息 + 联系人信息 ——
+  @IsOptional() @IsString() @MaxLength(60) source?: string; // 客户来源
+  @IsOptional() @IsString() @MaxLength(40) landline?: string; // 座机
+  @IsOptional() @IsString() @MaxLength(60) nickname?: string; // 昵称
+  @IsOptional() @IsString() @MaxLength(60) socialPlatform?: string; // 社交平台
+  @IsOptional() @IsString() @MaxLength(120) socialAccount?: string; // 社交账号
+  @IsOptional() @IsString() @MaxLength(40) mobile?: string; // 联系电话
+  @IsOptional() @IsString() @MaxLength(60) jobRank?: string; // 职级
+  @IsOptional() @IsString() birthday?: string; // 生日 YYYY-MM-DD
+  @IsOptional() @IsString() @MaxLength(20) gender?: string; // 性别
+  @IsOptional() @IsString() @MaxLength(1000) contactNotes?: string; // 联系人备注
+
+  @IsOptional() @ValidateNested() @Type(() => BusinessCardFileDto)
+  businessCardFront?: BusinessCardFileDto;
+
+  @IsOptional() @ValidateNested() @Type(() => BusinessCardFileDto)
+  businessCardBack?: BusinessCardFileDto;
 }

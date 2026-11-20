@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { useTranslation } from "react-i18next";
-import { Plus } from "lucide-react";
 import { Link } from "react-router";
 import {
   Breadcrumb,
@@ -37,13 +36,7 @@ import {
   type StageForm,
   type StageKey,
 } from "src/api/workspace/project-stages";
-import {
-  ItemAssigneeMenu,
-  ItemPriorityMenu,
-  ItemStatusMenu,
-  ItemTypeMenu,
-} from "../item-fields";
-import { ItemActionMenu } from "../item-actions";
+import { ItemsTable, type ItemsTableGroup, type ItemsTableRow } from "../items-table";
 import {
   Select,
   SelectContent,
@@ -63,7 +56,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { taskNo } from "src/api/workspace/task-no";
-import type { WsTask } from "src/types/apps/workspace";
 
 const GROUPS = [
   { key: "in_progress", title: "In progress", hint: "being worked on or in review", statuses: ["in_progress", "review"] },
@@ -116,6 +108,46 @@ export default function StageDetailPage() {
         .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()),
     [projectTasks, stageKey]
   );
+  const tableGroups: ItemsTableGroup[] = useMemo(() => {
+    const groups: ItemsTableGroup[] = GROUPS.map((group) => ({
+      key: group.key,
+      title: t(group.title),
+      hint: t(group.hint),
+      items: stageTasks
+        .filter((task) => (group.statuses as readonly string[]).includes(task.status))
+        .map<ItemsTableRow>((task) => ({
+          id: task.id,
+          kind: "task",
+          title: task.title,
+          no: taskNo(task, projectTasks),
+          type: task.type,
+          action: task.action,
+          status: task.status,
+          priority: task.priority,
+          assigneeId: task.assigneeId,
+          onOpen: () => openItem("task", task.id),
+        })),
+    }));
+    groups.push({
+      key: "issues",
+      title: t("Issues"),
+      hint: t("Open issues"),
+      items: stageIssues.map<ItemsTableRow>((issue) => ({
+        id: issue.id,
+        kind: "issue",
+        title: issue.title,
+        no: `#Q${issue.number}`,
+        type: issue.type,
+        action: issue.action,
+        status: issue.status,
+        priority: issue.priority,
+        assigneeId: issue.assigneeId,
+        onOpen: () => openItem("issue", issue.id),
+      })),
+    });
+    return groups;
+  }, [stageTasks, stageIssues, projectTasks, t]);
+
   const doneCount = stageTasks.filter((task) =>
     ["done", "closed", "completed"].includes(task.status)
   ).length;
@@ -216,15 +248,6 @@ export default function StageDetailPage() {
   const openItem = (kind: "task" | "issue", itemId: string) =>
     navigate(`/issues/${itemId}?kind=${kind}`);
 
-  /** 可选操作只记录：写回事项 action 字段，不创建、不发消息、不跳转。 */
-  const handleAction = (
-    kind: "task" | "issue",
-    itemId: string,
-    actionId: string | null
-  ) => {
-    if (kind === "issue") void updateIssue(itemId, { action: actionId });
-    else void updateTask(itemId, { action: actionId });
-  };
   const handleCreateIssue = (values: NewIssueValues) => {
     const nextNumber = Math.max(500, ...projectIssues.map((i) => i.number)) + 1;
     void createIssue({
@@ -308,140 +331,22 @@ export default function StageDetailPage() {
       </div>
 
       <div className="flex w-full flex-col gap-6 lg:flex-row lg:items-start">
-        {/* Left: grouped task table */}
-        <div className="min-w-0 flex-1 overflow-hidden rounded-xl border border-border bg-card">
-          <table className="w-full table-fixed border-collapse">
-            <colgroup>
-              <col className="w-[35%]" />
-              <col className="w-[12%]" />
-              <col className="w-[16%]" />
-              <col className="w-[14%]" />
-              <col className="w-[12%]" />
-              <col className="w-[11%]" />
-            </colgroup>
-            <thead>
-              <tr className="border-b border-border text-sm font-medium text-foreground">
-                <th className="px-3 py-3 text-left font-medium">{t("Item")}</th>
-                <th className="px-3 py-3 text-left font-medium">{t("Type")}</th>
-                <th className="px-3 py-3 text-left font-medium">{t("Actions")}</th>
-                <th className="px-3 py-3 text-left font-medium">{t("Status")}</th>
-                <th className="px-3 py-3 text-left font-medium">{t("Priority")}</th>
-                <th className="px-3 py-3 text-left font-medium">{t("Assignee")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {GROUPS.map((group) => {
-                const items = stageTasks.filter((task) =>
-                  (group.statuses as readonly string[]).includes(task.status)
-                );
-                if (!items.length) return null;
-                return (
-                  <GroupRows
-                    key={group.key}
-                    title={t(group.title)}
-                    hint={t(group.hint)}
-                    items={items}
-                    allTasks={projectTasks}
-                    onStatus={handleStatus}
-                    onType={(taskId, type) => void updateTask(taskId, { type })}
-                    onPriority={(taskId, priority) => void updateTask(taskId, { priority })}
-                    onAssignee={(taskId, assigneeId) =>
-                      void updateTask(taskId, { assigneeId })
-                    }
-                    onOpen={(taskId) => openItem("task", taskId)}
-                    onAction={(taskId, actionId) =>
-                      handleAction("task", taskId, actionId)
-                    }
-                  />
-                );
-              })}
-              {stageIssues.length ? (
-                <>
-                  <tr className="border-b border-border bg-muted/30">
-                    <td colSpan={6} className="px-3 py-2.5 text-xs text-muted-foreground">
-                      <span className="font-semibold text-foreground">{t("Issues")}</span>{" "}
-                      {stageIssues.length} · {t("Open issues")}
-                    </td>
-                  </tr>
-                  {stageIssues.map((issue) => (
-                    <tr key={issue.id} className="border-b border-border last:border-0">
-                      <td className="px-3 py-3">
-                        <button
-                          type="button"
-                          onClick={() => openItem("issue", issue.id)}
-                          className="text-start text-sm font-medium outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-ring"
-                        >
-                          {issue.title}
-                        </button>
-                        <p className="text-xs text-muted-foreground">#Q{issue.number}</p>
-                      </td>
-                      <td className="px-3 py-3">
-                        <ItemTypeMenu
-                          value={issue.type ?? "output"}
-                          onChange={(type) => void updateIssue(issue.id, { type })}
-                        />
-                      </td>
-                      <td className="px-3 py-3">
-                        <ItemActionMenu
-                          type={issue.type}
-                          value={issue.action}
-                          onChange={(actionId) =>
-                            handleAction("issue", issue.id, actionId)
-                          }
-                        />
-                      </td>
-                      <td className="px-3 py-3">
-                        <ItemStatusMenu
-                          value={issue.status}
-                          onChange={(status) => void updateIssue(issue.id, { status })}
-                        />
-                      </td>
-                      <td className="px-3 py-3">
-                        <ItemPriorityMenu
-                          value={issue.priority}
-                          onChange={(priority) => void updateIssue(issue.id, { priority })}
-                        />
-                      </td>
-                      <td className="px-3 py-3">
-                        <ItemAssigneeMenu
-                          value={issue.assigneeId}
-                          onChange={(assigneeId) =>
-                            void updateIssue(issue.id, { assigneeId })
-                          }
-                        />
-                      </td>
-                    </tr>
-                  ))}
-                </>
-              ) : null}
-              {stageTasks.length === 0 && stageIssues.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-sm text-muted-foreground">
-                    {t("No items")}
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-          <div className="flex items-center gap-4 border-t border-border px-3 py-2.5">
-            <button
-              type="button"
-              onClick={() => setIssueOpen(true)}
-              className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <Plus className="size-3.5" />
-              {t("Add Issue")}
-            </button>
-            <button
-              type="button"
-              onClick={() => setTaskOpen(true)}
-              className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <Plus className="size-3.5" />
-              {t("Add Task")}
-            </button>
-          </div>
-        </div>
+        <ItemsTable
+          groups={tableGroups}
+          onStatus={(row, status) => handleStatus(row.id, status)}
+          onPriority={(row, priority) =>
+            void (row.kind === "issue"
+              ? updateIssue(row.id, { priority })
+              : updateTask(row.id, { priority }))
+          }
+          onAssignee={(row, assigneeId) =>
+            void (row.kind === "issue"
+              ? updateIssue(row.id, { assigneeId })
+              : updateTask(row.id, { assigneeId }))
+          }
+          onAddIssue={() => setIssueOpen(true)}
+          onAddTask={() => setTaskOpen(true)}
+        />
 
         {/* Right: sprint detail panel */}
         <aside className="w-full shrink-0 lg:w-80">
@@ -588,86 +493,6 @@ export default function StageDetailPage() {
         users={snap.users}
         defaultProjectId={id}
       />
-    </>
-  );
-}
-
-/** 状态分组的小标题行 + 任务行：字段控件与项目详情 Tasks 列表同源。 */
-function GroupRows({
-  title,
-  hint,
-  items,
-  allTasks,
-  onStatus,
-  onType,
-  onPriority,
-  onAssignee,
-  onOpen,
-  onAction,
-}: {
-  title: string;
-  hint: string;
-  items: WsTask[];
-  allTasks: WsTask[];
-  onStatus: (id: string, status: string) => void;
-  onType: (id: string, type: string) => void;
-  onPriority: (id: string, priority: string) => void;
-  onAssignee: (id: string, assigneeId: string | null) => void;
-  onOpen: (id: string) => void;
-  onAction: (taskId: string, actionId: string | null) => void;
-}) {
-  return (
-    <>
-      <tr className="border-b border-border bg-muted/30">
-        <td colSpan={6} className="px-3 py-2.5 text-xs text-muted-foreground">
-          <span className="font-semibold text-foreground">{title}</span> {items.length} · {hint}
-        </td>
-      </tr>
-      {items.map((task) => (
-        <tr key={task.id} className="border-b border-border last:border-0">
-          <td className="px-3 py-3">
-            <button
-              type="button"
-              onClick={() => onOpen(task.id)}
-              className="text-start text-sm font-medium outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              {task.title}
-            </button>
-            <p className="text-xs text-muted-foreground">{taskNo(task, allTasks)}</p>
-          </td>
-          <td className="px-3 py-3">
-            <ItemTypeMenu
-              value={task.type ?? "output"}
-              onChange={(type) => onType(task.id, type)}
-            />
-          </td>
-          <td className="px-3 py-3">
-            <ItemActionMenu
-              type={task.type}
-              value={task.action}
-              onChange={(actionId) => onAction(task.id, actionId)}
-            />
-          </td>
-          <td className="px-3 py-3">
-            <ItemStatusMenu
-              value={task.status}
-              onChange={(status) => onStatus(task.id, status)}
-            />
-          </td>
-          <td className="px-3 py-3">
-            <ItemPriorityMenu
-              value={task.priority}
-              onChange={(priority) => onPriority(task.id, priority)}
-            />
-          </td>
-          <td className="px-3 py-3">
-            <ItemAssigneeMenu
-              value={task.assigneeId}
-              onChange={(assigneeId) => onAssignee(task.id, assigneeId)}
-            />
-          </td>
-        </tr>
-      ))}
     </>
   );
 }

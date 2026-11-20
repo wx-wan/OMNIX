@@ -1,83 +1,197 @@
-"use client";
-
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router";
-import { MoreHorizontal, Plus, Search, SlidersHorizontal } from "lucide-react";
-import { useWorkspace } from "src/api/workspace/use-workspace";
-import { useUsers } from "src/api/auth/use-users";
-import { PmsCard, PmsIconButton, PmsPage } from "../pms";
-import { PeopleField } from "../people-field";
-import Loading from "@/components/shadcn-dashboard/spinner/loading";
-import type { WsUser } from "src/types/apps/workspace";
+import { ArrowLeft, ListFilter, MoreHorizontal, Search, SlidersHorizontal } from "lucide-react";
+import { useSearchParams } from "react-router";
+import {
+  CURRENT_USER_ID,
+  useWorkspace,
+} from "src/api/workspace/use-workspace";
+import {
+  addTeam,
+  removeRecord,
+  updateRecord,
+} from "src/api/workspace/project-stages";
+import type { WsTeam } from "src/types/apps/workspace";
+import {
+  PmsAvatar,
+  PmsCard,
+  PmsCreateForm,
+  PmsField,
+  PmsIconButton,
+  PmsNewButton,
+  PmsOptionGroup,
+  PmsPage,
+  PmsPopover,
+  PmsSheet,
+} from "../pms";
 
-type TeamGroup = { id: string; name: string; memberIds: string[]; projectIds: string[] };
+const CARD_STYLE: Record<string, string> = {
+  Design: "bg-sky-400/10 text-sky-500",
+  Engineering: "bg-teal-400/10 text-teal-500",
+  Product: "bg-blue-500/10 text-blue-500",
+};
+const SORTS = ["Name", "People", "Live projects", "Founded"];
 
-/**
- * 团队页：当前后端尚无独立 team 表，团队由项目的 teamId 分组推导；
- * 成员关系来自项目 memberIds。teamId 为空的项目归入「未分组」。
- */
 export default function TeamPage() {
   const { t } = useTranslation();
-  const { snap, isLoading: wsLoading, userName } = useWorkspace();
-  const { users: members } = useUsers();
+  const { snap, user, isLoading } = useWorkspace();
+  const [params, setParams] = useSearchParams();
+  const teamId = params.get("team");
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
+  const [sortBy, setSortBy] = useState("Name");
+  const [mineOnly, setMineOnly] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [draft, setDraft] = useState({ name: "", description: "" });
+  const all = useMemo(() => snap?.teams ?? [], [snap]);
+  const mineCount = all.filter((team) => team.memberIds.includes(CURRENT_USER_ID)).length;
 
-  const projects = snap?.projects ?? [];
-  const teams = useMemo<TeamGroup[]>(() => {
-    const map = new Map<string, TeamGroup>();
-    projects.forEach((project) => {
-      const key = project.teamId || "ungrouped";
-      const group =
-        map.get(key) ??
-        {
-          id: key,
-          name: key === "ungrouped" ? t("Unassigned") : key,
-          memberIds: [] as string[],
-          projectIds: [] as string[],
-        };
-      group.memberIds = Array.from(new Set([...group.memberIds, ...project.memberIds]));
-      group.projectIds.push(project.id);
-      map.set(key, group);
-    });
-    return Array.from(map.values());
-  }, [projects, t]);
+  const liveOf = (team: WsTeam) =>
+    (snap?.projects ?? []).filter(
+      (project) => project.teamId === team.id && !project.archived && project.status === "active"
+    ).length;
 
-  const filtered = teams.filter((team) =>
-    `${team.name} ${team.memberIds.map((id) => userName(id)).join(" ")}`
-      .toLowerCase()
-      .includes(query.toLowerCase())
-  );
+  const list = useMemo(() => {
+    let out = all.filter((team) =>
+      `${team.name} ${team.description}`.toLowerCase().includes(query.toLowerCase())
+    );
+    if (mineOnly) out = out.filter((team) => team.memberIds.includes(CURRENT_USER_ID));
+    const sorted = [...out];
+    if (sortBy === "People")
+      sorted.sort((a, b) => b.memberIds.length - a.memberIds.length);
+    else if (sortBy === "Live projects") sorted.sort((a, b) => liveOf(b) - liveOf(a));
+    else if (sortBy === "Founded")
+      sorted.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    else sorted.sort((a, b) => a.name.localeCompare(b.name));
+    return sorted;
+  }, [all, query, mineOnly, sortBy]);
 
-  if (wsLoading) return <Loading />;
+  const selected = all.find((team) => team.id === teamId) ?? null;
 
-  const allUsers: WsUser[] = (members ?? []).map((member) => ({
-    id: member.id,
-    name: member.name,
-    email: member.email,
-    avatar: member.avatarUrl,
-    role: member.role,
-    status: "active",
-    createdAt: member.createdAt,
-  }));
+  const create = () => {
+    const name = draft.name.trim();
+    if (!name) return;
+    addTeam({ name, description: draft.description.trim() });
+    setDraft({ name: "", description: "" });
+    setCreating(false);
+  };
+
+  if (isLoading || !snap) return <div className="p-10 text-sm text-muted-foreground">…</div>;
+
+  if (selected) {
+    const members = selected.memberIds.map((id) => user(id)).filter(Boolean);
+    const projects = snap.projects.filter(
+      (project) => project.teamId === selected.id && !project.archived
+    );
+    return (
+      <PmsPage
+        title={selected.name}
+        count={t("N people", { n: members.length })}
+        segmented={
+          <button
+            type="button"
+            onClick={() => setParams({})}
+            className="inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs hover:bg-muted"
+          >
+            <ArrowLeft className="size-3.5" />
+            {t("All teams")}
+          </button>
+        }
+      >
+        <PmsCard>
+          <div className="space-y-4 p-4">
+            <p className="text-sm text-muted-foreground">{selected.description}</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <PmsField label={t("Owner")}>{user(selected.leadId)?.name ?? "—"}</PmsField>
+              <PmsField label={t("Founded")}>{selected.createdAt}</PmsField>
+              <PmsField label={t("Live projects")}>{liveOf(selected)}</PmsField>
+              <PmsField label={t("Members")}>{members.length}</PmsField>
+            </div>
+            <div>
+              <h2 className="mb-3 text-sm font-semibold">{t("Members")}</h2>
+              <div className="space-y-2">
+                {members.map((member) => (
+                  <div key={member!.id} className="flex items-center gap-2 text-xs">
+                    <PmsAvatar name={member!.name} avatar={member!.avatar} size={8} />
+                    {member!.name}
+                    <span className="text-muted-foreground">{member!.email}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div>
+              <h2 className="mb-3 text-sm font-semibold">{t("Projects")}</h2>
+              <div className="space-y-1">
+                {projects.map((project) => (
+                  <div key={project.id} className="text-xs">
+                    {project.name}
+                    <span className="ms-2 text-muted-foreground">{project.progress}%</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const isMember = selected.memberIds.includes(CURRENT_USER_ID);
+                  updateRecord("teams", selected.id, {
+                    memberIds: isMember
+                      ? selected.memberIds.filter((item) => item !== CURRENT_USER_ID)
+                      : [...selected.memberIds, CURRENT_USER_ID],
+                  });
+                }}
+                className="h-8 rounded-lg border px-2.5 text-xs hover:bg-muted"
+              >
+                {selected.memberIds.includes(CURRENT_USER_ID) ? t("Joined") : t("Join team")}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  removeRecord("teams", selected.id);
+                  setParams({});
+                }}
+                className="h-8 rounded-lg border px-2.5 text-xs text-destructive hover:bg-muted"
+              >
+                {t("Delete team")}
+              </button>
+            </div>
+          </div>
+        </PmsCard>
+      </PmsPage>
+    );
+  }
 
   return (
     <PmsPage
       title={t("Teams")}
-      count={t("{{n}} teams", { n: teams.length })}
+      count={t("N teams", { n: all.length, mine: mineCount })}
     >
       <PmsCard
         toolbar={
           <>
             <div className="flex flex-wrap items-center gap-2.5">
-              <PmsIconButton icon={SlidersHorizontal} label={t("Filters")} />
-              <PmsIconButton
-                icon={Search}
-                label="Search"
-                active={searchOpen}
-                onClick={() => setSearchOpen((v) => !v)}
-              />
+              <div className="flex items-center gap-1">
+                <PmsPopover icon={ListFilter} label="Filters">
+                  <label className="flex cursor-pointer items-center justify-between text-xs">
+                    {t("Only my teams")}
+                    <input
+                      type="checkbox"
+                      checked={mineOnly}
+                      onChange={(e) => setMineOnly(e.target.checked)}
+                    />
+                  </label>
+                </PmsPopover>
+                <PmsIconButton
+                  icon={Search}
+                  label="Search"
+                  active={searchOpen}
+                  onClick={() => setSearchOpen((v) => !v)}
+                />
+                <PmsPopover icon={SlidersHorizontal} label="View options">
+                  <PmsOptionGroup title="SORT BY" options={SORTS} value={sortBy} onPick={setSortBy} />
+                </PmsPopover>
+              </div>
               {searchOpen ? (
                 <input
                   autoFocus
@@ -88,64 +202,74 @@ export default function TeamPage() {
                 />
               ) : null}
             </div>
-            <button
-              type="button"
-              className="inline-flex h-8 items-center gap-1.5 rounded-[10px] bg-foreground px-2.5 text-sm font-medium text-background"
-            >
-              <Plus className="size-4" />
-              {t("New team")}
-            </button>
+            <PmsNewButton label={t("New team")} onClick={() => setCreating(true)} />
           </>
         }
       >
-        <div className="grid gap-4 p-4 md:grid-cols-2 xl:grid-cols-3">
-          {filtered.map((team) => (
+        <div className="grid min-h-0 flex-1 grid-cols-[repeat(auto-fill,minmax(7rem,9rem))] content-start gap-3 overflow-y-auto p-4">
+          {list.map((team) => (
             <div
               key={team.id}
-              className="flex flex-col gap-3 rounded-xl border border-border bg-background p-4 transition-colors hover:bg-muted/30"
+              role="link"
+              tabIndex={0}
+              onClick={() => setParams({ team: team.id })}
+              className="group relative cursor-pointer rounded-xl border bg-card p-1 outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
             >
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex min-w-0 items-center gap-3">
-                  <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-sm font-semibold">
-                    {team.name.slice(0, 1).toUpperCase()}
-                  </span>
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold">{team.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {t("{{n}} people · {{m}} projects", {
-                        n: team.memberIds.length,
-                        m: team.projectIds.length,
-                      })}
-                    </p>
-                  </div>
-                </div>
-                <button type="button" aria-label={t("Actions")} className="rounded-md p-1 text-muted-foreground hover:bg-muted">
+              <div
+                className={`flex aspect-square w-full items-center justify-center rounded-lg text-4xl font-bold ${
+                  CARD_STYLE[team.name] ?? "bg-blue-500/10 text-blue-500"
+                }`}
+              >
+                {team.name[0]}
+              </div>
+              <div className="absolute top-2 right-2 rounded-lg bg-background opacity-0 shadow-sm transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
+                <button
+                  type="button"
+                  aria-label={`Actions for ${team.name}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setParams({ team: team.id });
+                  }}
+                  className="inline-flex size-7 cursor-pointer items-center justify-center rounded-[min(var(--radius-md),12px)] hover:bg-muted"
+                >
                   <MoreHorizontal className="size-4" />
                 </button>
               </div>
-              <div className="flex items-center gap-2">
-                <PeopleField users={allUsers} value={team.memberIds} multiple max={4} />
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {team.projectIds.slice(0, 3).map((projectId) => (
-                  <Link
-                    key={projectId}
-                    to={`/projects/${projectId}`}
-                    className="rounded-4xl bg-muted px-2 py-0.5 text-[11px] text-muted-foreground hover:text-foreground"
-                  >
-                    {snap?.projects.find((p) => p.id === projectId)?.name ?? projectId}
-                  </Link>
-                ))}
+              <div className="px-2 py-3">
+                <div className="flex items-center gap-2">
+                  <span className="truncate text-sm font-medium">{team.name}</span>
+                </div>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {t("N people", { n: team.memberIds.length })} ·{" "}
+                  {t("N live", { n: liveOf(team) })}
+                </p>
               </div>
             </div>
           ))}
-          {filtered.length === 0 ? (
-            <p className="col-span-full py-10 text-center text-sm text-muted-foreground">
-              {t("No items")}
-            </p>
-          ) : null}
         </div>
       </PmsCard>
+
+      <PmsSheet open={creating} onOpenChange={setCreating} title={t("New team")}>
+        <PmsCreateForm
+          submitLabel={t("Create")}
+          onSubmit={create}
+          fields={[
+            {
+              name: t("Name"),
+              value: draft.name,
+              onChange: (value) => setDraft((prev) => ({ ...prev, name: value })),
+              placeholder: t("Team name"),
+            },
+            {
+              name: t("Description"),
+              value: draft.description,
+              onChange: (value) => setDraft((prev) => ({ ...prev, description: value })),
+              placeholder: t("What does this team do?"),
+              multiline: true,
+            },
+          ]}
+        />
+      </PmsSheet>
     </PmsPage>
   );
 }

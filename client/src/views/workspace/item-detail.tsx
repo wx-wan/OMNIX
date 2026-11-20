@@ -34,6 +34,7 @@ import {
 import { cn } from "@/lib/utils";
 import { InlineEdit } from "@/components/shadcn-dashboard/input/inline-edit";
 import { ContactInfoFields } from "./contact-info-fields";
+import { PropertyRow, PropertiesPanel } from "./item-properties";
 
 type Item = WsTask | WsIssue;
 const isIssue = (item: Item): item is WsIssue => "number" in item;
@@ -160,19 +161,11 @@ export default function ItemDetailPage() {
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="flex flex-col gap-4">
-          <section className="rounded-xl border border-border bg-card">
-            <h2 className="border-b border-border px-5 py-4 text-base font-semibold">
-              {t("Description")}
-            </h2>
-            <p className="px-5 py-4 text-sm">
-              {item.description || t("No description")}
-            </p>
-            {item.action === "contact" ? (
-              <div className="px-5 pb-5">
-                <ContactInfoFields />
-              </div>
-            ) : null}
-          </section>
+          {item.action === "contact" ? (
+            <section className="rounded-xl border border-border bg-card p-5">
+              <ContactInfoFields taskId={item.id} />
+            </section>
+          ) : null}
           <section className="rounded-xl border border-border bg-card">
             <h2 className="border-b border-border px-5 py-4 text-base font-semibold">
               {t("Activity")}
@@ -185,10 +178,7 @@ export default function ItemDetailPage() {
           </section>
         </div>
 
-        <aside className="h-fit rounded-xl border border-border bg-card">
-          <h2 className="border-b border-border px-5 py-4 text-base font-semibold">
-            {t("Properties")}
-          </h2>
+        <PropertiesPanel title={t("Properties")}>
           <div className="divide-y divide-border px-5">
             <PropertyRow label={t("Status")}>
               <ItemStatusMenu
@@ -234,7 +224,7 @@ export default function ItemDetailPage() {
             </PropertyRow>
             <PropertyRow label={t("Updated")}>{agoLabel(updatedAt, zh ? "ch" : "en")}</PropertyRow>
           </div>
-        </aside>
+        </PropertiesPanel>
       </div>
 
       {confirmOpen ? (
@@ -257,15 +247,6 @@ export default function ItemDetailPage() {
   );
 
   return <div className="flex min-w-0 flex-1 flex-col">{content}</div>;
-}
-
-function PropertyRow({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex items-center justify-between gap-3 py-3 text-sm">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="min-w-0 text-end">{children}</span>
-    </div>
-  );
 }
 
 function ActivityLine({ color, text, time }: { color: string; text: string; time: string }) {

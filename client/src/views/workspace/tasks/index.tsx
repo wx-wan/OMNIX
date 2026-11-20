@@ -1,4 +1,5 @@
 import { Fragment, useMemo, useState } from "react";
+import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import {
   ArrowDown,
@@ -18,7 +19,6 @@ import {
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DatePicker } from "@/components/ui/date-picker";
-import { PeopleField } from "../people-field";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,26 +41,23 @@ import {
   type StageKey,
 } from "src/api/workspace/project-stages";
 import { useTasks } from "src/api/tasks/use-tasks";
+import { useWorkspaceDefaults } from "src/api/settings/use-workspace-defaults";
 import Loading from "@/components/shadcn-dashboard/spinner/loading";
 import { NewTaskDialog, type NewTaskValues } from "../create-dialogs";
 import type { WsTask } from "src/types/apps/workspace";
 import {
   PmsCard,
-  PmsField,
   PmsIconButton,
   PmsNewButton,
   PmsOptionGroup,
   PmsPage,
   PmsPopover,
-  PriorityMenu,
   PmsSegmented,
-  PmsSheet,
 } from "../pms";
 import {
   ItemAssigneeMenu,
   ItemPriorityMenu,
   ItemStatusMenu,
-  STATUS_LABEL,
   STATUS_ORDER,
 } from "../item-fields";
 
@@ -110,7 +107,9 @@ export default function TasksPage({
   embedded,
 }: { projectId?: string; embedded?: boolean } = {}) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const { snap, lang, projectName, isLoading: wsLoading } = useWorkspace();
+  const { defaults } = useWorkspaceDefaults();
   useProjectStageStore();
   const {
     tasks: all,
@@ -130,7 +129,6 @@ export default function TasksPage({
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [groupBy, setGroupBy] = useState("Status");
   const [collapsed, setCollapsed] = useState<string[]>([]);
-  const [selected, setSelected] = useState<WsTask | null>(null);
   const [creating, setCreating] = useState(false);
 
   /** 任务列只展示各项目「当前阶段」的任务；该筛选默认开启，可在 Filters 里关闭以查看其它阶段。 */
@@ -221,6 +219,8 @@ export default function TasksPage({
       assigneeId: values.assigneeId || CURRENT_USER_ID,
       dueDate: values.dueDate || undefined,
       projectId,
+      type: defaults.defaultItemType,
+      action: defaults.defaultAction || undefined,
     });
     setCreating(false);
   };
@@ -408,8 +408,8 @@ export default function TasksPage({
                           <td className="p-2 px-3 py-3 align-middle whitespace-nowrap">
                             <button
                               type="button"
-                              onClick={() => setSelected(task)}
-                              className="min-w-0 text-left"
+                              onClick={() => navigate(`/issues/${task.id}?kind=task`)}
+                              className="min-w-0 text-left hover:text-primary"
                             >
                               <h6 className="flex max-w-72 items-baseline gap-2 truncate text-sm font-medium">
                                 <span
@@ -533,18 +533,19 @@ export default function TasksPage({
                 {group.items.map((task) => (
                   <div
                     key={task.id}
-                    onClick={() => setSelected(task)}
-                    className="w-full cursor-pointer rounded-xl bg-card p-3 text-sm shadow-sm"
+                    className="w-full rounded-xl bg-card p-3 text-sm shadow-sm"
                   >
-                    <div
-                      className={`font-medium ${
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/issues/${task.id}?kind=task`)}
+                      className={`text-start font-medium hover:text-primary ${
                         task.status === "done" || task.status === "closed"
                           ? "text-muted-foreground line-through"
                           : ""
                       }`}
                     >
                       {task.title}
-                    </div>
+                    </button>
                     <div className="mt-1 text-[11px] text-muted-foreground">
                       {embedded ? null : `${projectName(task.projectId)} · `}
                       {dueLabel(task.dueDate, lang)}
@@ -561,39 +562,6 @@ export default function TasksPage({
           </div>
         )}
       </PmsCard>
-
-      <PmsSheet
-        open={Boolean(selected)}
-        onOpenChange={(open) => !open && setSelected(null)}
-        title={selected?.title ?? ""}
-        description={selected ? projectName(selected.projectId) : undefined}
-      >
-        {selected ? (
-          <>
-            <p className="text-xs leading-relaxed text-muted-foreground">
-              {selected.description || t("No description")}
-            </p>
-            <div className="space-y-3 border-t border-border pt-4">
-              <PmsField label={t("Status")}>{t(STATUS_LABEL[selected.status])}</PmsField>
-              <PmsField label={t("Priority")}>
-                <PriorityMenu value={selected.priority} />
-              </PmsField>
-              <PmsField label={t("Assignee")}>
-                <PeopleField users={snap?.users ?? []} value={selected.assigneeId} />
-              </PmsField>
-              <PmsField label={t("Estimate")}>
-                {selected.estimate ? `${selected.estimate}h` : "—"}
-              </PmsField>
-              <PmsField label={t("Due date")}>{dueLabel(selected.dueDate, lang)}</PmsField>
-              <PmsField label={t("Stage")}>
-                <span className="inline-flex h-5 items-center rounded-4xl bg-blue-500/10 px-2 text-[11px] font-medium text-blue-500">
-                  {stageLabel(stageOf(selected), isZh(lang))}
-                </span>
-              </PmsField>
-            </div>
-          </>
-        ) : null}
-      </PmsSheet>
 
       <NewTaskDialog
         open={creating}

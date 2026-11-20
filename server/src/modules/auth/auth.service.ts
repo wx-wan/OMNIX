@@ -24,6 +24,7 @@ export interface PublicUser {
   avatarUrl: string; // 头像路径；未设置时用默认头像
   createdAt: string; // ISO 字符串，成员页「加入时间」列展示真实创建时间
   department: string | null; // 部门（Contact.department），成员页「部门」列展示
+  position: string | null; // 职位（Contact.position），与部门无关；默认事项经办人按职位匹配
   presence: string; // 在线状态：online | away | busy | offline
 }
 
@@ -212,6 +213,7 @@ export class AuthService {
     avatarUrl?: string | null;
     createdAt: Date;
     department?: string | null;
+    position?: string | null;
     presence?: string | null;
   }): PublicUser {
     return {
@@ -222,6 +224,7 @@ export class AuthService {
       avatarUrl: user.avatarUrl || "/images/profile/user-1.png",
       createdAt: user.createdAt.toISOString(),
       department: user.department ?? null,
+      position: user.position ?? null,
       presence: user.presence ?? "offline",
     };
   }

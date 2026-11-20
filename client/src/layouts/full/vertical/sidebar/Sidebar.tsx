@@ -26,7 +26,7 @@ const SidebarLayout = ({ ...props }: React.ComponentProps<typeof Sidebar>) => {
             className="sidebar-box **:data-[slot=sidebar-inner]:bg-transparent"
             side="left"
         >
-            <SidebarHeader className="p-3 group-data-[state=collapsed]:px-2.5 flex flex-row items-center justify-between">
+            <SidebarHeader className="p-3 group-data-[state=collapsed]:px-0 group-data-[state=collapsed]:justify-center flex flex-row items-center justify-between">
                 <FullLogo />
                 <Badge className="group-data-[state=collapsed]:hidden" variant={"secondary"}>V.1.0</Badge>
             </SidebarHeader>
